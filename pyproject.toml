@@ -54,7 +54,7 @@ cra = "cra.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cra = ["web/static/**/*", "history/migrations/**/*"]
+cra = ["app/web/static/**/*", "app/history/migrations/**/*"]
 
 [tool.setuptools_scm]
 version_file = "src/cra/_version.py"

@@ -47,8 +47,10 @@ so a pull request cannot be merged before that.
 Conventions: conventional commits, no `os.environ` reads outside
 `cra.config.settings`, no module-level per-user state, no two files with the
 same basename, logging never `print`. `tests/test_layout.py` enforces the
-layout rules and the import layering (corpus and retrieval never import the
-application layers).
+layout rules and the import layering: `cra.core` (corpus, retrieval,
+connectors, tools) never imports `cra.assistant` (llm, chat, mcpclient) or
+`cra.app` (web, auth, history, mcpserver, viz), and `cra.assistant` never
+imports `cra.app`.
 
 ## License
 

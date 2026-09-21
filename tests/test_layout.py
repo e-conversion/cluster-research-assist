@@ -13,20 +13,10 @@ SRC = REPO / "src" / "cra"
 BANNED = {"utils", "helpers", "common", "base", "models"}
 SHARED = {"__init__", "conftest", "_version"}
 
-APPLICATION_LAYERS = (
-    "cra.web",
-    "cra.chat",
-    "cra.auth",
-    "cra.history",
-    "cra.connectors",
-    "cra.mcpclient",
-    "cra.mcpserver",
-)
-# source package -> packages it may never import
+# layer -> layers it may never import; the directory tree encodes the direction
 CONTRACTS = {
-    "cra.corpus": APPLICATION_LAYERS,
-    "cra.retrieval": APPLICATION_LAYERS,
-    "cra.tools": ("cra.web", "cra.history"),
+    "cra.core": ("cra.assistant", "cra.app"),
+    "cra.assistant": ("cra.app",),
 }
 
 
@@ -67,6 +57,7 @@ def test_no_catch_all_module_names():
 @pytest.mark.parametrize(("package", "forbidden"), CONTRACTS.items())
 def test_import_layering(package, forbidden):
     root = SRC / package.removeprefix("cra.")
+    assert root.is_dir(), root
     violations = {
         str(path.relative_to(REPO)): sorted(bad)
         for path in root.rglob("*.py")

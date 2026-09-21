@@ -2,8 +2,8 @@ include LICENSE
 include README.md
 include .env.example
 include tox.ini
-recursive-include src/cra/web/static *
-recursive-include src/cra/history/migrations *
+recursive-include src/cra/app/web/static *
+recursive-include src/cra/app/history/migrations *
 recursive-include tests *.py *.txt
 recursive-include tests/data *
 recursive-include developer *
