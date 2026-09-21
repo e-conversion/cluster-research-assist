@@ -13,7 +13,7 @@ authors = [{name = "e-conversion Data Intelligence Team"}]
 maintainers = [
     {name = "Philip Loche"},
     {name = "Alex Burg"},
-    {name = "Harry Typ"},
+    {name = "Kolja Knodel"},
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",

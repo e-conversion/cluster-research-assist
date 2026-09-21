@@ -36,8 +36,19 @@ tox -e format      # apply formatting
 Two further suites need external resources and are not part of the default
 run: `tox -e tests-postgres` (a PostgreSQL server at `CRA_TEST_POSTGRES_URL`)
 and `tox -e tests-llm` (a real model endpoint through `CRA_LLM_API_KEY`,
-`CRA_LLM_BASE_URL` and `CRA_LLM_MODEL`). See CONTRIBUTING.md for how the LLM
-suite gates pull requests.
+`CRA_LLM_BASE_URL` and `CRA_LLM_MODEL`).
+
+In CI the LLM suite is the `tests-llm` job, bound to the GitHub Environment
+`llm`. Its required reviewers approve the job as the last action of a review;
+only then does it receive the secrets and run. It is a required status check,
+so a pull request cannot be merged before that.
+`developer/set_branch_protection.sh` configures the required checks.
+
+Conventions: conventional commits, no `os.environ` reads outside
+`cra.config.settings`, no module-level per-user state, no two files with the
+same basename, logging never `print`. `tests/test_layout.py` enforces the
+layout rules and the import layering (corpus and retrieval never import the
+application layers).
 
 ## License
 

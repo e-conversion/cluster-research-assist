@@ -5,5 +5,5 @@
 ## Checklist
 
 - [ ] Tests cover the change and the default suite stays fast
-- [ ] `.env.example` and CHANGELOG.md updated if configuration or behaviour changed
+- [ ] `.env.example` updated if configuration changed
 - [ ] No secrets, no `.env`

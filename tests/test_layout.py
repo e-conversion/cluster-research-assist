@@ -1,16 +1,48 @@
 """Repository layout rules from the design document: unique basenames, no
-catch-all module names."""
+catch-all module names, and the import layering that keeps the corpus tools
+extractable."""
 
+import ast
 from collections import defaultdict
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parent.parent
+SRC = REPO / "src" / "cra"
 BANNED = {"utils", "helpers", "common", "base", "models"}
 SHARED = {"__init__", "conftest", "_version"}
+
+APPLICATION_LAYERS = (
+    "cra.web",
+    "cra.chat",
+    "cra.auth",
+    "cra.history",
+    "cra.connectors",
+    "cra.mcpclient",
+    "cra.mcpserver",
+)
+# source package -> packages it may never import
+CONTRACTS = {
+    "cra.corpus": APPLICATION_LAYERS,
+    "cra.retrieval": APPLICATION_LAYERS,
+    "cra.tools": ("cra.web", "cra.history"),
+}
 
 
 def _modules(root: Path) -> list[Path]:
     return [p for p in root.rglob("*.py") if p.stem not in SHARED]
+
+
+def _imports(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            found.add(node.module)
+    return found
 
 
 def test_no_two_python_files_share_a_basename():
@@ -30,3 +62,14 @@ def test_no_catch_all_module_names():
         if p.stem in BANNED
     ]
     assert not offenders, offenders
+
+
+@pytest.mark.parametrize(("package", "forbidden"), CONTRACTS.items())
+def test_import_layering(package, forbidden):
+    root = SRC / package.removeprefix("cra.")
+    violations = {
+        str(path.relative_to(REPO)): sorted(bad)
+        for path in root.rglob("*.py")
+        if (bad := {m for m in _imports(path) if m.startswith(forbidden)})
+    }
+    assert not violations, violations
