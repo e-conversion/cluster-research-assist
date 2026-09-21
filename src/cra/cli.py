@@ -54,6 +54,46 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+# corpus
+
+
+def cmd_corpus_check(args: argparse.Namespace) -> int:
+    from cra.core.corpus.corpus import Corpus, CorpusError
+
+    settings = load_settings(args)
+    directory = args.directory or settings.corpus_path
+    try:
+        corpus = Corpus.load(directory, required_schema=settings.corpus_require_schema)
+    except CorpusError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    for key, value in corpus.counts.items():
+        _out(f"{key:12} {value}")
+    for key, ok in corpus.available.items():
+        if not ok:
+            _out(f"{key:12} unavailable")
+    return 0
+
+
+def cmd_corpus_manifest(args: argparse.Namespace) -> int:
+    from cra.core.corpus import manifest
+    from cra.core.corpus.corpus import Corpus, CorpusError
+
+    settings = load_settings(args)
+    directory = Path(args.directory or settings.corpus_path)
+    try:
+        corpus = Corpus.load(directory, verify=False)
+    except CorpusError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    model = corpus.embeddings.model if corpus.embeddings is not None else ""
+    manifest.write(
+        directory, corpus.counts, embedding_model=model, builder=f"cra {__version__}"
+    )
+    _out(f"wrote {directory / manifest.MANIFEST}")
+    return 0
+
+
 # database
 
 
@@ -195,6 +235,19 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = sub.add_parser("serve", help="run the web application")
     serve.set_defaults(func=cmd_serve)
+
+    corpus = sub.add_parser("corpus", help="corpus bundle").add_subparsers(
+        dest="corpus_command", metavar="<command>", required=True
+    )
+    for name, func, help_text in (
+        ("check", cmd_corpus_check, "verify the manifest and print the counts"),
+        ("manifest", cmd_corpus_manifest, "write manifest.json for a corpus directory"),
+    ):
+        p = corpus.add_parser(name, help=help_text)
+        p.add_argument(
+            "directory", nargs="?", type=Path, help="default: CRA_CORPUS_PATH"
+        )
+        p.set_defaults(func=func)
 
     db = sub.add_parser("db", help="database schema").add_subparsers(
         dest="db_command", metavar="<command>", required=True

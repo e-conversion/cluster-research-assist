@@ -44,3 +44,16 @@ def test_check_config_fails_with_exit_2(tmp_path, capsys, content, message):
         main(["--env-file", str(env), "check-config"])
     assert exc.value.code == 2
     assert message in capsys.readouterr().err
+
+
+def test_corpus_manifest_then_check(tmp_path, capsys):
+    from corpus_builder import write_corpus
+
+    directory = write_corpus(tmp_path / "c", with_manifest=False)
+    env = tmp_path / "e"
+    env.write_text(f"CRA_CORPUS_PATH={directory}\n")
+    assert main(["--env-file", str(env), "corpus", "check"]) == 1
+    assert "manifest.json missing" in capsys.readouterr().err
+    assert main(["--env-file", str(env), "corpus", "manifest"]) == 0
+    assert main(["--env-file", str(env), "corpus", "check", str(directory)]) == 0
+    assert "papers       3" in capsys.readouterr().out
