@@ -37,7 +37,7 @@ dependencies = [
     "sqlalchemy[asyncio]",
     "aiosqlite",
     "alembic",
-    "authlib",
+    "joserfc",
     "onnxruntime",
     "tokenizers",
     "huggingface_hub",
@@ -98,6 +98,8 @@ ignore = ["E501", "TRY003", "TD003", "G004"]
 # fixtures are used by name, and CLI-style helper scripts may print
 "tests/*" = ["ARG001", "ARG002"]
 "developer/*" = ["T20"]
+# providers implement the AuthProvider protocol and may not need every argument
+"src/cra/app/auth/*" = ["ARG002"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["cra"]

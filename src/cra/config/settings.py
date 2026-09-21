@@ -35,7 +35,6 @@ class Settings(BaseSettings):
     cluster_display_name: str = "Cluster Research Assistant"
     cluster_description: str = "a research cluster"
     cluster_website: str = ""
-    cluster_id: str = ""
     cluster_funding_body: str = ""
     cluster_host_institutions: CommaList = []
 

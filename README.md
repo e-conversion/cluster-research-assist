@@ -19,7 +19,19 @@ Requires Python 3.11 or newer.
 ```bash
 cp .env.example .env      # fill in the values
 cra check-config          # validate and print the resolved settings
+cra db upgrade            # create or migrate the database (CRA_HISTORY_URL)
 cra serve
+```
+
+Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
+`CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header
+`CRA_AUTH_USER_HEADER`). With `CRA_AUTH_PROVIDER=oidc` users log in at the
+configured OpenID Connect issuer, and only pre-registered addresses may sign in:
+
+```bash
+cra users add-email someone@university.de
+cra users list
+cra users deactivate <user-id>
 ```
 
 ## Develop
