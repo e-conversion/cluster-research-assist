@@ -1,0 +1,133 @@
+{
+ "directed": false,
+ "multigraph": false,
+ "graph": {
+  "built_from": "pis.json",
+  "n_pis": 8
+ },
+ "nodes": [
+  {
+   "name": "Prof. Dr. Ariadne Thalassor",
+   "group": "Thalassor Group",
+   "institution": "TUM",
+   "paper_count": 4,
+   "id": "1001"
+  },
+  {
+   "name": "Dr. Cassiopeia Vellanor",
+   "group": "Vellanor Group",
+   "institution": "LMU",
+   "paper_count": 4,
+   "id": "1002"
+  },
+  {
+   "name": "Prof. Dr. Orpheus Draumheim",
+   "group": "Draumheim Group",
+   "institution": "FHI",
+   "paper_count": 3,
+   "id": "1003"
+  },
+  {
+   "name": "Dr. Selene Morvath",
+   "group": "Morvath Group",
+   "institution": "TUM",
+   "paper_count": 3,
+   "id": "1004"
+  },
+  {
+   "name": "Prof. Dr. Lysander Quenwyck",
+   "group": "Quenwyck Group",
+   "institution": "MPI FKF",
+   "paper_count": 4,
+   "id": "1005"
+  },
+  {
+   "name": "Dr. Persephone Ilmarinen",
+   "group": "Ilmarinen Group",
+   "institution": "LMU",
+   "paper_count": 3,
+   "id": "1006"
+  },
+  {
+   "name": "Prof. Dr. Icarus Brenholt",
+   "group": "Brenholt Group",
+   "institution": "TUM",
+   "paper_count": 4,
+   "id": "1007"
+  },
+  {
+   "name": "Dr. Thalia Skarnvold",
+   "group": "Skarnvold Group",
+   "institution": "FHI",
+   "paper_count": 3,
+   "id": "1008"
+  }
+ ],
+ "links": [
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2412.01642"
+   ],
+   "source": "1001",
+   "target": "1002"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2409.17622"
+   ],
+   "source": "1001",
+   "target": "1007"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2405.04967"
+   ],
+   "source": "1002",
+   "target": "1003"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2603.02089"
+   ],
+   "source": "1002",
+   "target": "1008"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2505.08762"
+   ],
+   "source": "1003",
+   "target": "1004"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2608.14153"
+   ],
+   "source": "1004",
+   "target": "1005"
+  },
+  {
+   "weight": 1,
+   "shared_dois": [
+    "10.48550/arxiv.2410.03299"
+   ],
+   "source": "1005",
+   "target": "1006"
+  },
+  {
+   "weight": 2,
+   "shared_dois": [
+    "10.48550/arxiv.2502.13797",
+    "10.48550/arxiv.2604.02270"
+   ],
+   "source": "1007",
+   "target": "1008"
+  }
+ ]
+}

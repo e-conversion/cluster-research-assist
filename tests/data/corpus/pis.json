@@ -1,0 +1,226 @@
+[
+ {
+  "smid": "1001",
+  "name": "Prof. Dr. Ariadne Thalassor",
+  "title": "Prof. Dr.",
+  "first_name": "Ariadne",
+  "last_name": "Thalassor",
+  "group": "Thalassor Group",
+  "department": "Department of Chemistry",
+  "institution": "TUM",
+  "website": "https://example.org/thalassor",
+  "profile_url": "https://example.org/members/1001",
+  "image_url": "",
+  "research_focus": [
+   "Theoretical Chemistry",
+   "long-range electrostatics",
+   "geometric GNNs"
+  ],
+  "application_fields": [
+   "molecular property prediction",
+   "molecular simulation"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2602.11071",
+   "10.48550/arxiv.2412.01642",
+   "10.48550/arxiv.2406.17595",
+   "10.48550/arxiv.2409.17622"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1002",
+  "name": "Dr. Cassiopeia Vellanor",
+  "title": "Dr.",
+  "first_name": "Cassiopeia",
+  "last_name": "Vellanor",
+  "group": "Vellanor Group",
+  "department": "Department of Physics",
+  "institution": "LMU",
+  "website": "https://example.org/vellanor",
+  "profile_url": "https://example.org/members/1002",
+  "image_url": "",
+  "research_focus": [
+   "Computational Materials Physics",
+   "charge equilibration",
+   "benchmark datasets"
+  ],
+  "application_fields": [
+   "materials discovery",
+   "molecular simulation"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2412.01642",
+   "10.48550/arxiv.2412.15455",
+   "10.48550/arxiv.2405.04967",
+   "10.48550/arxiv.2603.02089"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1003",
+  "name": "Prof. Dr. Orpheus Draumheim",
+  "title": "Prof. Dr.",
+  "first_name": "Orpheus",
+  "last_name": "Draumheim",
+  "group": "Draumheim Group",
+  "department": "Theory Department",
+  "institution": "FHI",
+  "website": "https://example.org/draumheim",
+  "profile_url": "https://example.org/members/1003",
+  "image_url": "",
+  "research_focus": [
+   "Machine Learning for Materials",
+   "foundation models for materials"
+  ],
+  "application_fields": [
+   "materials discovery"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2405.04967",
+   "10.48550/arxiv.2505.08762",
+   "10.48550/arxiv.2504.19578"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1004",
+  "name": "Dr. Selene Morvath",
+  "title": "Dr.",
+  "first_name": "Selene",
+  "last_name": "Morvath",
+  "group": "Morvath Group",
+  "department": "Department of Chemistry",
+  "institution": "TUM",
+  "website": "https://example.org/morvath",
+  "profile_url": "https://example.org/members/1004",
+  "image_url": "",
+  "research_focus": [
+   "Data-Driven Catalysis",
+   "universal atomistic models",
+   "electrochemical interfaces"
+  ],
+  "application_fields": [
+   "energy storage and conversion",
+   "materials discovery"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2505.08762",
+   "10.48550/arxiv.2206.08917",
+   "10.48550/arxiv.2608.14153"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1005",
+  "name": "Prof. Dr. Lysander Quenwyck",
+  "title": "Prof. Dr.",
+  "first_name": "Lysander",
+  "last_name": "Quenwyck",
+  "group": "Quenwyck Group",
+  "department": "Department of Physics",
+  "institution": "MPI FKF",
+  "website": "https://example.org/quenwyck",
+  "profile_url": "https://example.org/members/1005",
+  "image_url": "",
+  "research_focus": [
+   "Electrochemical Interfaces",
+   "redox chemistry in solution",
+   "charge equilibration"
+  ],
+  "application_fields": [
+   "energy storage and conversion",
+   "molecular simulation"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2608.14153",
+   "10.48550/arxiv.2410.03299",
+   "10.48550/arxiv.2506.10548",
+   "10.48550/arxiv.2412.11569"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1006",
+  "name": "Dr. Persephone Ilmarinen",
+  "title": "Dr.",
+  "first_name": "Persephone",
+  "last_name": "Ilmarinen",
+  "group": "Ilmarinen Group",
+  "department": "Department of Chemistry",
+  "institution": "LMU",
+  "website": "https://example.org/ilmarinen",
+  "profile_url": "https://example.org/members/1006",
+  "image_url": "",
+  "research_focus": [
+   "Solvation and Redox Chemistry",
+   "solvation free energies",
+   "polarisable ML potentials"
+  ],
+  "application_fields": [
+   "energy storage and conversion",
+   "molecular simulation"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2410.03299",
+   "10.48550/arxiv.2007.00407}",
+   "10.48550/arxiv.2602.19411"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1007",
+  "name": "Prof. Dr. Icarus Brenholt",
+  "title": "Prof. Dr.",
+  "first_name": "Icarus",
+  "last_name": "Brenholt",
+  "group": "Brenholt Group",
+  "department": "School of Computation, Information and Technology",
+  "institution": "TUM",
+  "website": "https://example.org/brenholt",
+  "profile_url": "https://example.org/members/1007",
+  "image_url": "",
+  "research_focus": [
+   "Geometric Deep Learning",
+   "geometric GNNs"
+  ],
+  "application_fields": [
+   "molecular property prediction"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2003.03123",
+   "10.48550/arxiv.2409.17622",
+   "10.48550/arxiv.2502.13797",
+   "10.48550/arxiv.2604.02270"
+  ],
+  "fetched_at": "2026-09-21"
+ },
+ {
+  "smid": "1008",
+  "name": "Dr. Thalia Skarnvold",
+  "title": "Dr.",
+  "first_name": "Thalia",
+  "last_name": "Skarnvold",
+  "group": "Skarnvold Group",
+  "department": "Theory Department",
+  "institution": "FHI",
+  "website": "https://example.org/skarnvold",
+  "profile_url": "https://example.org/members/1008",
+  "image_url": "",
+  "research_focus": [
+   "Crystal Representation Learning",
+   "attention for molecular graphs",
+   "benchmark datasets"
+  ],
+  "application_fields": [
+   "materials discovery",
+   "molecular property prediction"
+  ],
+  "publication_dois": [
+   "10.48550/arxiv.2502.13797",
+   "10.48550/arxiv.2604.02270",
+   "10.48550/arxiv.2603.02089"
+  ],
+  "fetched_at": "2026-09-21"
+ }
+]

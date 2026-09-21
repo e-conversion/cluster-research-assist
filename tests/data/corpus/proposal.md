@@ -1,0 +1,111 @@
+# e-toy: Learning Long-Range Physics (EXC 0000)
+
+## Summary
+
+The cluster e-toy brings together 8 principal investigators from FHI, LMU, MPI FKF, TUM around a single question: how can machine-learned models of matter capture physics that acts across many nanometres without sacrificing the locality that makes them tractable? Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for heterogeneous catalysis. The training data for this effort will be curated jointly by the Brenholt Group and the Draumheim Group, with all datasets published under open licences.
+
+Preliminary results from the Thalassor Group indicate that as a proof-of-concept demonstration in a prototypical Au(100)/NaCl(aq) system, this approach not only dramatically accelerates fully first-principles finite-field simulations but also successfully extrapolates to cell potentials beyond the training range while accurately predicting key electrochemical properties. Methodologically, we will combine graph neural network architectures with electrochemistry and interfaces, an approach whose feasibility is supported by the finding that despite substantial efforts in data generation, no large-scale molecular dataset exists that combines broad chemical diversity with a high level of accuracy. In the first funding period the emphasis lies on graph neural network architectures; the second period shifts towards transfer to heterogeneous catalysis.
+
+The cluster's data stewardship plan follows FAIR principles and is coordinated by the Draumheim Group. A central hypothesis of the cluster is that dataset and baseline models are open sourced, and a public leaderboard is available to encourage continued community developments on the total energy tasks and data.
+
+## Scientific Context
+
+Risk mitigation relies on the redundancy between Prof. Dr. Ariadne Thalassor and Prof. Dr. Lysander Quenwyck, whose groups pursue complementary routes to the same milestone. Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for heterogeneous catalysis.
+
+Early-career researchers will rotate between TUM and MPI FKF so that each doctoral project is supervised by two principal investigators. In the first funding period the emphasis lies on long-range electrostatics in machine-learning potentials; the second period shifts towards transfer to battery electrolytes.
+
+A central hypothesis of the cluster is that in this study, we introduce LAMBench, a benchmarking system designed to evaluate LAMs in terms of their generalizability, adaptability, and applicability. Dr. Thalia Skarnvold and the Skarnvold Group will contribute expertise in Crystal Representation Learning, building on their recent work on "Extending the RANGE of Graph Neural Networks: Relaying Attention Nodes for Global Encoding".
+
+This line of research builds on the insight that by performing a combination of dimensionality reduction and cross-learning models, we show that the rate of learning depends significantly on the breadth and variety of the training dataset. Methodologically, we will combine graph neural network architectures with large atomistic models and datasets, an approach whose feasibility is supported by the finding that we also include an atomic-decomposition ansatz, which we show offers significant added transferability compared to molecular learning.
+
+## Research Area A: Long-Range Electrostatics
+
+Work on graph neural network architectures has shown that this is particularly problematic when modeling large molecular systems, where dispersion forces and local electric field variations drive collective structural changes. A central hypothesis of the cluster is that however, aggregate energy and force errors alone are insufficient to establish an MLIP's physical accuracy since they do not detect qualitative inconsistencies in the model such as the prediction of image-charge attraction, dielectric screening, or charge transfer.
+
+Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for polar functional materials. Prof. Dr. Icarus Brenholt and the Brenholt Group will contribute expertise in Geometric Deep Learning, building on their recent work on "MatterSim: A Deep Learning Atomistic Model Across Elements, Temperatures and Pressures".
+
+## Research Area B: Large Atomistic Models and Datasets
+
+Risk mitigation relies on the redundancy between Prof. Dr. Lysander Quenwyck and Dr. Thalia Skarnvold, whose groups pursue complementary routes to the same milestone. We will benchmark every model against the criteria established in "Learning charges and long-range interactions from energies and forces", extended with cluster-specific probes for large atomistic models and datasets. Early-career researchers will rotate between MPI FKF and LMU so that each doctoral project is supervised by two principal investigators.
+
+A central hypothesis of the cluster is that the inclusion of long-range electrostatics in atomistic machine learning (ML) is receiving increasing attention for achieving quantum-mechanical accuracy in predicting a wide range of molecular and material properties. In the first funding period the emphasis lies on graph neural network architectures; the second period shifts towards transfer to heterogeneous catalysis. Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at MPI FKF and TUM.
+
+## Research Area C: Electrochemistry and Interfaces
+
+Dr. Thalia Skarnvold and the Skarnvold Group will contribute expertise in benchmark datasets, building on their recent work on "The dark side of the forces: assessing non-conservative force models for atomistic machine learning". Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at TUM and MPI FKF.
+
+Risk mitigation relies on the redundancy between Prof. Dr. Ariadne Thalassor and Prof. Dr. Lysander Quenwyck, whose groups pursue complementary routes to the same milestone. The cluster's data stewardship plan follows FAIR principles and is coordinated by the Vellanor Group. Early-career researchers will rotate between LMU and FHI so that each doctoral project is supervised by two principal investigators.
+
+## Research Area D: Graph Neural Network Architectures
+
+In the first funding period the emphasis lies on electrochemistry and interfaces; the second period shifts towards transfer to aqueous electrochemistry. Risk mitigation relies on the redundancy between Prof. Dr. Orpheus Draumheim and Prof. Dr. Ariadne Thalassor, whose groups pursue complementary routes to the same milestone. A central hypothesis of the cluster is that these attributes are crucial for deploying LAMs as ready-to-use tools across a diverse array of scientific discovery contexts.
+
+Methodologically, we will combine long-range electrostatics in machine-learning potentials with electrochemistry and interfaces, an approach whose feasibility is supported by the finding that despite substantial efforts in data generation, no large-scale molecular dataset exists that combines broad chemical diversity with a high level of accuracy. The cluster e-toy brings together 8 principal investigators from FHI, LMU, MPI FKF, TUM around a single question: how can machine-learned models of matter capture physics that acts across many nanometres without sacrificing the locality that makes them tractable? In the first funding period the emphasis lies on large atomistic models and datasets; the second period shifts towards transfer to polar functional materials.
+
+## Work Package 1: Physically Constrained Long-Range Models
+
+Methodologically, we will combine graph neural network architectures with large atomistic models and datasets, an approach whose feasibility is supported by the finding that at evaluation time, both force types can be used together to avoid unphysical effects while still benefitting almost entirely from the computational efficiency of direct forces. Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for polar functional materials.
+
+Risk mitigation relies on the redundancy between Dr. Persephone Ilmarinen and Prof. Dr. Lysander Quenwyck, whose groups pursue complementary routes to the same milestone. A central hypothesis of the cluster is that we benchmark LES on diverse and challenging systems, including charged molecules, ionic liquid, electrolyte solution, polar dipeptides, surface adsorption, electrolyte/solid interfaces, and solid-solid interfaces.
+
+We will benchmark every model against the criteria established in "Electrostatic Phenomenology Benchmarks for Machine-Learned Interatomic Potentials in Electrochemistry: Beyond the Energy-Force Metric", extended with cluster-specific probes for graph neural network architectures. Preliminary results from the Morvath Group indicate that the first is Subatomic Tokenization, a compact chemically structured atom representation that replaces high-dimensional one-hot encodings and is better suited to continuous diffusion. Risk mitigation relies on the redundancy between Dr. Selene Morvath and Prof. Dr. Ariadne Thalassor, whose groups pursue complementary routes to the same milestone.
+
+## Work Package 2: Data Generation and Foundation Models
+
+Early-career researchers will rotate between LMU and FHI so that each doctoral project is supervised by two principal investigators. In the first funding period the emphasis lies on long-range electrostatics in machine-learning potentials; the second period shifts towards transfer to heterogeneous catalysis.
+
+The cluster e-toy brings together 8 principal investigators from FHI, LMU, MPI FKF, TUM around a single question: how can machine-learned models of matter capture physics that acts across many nanometres without sacrificing the locality that makes them tractable? Dr. Selene Morvath and the Morvath Group will contribute expertise in electrochemical interfaces, building on their recent work on "Long-range electrostatics in atomistic machine learning: a physical perspective". Methodologically, we will combine graph neural network architectures with large atomistic models and datasets, an approach whose feasibility is supported by the finding that however, for solid zirconia, no improvements are observed with the present approach, while message-passing networks reduce the error by almost a factor of two to three.
+
+Prof. Dr. Lysander Quenwyck and the Quenwyck Group will contribute expertise in charge equilibration, building on their recent work on "MatterSim: A Deep Learning Atomistic Model Across Elements, Temperatures and Pressures". Methodologically, we will combine graph neural network architectures with long-range electrostatics in machine-learning potentials, an approach whose feasibility is supported by the finding that we benchmark LES on diverse and challenging systems, including charged molecules, ionic liquid, electrolyte solution, polar dipeptides, surface adsorption, electrolyte/solid interfaces, and solid-solid interfaces.
+
+## Work Package 3: Electrified Interfaces
+
+Preliminary results from the Vellanor Group indicate that we benchmark LES on diverse and challenging systems, including charged molecules, ionic liquid, electrolyte solution, polar dipeptides, surface adsorption, electrolyte/solid interfaces, and solid-solid interfaces. Dr. Persephone Ilmarinen and the Ilmarinen Group will contribute expertise in polarisable ML potentials, building on their recent work on "Electrostatic interactions in atomistic and machine-learned potentials for polar materials". Risk mitigation relies on the redundancy between Dr. Cassiopeia Vellanor and Prof. Dr. Lysander Quenwyck, whose groups pursue complementary routes to the same milestone. All interface simulations described in work package 3 share the constant-potential infrastructure developed in Work Package 1.
+
+Early-career researchers will rotate between MPI FKF and FHI so that each doctoral project is supervised by two principal investigators. Methodologically, we will combine electrochemistry and interfaces with long-range electrostatics in machine-learning potentials, an approach whose feasibility is supported by the finding that for NaCl, the present descriptors improve on short-range density descriptors, reducing errors by a factor of two to three and coming close to message-passing networks.
+
+The training data for this effort will be curated jointly by the Draumheim Group and the Skarnvold Group, with all datasets published under open licences. This line of research builds on the insight that our implementation is available online.
+
+## Work Package 4: Architectures and Software
+
+A central hypothesis of the cluster is that we introduce RANGE, a model-agnostic framework that employs an attention-based aggregation-broadcast mechanism that significantly reduces oversquashing effects, and achieves remarkable accuracy in capturing long-range interactions at a negligible computational cost. Early-career researchers will rotate between LMU and TUM so that each doctoral project is supervised by two principal investigators. Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at TUM and FHI.
+
+The training data for this effort will be curated jointly by the Thalassor Group and the Morvath Group, with all datasets published under open licences. Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for battery electrolytes.
+
+The training data for this effort will be curated jointly by the Vellanor Group and the Morvath Group, with all datasets published under open licences. In the first funding period the emphasis lies on large atomistic models and datasets; the second period shifts towards transfer to polar functional materials.
+
+## Principal Investigators
+
+Prof. Dr. Ariadne Thalassor (Thalassor Group, TUM, Department of Chemistry) leads research on Theoretical Chemistry, long-range electrostatics, geometric GNNs with applications in molecular property prediction and molecular simulation. Methodologically, we will combine large atomistic models and datasets with electrochemistry and interfaces, an approach whose feasibility is supported by the finding that yet, many widely used electronic-structure databases are assembled having materials screening as primary goal rather than robust force-field learning, are limited in their scope to a specific class of chemical compounds, and/or employ inconsistent DFT functionals and settings. A central hypothesis of the cluster is that we introduce a benchmark suite EPhEct (Electrostatic Phenomena for Electrochemistry) of focused test cases designed to evaluate MLIPs on electrochemically relevant physical phenomena.
+
+Dr. Cassiopeia Vellanor (Vellanor Group, LMU, Department of Physics) leads research on Computational Materials Physics, charge equilibration, benchmark datasets with applications in materials discovery and molecular simulation. Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at MPI FKF and FHI. This line of research builds on the insight that in a toy model with purely electrostatic interactions, our model achieves errors below 0.1%, worse than LODE but still very good.
+
+Prof. Dr. Orpheus Draumheim (Draumheim Group, FHI, Theory Department) leads research on Machine Learning for Materials, foundation models for materials with applications in materials discovery. Early-career researchers will rotate between TUM and LMU so that each doctoral project is supervised by two principal investigators. Prof. Dr. Ariadne Thalassor and the Thalassor Group will contribute expertise in geometric GNNs, building on their recent work on "Machine learning potentials for redox chemistry in solution".
+
+Dr. Selene Morvath (Morvath Group, TUM, Department of Chemistry) leads research on Data-Driven Catalysis, universal atomistic models, electrochemical interfaces with applications in energy storage and conversion and materials discovery. Preliminary results from the Vellanor Group indicate that finite-field methods are one of most reliable approaches for modeling electrochemical interfaces in complete cells under realistic constant-potential conditions. Early-career researchers will rotate between LMU and MPI FKF so that each doctoral project is supervised by two principal investigators.
+
+Prof. Dr. Lysander Quenwyck (Quenwyck Group, MPI FKF, Department of Physics) leads research on Electrochemical Interfaces, redox chemistry in solution, charge equilibration with applications in energy storage and conversion and molecular simulation. The training data for this effort will be curated jointly by the Ilmarinen Group and the Brenholt Group, with all datasets published under open licences. Preliminary results from the Thalassor Group indicate that here, we show that fourth-generation MLPs overcome this limitation and can provide a physically correct description of redox chemical reactions.
+
+Dr. Persephone Ilmarinen (Ilmarinen Group, LMU, Department of Chemistry) leads research on Solvation and Redox Chemistry, solvation free energies, polarisable ML potentials with applications in energy storage and conversion and molecular simulation. This line of research builds on the insight that our study highlights the dangers of fitting machine-learning models to databases of narrow chemical range. Early-career researchers will rotate between TUM and FHI so that each doctoral project is supervised by two principal investigators.
+
+Prof. Dr. Icarus Brenholt (Brenholt Group, TUM, School of Computation, Information and Technology) leads research on Geometric Deep Learning, geometric GNNs with applications in molecular property prediction. In the first funding period the emphasis lies on long-range electrostatics in machine-learning potentials; the second period shifts towards transfer to battery electrolytes. This line of research builds on the insight that however, GNNs are inherently local and can suffer from information flow bottlenecks.
+
+Dr. Thalia Skarnvold (Skarnvold Group, FHI, Theory Department) leads research on Crystal Representation Learning, attention for molecular graphs, benchmark datasets with applications in materials discovery and molecular property prediction. Methodologically, we will combine electrochemistry and interfaces with long-range electrostatics in machine-learning potentials, an approach whose feasibility is supported by the finding that OMol25 also greatly expands on the size of systems typically included in DFT datasets, with systems of up to 350 atoms. Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at MPI FKF and FHI.
+
+## Infrastructure and Data Management
+
+We will benchmark every model against the criteria established in "The Open Molecules 2025 (OMol25) Dataset, Evaluations, and Models", extended with cluster-specific probes for graph neural network architectures. In the first funding period the emphasis lies on long-range electrostatics in machine-learning potentials; the second period shifts towards transfer to battery electrolytes. The cluster e-toy brings together 8 principal investigators from FHI, LMU, MPI FKF, TUM around a single question: how can machine-learned models of matter capture physics that acts across many nanometres without sacrificing the locality that makes them tractable?
+
+Work on electrochemistry and interfaces has shown that we further address the related aspect of incorporating finite-field effects through coupling to the system's polarization, relevant for applications involving an external electric bias. Deliverables include an open-source software stack, curated datasets, and a yearly summer school hosted alternately at MPI FKF and FHI. Beyond its scientific goals, e-toy will deliver a reference implementation that external groups can adopt for heterogeneous catalysis.
+
+## Timeline and Milestones
+
+Early-career researchers will rotate between TUM and MPI FKF so that each doctoral project is supervised by two principal investigators. A central hypothesis of the cluster is that to overcome these limitations, we present a machine learning-based finite-field approach that combines two neural network models: one predicts atomic forces under applied electric fields, while the other describes the corresponding charge response.
+
+Prof. Dr. Lysander Quenwyck and the Quenwyck Group will contribute expertise in redox chemistry in solution, building on their recent work on "MACE-POLAR-1: A Polarisable Electrostatic Foundation Model for Molecular Chemistry". We will benchmark every model against the criteria established in "Hydration free energies from kernel-based machine learning: Compound-database bias", extended with cluster-specific probes for graph neural network architectures. The cluster's data stewardship plan follows FAIR principles and is coordinated by the Ilmarinen Group.
+
+## Expected Impact
+
+The cluster e-toy brings together 8 principal investigators from FHI, LMU, MPI FKF, TUM around a single question: how can machine-learned models of matter capture physics that acts across many nanometres without sacrificing the locality that makes them tractable? Dr. Thalia Skarnvold and the Skarnvold Group will contribute expertise in benchmark datasets, building on their recent work on "Electrostatic Phenomenology Benchmarks for Machine-Learned Interatomic Potentials in Electrochemistry: Beyond the Energy-Force Metric".
+
+Risk mitigation relies on the redundancy between Prof. Dr. Orpheus Draumheim and Dr. Selene Morvath, whose groups pursue complementary routes to the same milestone. Methodologically, we will combine electrochemistry and interfaces with graph neural network architectures, an approach whose feasibility is supported by the finding that these models represent a molecule as a graph using only the distance between atoms (nodes). A central hypothesis of the cluster is that we benchmark ten state-of-the-art LAMs released prior to August 1, 2025, using LAMBench.
