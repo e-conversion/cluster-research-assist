@@ -14,3 +14,33 @@ def test_version_flag_prints_version(capsys):
 def test_no_command_prints_help_and_fails(capsys):
     assert main([]) == 2
     assert "usage: cra" in capsys.readouterr().out
+
+
+def test_check_config_prints_redacted_settings(tmp_path, capsys):
+    env = tmp_path / "my.env"
+    env.write_text("CRA_CORPUS_PATH=/c\nCRA_LLM_API_KEY=secret\n")
+    assert main(["--env-file", str(env), "check-config"]) == 0
+    out = capsys.readouterr().out
+    assert "CRA_CORPUS_PATH=/c" in out
+    assert "CRA_LLM_API_KEY=***" in out
+    assert "secret" not in out
+
+
+@pytest.mark.parametrize(
+    ("content", "message"),
+    [
+        ("CRA_CORPUS_PATH=/c\nCRA_AUTH_PROVIDER=oidc\n", "CRA_OIDC_ISSUER"),
+        (
+            "CRA_CORPUS_PATH=/c\nCRA_LLM_MODLE=x\n",
+            "unknown configuration keys: CRA_LLM_MODLE",
+        ),
+    ],
+    ids=["invalid", "typo"],
+)
+def test_check_config_fails_with_exit_2(tmp_path, capsys, content, message):
+    env = tmp_path / ".env"
+    env.write_text(content)
+    with pytest.raises(SystemExit) as exc:
+        main(["--env-file", str(env), "check-config"])
+    assert exc.value.code == 2
+    assert message in capsys.readouterr().err
