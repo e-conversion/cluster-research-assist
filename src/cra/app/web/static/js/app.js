@@ -24,7 +24,7 @@ export async function refreshSession() {
 
 function renderSignIn(view, config) {
   const page = document.createElement("div");
-  page.className = "landing";
+  page.className = "landing signin";
   page.innerHTML = `
     <div class="landing-head">
       <svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>

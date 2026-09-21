@@ -21,6 +21,7 @@ def _clean_environment(monkeypatch, tmp_path):
     for key in list(os.environ):
         if key.startswith("CRA_"):
             monkeypatch.delenv(key)
+    monkeypatch.setenv("PYTHON_COLORS", "0")  # argparse colours help on a tty (3.14)
     monkeypatch.chdir(tmp_path)
 
 
