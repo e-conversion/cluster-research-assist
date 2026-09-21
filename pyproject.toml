@@ -1,0 +1,117 @@
+[build-system]
+requires = ["setuptools>=77.0.1", "setuptools_scm>=8", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cluster-research-assist"
+description = "LLM research assistant over a cluster's publications, data and ELN."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dynamic = ["version"]
+authors = [{name = "e-conversion Data Intelligence Team"}]
+maintainers = [
+    {name = "Philip Loche"},
+    {name = "Alex Burg"},
+    {name = "Harry Typ"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "quart",
+    "hypercorn",
+    "pydantic",
+    "pydantic-settings",
+    "httpx",
+    "openai",
+    "numpy",
+    "rank-bm25",
+    "networkx",
+    "mcp",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "alembic",
+    "authlib",
+    "onnxruntime",
+    "tokenizers",
+    "huggingface_hub",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]"]
+map = ["scikit-learn", "umap-learn"]
+
+[project.scripts]
+cra = "cra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cra = ["web/static/**/*", "history/migrations/**/*"]
+
+[tool.setuptools_scm]
+version_file = "src/cra/_version.py"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+addopts = [
+    "--cov",
+    "--cov-append",
+    "--cov-report=",
+    "--import-mode=append",
+    "-m", "not llm and not postgres and not slow",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "llm: calls a real LLM endpoint; needs CRA_LLM_API_KEY",
+    "postgres: needs a PostgreSQL server at CRA_TEST_POSTGRES_URL",
+    "slow: downloads models or takes more than a few seconds",
+]
+
+[tool.mypy]
+follow_imports = "skip"
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 88
+exclude = ["src/cra/_version.py"]
+
+[tool.ruff.lint]
+extend-select = [
+    "F", "B", "E", "UP", "I", "SIM", "PT", "RET", "W", "Q",
+    "TD", "LOG", "G", "T20", "ARG", "PTH", "FLY", "TRY", "ASYNC",
+]
+# E501: the formatter owns line length. TRY003: messages in exceptions are fine.
+# TD003: no issue links required on TODOs. G004: f-strings in log calls are fine.
+ignore = ["E501", "TRY003", "TD003", "G004"]
+
+[tool.ruff.lint.per-file-ignores]
+# fixtures are used by name, and CLI-style helper scripts may print
+"tests/*" = ["ARG001", "ARG002"]
+"developer/*" = ["T20"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cra"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.check-manifest]
+ignore = ["src/cra/_version.py"]
+
+[tool.coverage.run]
+omit = ["src/cra/_version.py", "tests/*", "tests/**/*"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+exclude_lines = ["if __name__ == .__main__.:", "if TYPE_CHECKING:", "\\.\\.\\."]

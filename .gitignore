@@ -1,0 +1,33 @@
+# secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+src/cra/_version.py
+build/
+dist/
+.tox/
+.venv/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# runtime
+logs/
+*.sqlite
+*.sqlite3
+*.db
+
+# editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.claude/settings.local.json

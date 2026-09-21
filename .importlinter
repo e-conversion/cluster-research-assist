@@ -1,0 +1,26 @@
+[importlinter]
+root_package = cra
+
+[importlinter:contract:corpus-independence]
+name = Corpus and retrieval do not depend on the application layers
+type = forbidden
+source_modules =
+    cra.corpus
+    cra.retrieval
+forbidden_modules =
+    cra.web
+    cra.chat
+    cra.auth
+    cra.history
+    cra.connectors
+    cra.mcpclient
+    cra.mcpserver
+
+[importlinter:contract:tools-independence]
+name = Tools do not depend on the web or history layers
+type = forbidden
+source_modules =
+    cra.tools
+forbidden_modules =
+    cra.web
+    cra.history

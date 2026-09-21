@@ -1,0 +1,26 @@
+# Real-endpoint tests. The job is bound to the GitHub Environment `llm`, whose
+# required reviewers must approve it before it receives the secrets and runs.
+# Approve it as the last action of a review; it is a required status check.
+name: Tests (LLM)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests-llm:
+    runs-on: ubuntu-latest
+    environment: llm
+    env:
+      CRA_LLM_API_KEY: ${{ secrets.CRA_LLM_API_KEY }}
+      CRA_LLM_BASE_URL: ${{ vars.CRA_LLM_BASE_URL }}
+      CRA_LLM_MODEL: ${{ vars.CRA_LLM_MODEL }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m pip install tox
+      - run: tox -e tests-llm
