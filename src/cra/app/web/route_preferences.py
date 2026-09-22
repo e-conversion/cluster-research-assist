@@ -9,7 +9,7 @@ from typing import Any
 from quart import Blueprint, current_app, g, request
 
 from cra.assistant.llm import params as params_
-from cra.assistant.llm.selection import resolve
+from cra.assistant.llm.selection import available, resolve
 
 bp = Blueprint("preferences", __name__)
 
@@ -46,8 +46,10 @@ async def set_model() -> Any:
     ctx = _ctx()
     body = await request.get_json(silent=True) or {}
     wanted = str(body.get("model", "")).strip()
-    offered = ctx.policy["llm_models"]
-    if wanted and wanted not in offered:
+    choices = await available(
+        ctx.settings, ctx.policy["llm_models"], ctx.catalogue, ctx.http
+    )
+    if wanted and wanted not in choices:
         return {"error": f"Unknown model: {wanted}"}, 400
 
     data = dict(g.session.data)

@@ -222,3 +222,54 @@ async def test_an_unreachable_catalogue_falls_back_to_the_configured_model(tmp_p
 def test_the_configured_model_is_always_offered(tmp_path):
     settings = make_settings(tmp_path, llm_model="house/model", llm_models=["other"])
     assert offered(settings) == ["house/model", "other"]
+
+
+@respx.mock
+async def test_the_catalogue_models_are_offered_when_none_are_named(tmp_path):
+    """Otherwise a deployment that leaves the choice automatic can only pick
+    between "auto" and the fallback."""
+    from cra.assistant.llm.selection import available
+
+    settings = make_settings(
+        tmp_path,
+        llm_provider="openrouter",
+        llm_base_url="https://openrouter.test/api/v1",
+        llm_api_key="a-key",
+        llm_model="fallback/model",
+        llm_models=[],
+    )
+    entry = {
+        "pricing": {"prompt": "0.0000002", "completion": "0.0000002"},
+        "benchmarks": {"artificial_analysis": {"intelligence_index": 50}},
+        "supported_parameters": ["tools"],
+    }
+    respx.get("https://openrouter.test/api/v1/models/user").mock(
+        return_value=httpx.Response(
+            200, json={"data": [{"id": "a/one"}, {"id": "b/two"}]}
+        )
+    )
+    respx.get("https://openrouter.test/api/v1/models").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        **entry,
+                        "id": "b/two",
+                        "pricing": {"prompt": "0.9", "completion": "0.9"},
+                    },
+                    {**entry, "id": "a/one"},
+                ]
+            },
+        )
+    )
+    async with httpx.AsyncClient() as http:
+        choices = await available(settings, [], ModelCatalogue(settings), http)
+    assert choices == ["a/one"], "too dear to run is not a choice"
+
+
+async def test_a_named_list_is_the_whole_choice(tmp_path):
+    from cra.assistant.llm.selection import available
+
+    settings = make_settings(tmp_path, llm_models=MODELS, llm_model=MODELS[0])
+    assert await available(settings, MODELS) == MODELS

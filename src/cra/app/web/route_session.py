@@ -9,7 +9,7 @@ from cra import __version__
 from cra.app.web.access import public
 from cra.app.web.route_preferences import selection
 from cra.assistant.llm import params as params_
-from cra.assistant.llm.selection import offered
+from cra.assistant.llm.selection import available
 
 bp = Blueprint("session", __name__)
 
@@ -39,7 +39,9 @@ async def config() -> dict[str, Any]:
         "notice": policy["notice"],
         "provider": settings.llm_provider,
         "openrouter": params_.is_openrouter(settings),
-        "models": offered(settings, policy["llm_models"]),
+        "models": await available(
+            settings, policy["llm_models"], ctx.catalogue, ctx.http
+        ),
         "default_model": policy["llm_model"],
         "routes": [dict(r) for r in params_.ROUTES],
         "parameters": params_.payload(settings),

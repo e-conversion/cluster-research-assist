@@ -105,10 +105,32 @@ class ModelCatalogue:
 
 
 def offered(settings: Settings, policy_models: list[str] | None = None) -> list[str]:
-    models = policy_models if policy_models is not None else settings.llm_models
+    """What the deployment names, without asking anyone."""
+    models = list(policy_models if policy_models is not None else settings.llm_models)
     if settings.llm_model and settings.llm_model not in models:
-        return [settings.llm_model, *models]
-    return list(models)
+        models.insert(0, settings.llm_model)
+    return models
+
+
+async def available(
+    settings: Settings,
+    policy_models: list[str] | None = None,
+    catalogue: "ModelCatalogue | None" = None,
+    client: httpx.AsyncClient | None = None,
+) -> list[str]:
+    """What a person may choose from.
+
+    A deployment that names its models gets exactly those. One that names none
+    and runs on OpenRouter gets everything the account may use that is cheap
+    enough and good enough, so the choice is not limited to the fallback.
+    """
+    named = offered(settings, policy_models)
+    if policy_models or settings.llm_models or not is_openrouter(settings):
+        return named
+    if catalogue is None or client is None:
+        return named
+    eligible = await catalogue.cheapest_first(client)
+    return eligible or named
 
 
 async def resolve(
