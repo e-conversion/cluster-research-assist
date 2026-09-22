@@ -30,7 +30,7 @@ jobs:
       - run: python -m pip install tox coverage[toml]
       - run: tox -e tests
       - run: coverage xml
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v7
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.13'
         with:
           files: coverage.xml
