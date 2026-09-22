@@ -80,7 +80,6 @@ PAPERS = [
         "The Open Molecules 2025 (OMol25) Dataset, Evaluations, and Models",
         "2505.08762",
     ),
-    # OC25 is not on arXiv; OC22 is the closest solid-liquid/electrocatalysis dataset paper.
     (
         "b",
         "The Open Catalyst 2022 (OC22) Dataset and Challenges for Oxide Electrocatalysts",
@@ -98,7 +97,6 @@ PAPERS = [
         "2608.14153",
     ),
     ("c", "Machine learning potentials for redox chemistry in solution", "2410.03299"),
-    # Substitutes for two electrochemistry papers that are not on arXiv.
     (
         "c",
         "Machine learning accelerated finite-field simulations for electrochemical interfaces",

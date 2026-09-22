@@ -13,6 +13,7 @@ from cra.config.settings import Settings
 
 # read at import time: the autouse fixture below wipes CRA_ variables per test
 POSTGRES_URL = os.environ.get("CRA_TEST_POSTGRES_URL", "")
+TOY_CORPUS = Path(__file__).resolve().parent / "data" / "corpus"
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,7 @@ def _clean_environment(monkeypatch, tmp_path):
 
 def make_settings(tmp_path: Path, **overrides) -> Settings:
     values = {
-        "corpus_path": tmp_path,
+        "corpus_path": TOY_CORPUS,
         "history_url": f"sqlite+aiosqlite:///{tmp_path}/cra.sqlite",
         "history_auto_migrate": True,
         "auth_provider": "dev",

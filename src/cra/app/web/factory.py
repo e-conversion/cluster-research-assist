@@ -1,6 +1,7 @@
 """Quart application factory. Everything long-lived (engine, HTTP client,
 auth provider) hangs off ``app.extensions["cra"]`` and is created once."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
@@ -20,6 +21,7 @@ from cra.app.web import route_auth, route_health, route_session
 from cra.app.web.access import is_public
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.config.settings import Settings
+from cra.core.corpus.corpus import Corpus
 
 log = logging.getLogger(__name__)
 
@@ -35,6 +37,7 @@ class AppContext:
     sessions: SessionStore
     provider: AuthProvider
     http: httpx.AsyncClient
+    corpus: Corpus | None = None
 
     @property
     def home(self) -> str:
@@ -77,6 +80,11 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     @app.before_serving
     async def start() -> None:
         try:
+            ctx.corpus = await asyncio.to_thread(
+                Corpus.load,
+                ctx.settings.corpus_path,
+                required_schema=ctx.settings.corpus_require_schema,
+            )
             await ctx.provider.start()
             await _check_schema(ctx)
         except Exception:

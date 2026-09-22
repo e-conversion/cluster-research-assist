@@ -12,7 +12,9 @@ def cookie_value(response):
 
 
 async def test_public_routes_answer_without_a_session(client):
-    assert (await (await client.get("/api/health")).get_json())["ok"] is True
+    health = await (await client.get("/api/health")).get_json()
+    assert health["ok"] is True
+    assert health["corpus"]["papers"] == 19
     config = await (await client.get("/api/config")).get_json()
     assert config["auth"] == {
         "provider": "dev",
@@ -111,6 +113,14 @@ async def test_base_path_mounts_everything_under_the_prefix(tmp_path):
         assert (await (await client.get(f"{prefix}/api/session")).get_json())[
             "user"
         ] == "alice"
+
+
+async def test_serving_refuses_a_broken_corpus_bundle(tmp_path):
+    (tmp_path / "papers.csv").write_text("article_doi\n")
+    app = create_app(make_settings(tmp_path, corpus_path=tmp_path))
+    with pytest.raises(LifespanError, match="manifest.json missing"):
+        async with app.test_app():
+            pass
 
 
 async def test_serving_refuses_an_outdated_schema(tmp_path):
