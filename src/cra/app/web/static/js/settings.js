@@ -124,15 +124,33 @@ function renderStats(s) {
     `;
 }
 
+/** Native dialogs only close on Escape or the ✕; make the backdrop dismiss them
+ *  too. The mousedown check keeps a selection drag that ends on the backdrop
+ *  from closing the dialog. */
+function closeOnBackdropClick(dlg) {
+  let fromBackdrop = false;
+  dlg.addEventListener("mousedown", (e) => { fromBackdrop = e.target === dlg; });
+  dlg.addEventListener("click", (e) => { if (fromBackdrop && e.target === dlg) dlg.close("cancel"); });
+}
+
 export function initDialogs(s) {
   store = s;
+  for (const dlg of document.querySelectorAll("dialog.dlg")) closeOnBackdropClick(dlg);
   syncControls(currentTheme());
   document.getElementById("theme-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-theme]");
     if (b) applyTheme(b.dataset.theme);
   });
   const menu = document.getElementById("menu");
-  document.addEventListener("click", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+  // Pop-up <details> dismiss like the dialogs do. Expanders that are part of a
+  // panel (#pipeline-box) are deliberately not listed.
+  const popovers = () => document.querySelectorAll("details.menu[open], details.picker[open]");
+  document.addEventListener("click", (e) => {
+    for (const d of popovers()) if (!d.contains(e.target)) d.open = false;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") for (const d of popovers()) d.open = false;
+  });
   document.getElementById("stats-btn").addEventListener("click", () => { menu.open = false; openStats(); });
   const box = document.getElementById("pipeline-box");
   box.addEventListener("toggle", () => {
