@@ -7,6 +7,9 @@ from quart import Blueprint, current_app, g
 
 from cra import __version__
 from cra.app.web.access import public
+from cra.app.web.route_preferences import selection
+from cra.assistant.llm import params as params_
+from cra.assistant.llm.selection import offered
 
 bp = Blueprint("session", __name__)
 
@@ -34,11 +37,15 @@ async def config() -> dict[str, Any]:
             "logout_url": "auth/logout",
         },
         "notice": policy["notice"],
+        "provider": settings.llm_provider,
+        "openrouter": params_.is_openrouter(settings),
+        "models": offered(settings, policy["llm_models"]),
+        "default_model": policy["llm_model"],
+        "routes": [dict(r) for r in params_.ROUTES],
+        "parameters": params_.payload(settings),
         "library": counts,
         "placeholder": _placeholder(counts),
         "examples": [],
-        "models": policy["llm_models"],
-        "default_model": policy["llm_model"],
         "sources": {},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
         "version": {"version": __version__},
@@ -71,7 +78,7 @@ async def session() -> dict[str, Any]:
         "signed_in": principal.signed_in,
         "is_admin": principal.is_admin,
         "daily_limit": ctx.policy["user_chat_daily_limit"],
-        "model": "",
+        **await selection(ctx, g.session),
         "connected": {},
         "tools": _tool_counts(ctx, principal.tier),
         "turns": 0,

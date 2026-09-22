@@ -104,6 +104,24 @@
   </form>
 </dialog>
 
+<dialog id="dlg-params" class="dlg">
+  <form method="dialog" class="dlg-body">
+    <header class="dlg-head">
+      <h2>Parameters</h2>
+      <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+    </header>
+    <p class="muted small">This session only. “default” means the field is not sent, so the
+      provider's own value is used.</p>
+    <div id="params-body"></div>
+    <p class="error" id="params-error" hidden></p>
+    <footer class="dlg-foot">
+      <button type="button" class="btn danger ghost" id="params-reset">Reset</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn primary" id="params-apply">Apply</button>
+    </footer>
+  </form>
+</dialog>
+
 <dialog id="dlg-feedback" class="dlg">
   <form method="dialog" class="dlg-body" id="feedback-form">
     <header class="dlg-head">

@@ -64,6 +64,105 @@ async function disconnect() {
   } catch (e) { toast(e.message, "bad"); }
 }
 
+// ---------- parameters dialog ----------
+const optionLabel = (field, value) => field.option_labels?.[value] ?? (value || "default");
+
+/** The fields this session set away from what the deployment configures. */
+function changedParams(store) {
+  const { defaults } = store.config.parameters;
+  const effective = store.session.params || {};
+  return Object.keys(defaults).filter((k) => effective[k] !== defaults[k]);
+}
+
+function paramField(field, effective, defaults) {
+  const wrap = document.createElement("div");
+  const label = document.createElement("label");
+  label.className = "field";
+  const name = document.createElement("span");
+  name.textContent = field.label;
+  if (effective[field.key] !== defaults[field.key]) {
+    const changed = document.createElement("b");
+    changed.className = "muted small";
+    changed.textContent = " \u00b7 changed";
+    name.append(changed);
+  }
+  label.append(name);
+
+  if (field.type === "number") {
+    const input = document.createElement("input");
+    input.type = "number";
+    input.dataset.key = field.key;
+    input.min = String(field.min);
+    input.max = String(field.max);
+    input.step = String(field.step || 1);
+    input.placeholder = defaults[field.key] || "default";
+    input.value = effective[field.key] || "";
+    label.append(input);
+  } else {
+    const select = document.createElement("select");
+    select.dataset.key = field.key;
+    for (const option of field.options) {
+      const o = document.createElement("option");
+      o.value = option;
+      o.textContent = optionLabel(field, option);
+      o.selected = option === effective[field.key];
+      select.append(o);
+    }
+    label.append(select);
+  }
+  wrap.append(label);
+  if (field.help) {
+    const help = document.createElement("p");
+    help.className = "hint";
+    help.textContent = field.help;
+    wrap.append(help);
+  }
+  return wrap;
+}
+
+function openParams() {
+  const { spec, defaults } = store.config.parameters;
+  const effective = store.session.params || {};
+  const body = document.getElementById("params-body");
+  document.getElementById("params-error").hidden = true;
+  body.replaceChildren(
+    ...spec.filter((f) => !f.hidden).map((f) => paramField(f, effective, defaults)),
+  );
+  document.getElementById("dlg-params").showModal();
+}
+
+function readParams() {
+  const values = {};
+  for (const el of document.querySelectorAll("#params-body [data-key]")) {
+    values[el.dataset.key] = el.value;
+  }
+  return values;
+}
+
+async function applyParams() {
+  const err = document.getElementById("params-error");
+  try {
+    await postJSON("api/session/params", { params: readParams() });
+    await refreshSession();
+    document.getElementById("dlg-params").close();
+    toast("Parameters applied");
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+  }
+}
+
+async function resetParams() {
+  try {
+    await del("api/session/params");
+    await refreshSession();
+    document.getElementById("dlg-params").close();
+    toast("Parameters reset");
+  } catch (e) {
+    toast(e.message, "bad");
+  }
+}
+
 // ---------- feedback dialog ----------
 function openFeedback() {
   document.getElementById("feedback-text").value = "";
@@ -169,6 +268,8 @@ export function initDialogs(s) {
   document.getElementById("connect-disconnect").addEventListener("click", disconnect);
   document.getElementById("connect-token").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitConnect(); } });
   document.getElementById("feedback-submit").addEventListener("click", submitFeedback);
+  document.getElementById("params-apply").addEventListener("click", applyParams);
+  document.getElementById("params-reset").addEventListener("click", resetParams);
   document.getElementById("dlg-connect").addEventListener("close", () => { document.getElementById("connect-frame").src = "about:blank"; });
 }
 
@@ -191,7 +292,18 @@ export function renderSettingsRow(store, el) {
     el.append(b);
   }
 
-  if (Object.keys(cfg.providers || {}).length) el.append(modelPicker(store));
+  if ((cfg.models || []).length || cfg.openrouter) el.append(modelPicker(store));
+
+  const changed = changedParams(store);
+  const params = document.createElement("button");
+  params.type = "button";
+  params.className = "chip" + (changed.length ? " on" : "");
+  params.textContent = changed.length ? `Parameters \u00b7 ${changed.length}` : "Parameters";
+  params.title = changed.length
+    ? `Changed for this session: ${changed.join(", ")}`
+    : "Reasoning, sampling and the tool-call limit";
+  params.addEventListener("click", openParams);
+  el.append(params);
 
   const spacer = document.createElement("span"); spacer.className = "spacer"; el.append(spacer);
   const fb = document.createElement("button");
@@ -202,39 +314,65 @@ export function renderSettingsRow(store, el) {
 }
 
 function modelPicker(store) {
-  const session = store.session;
-  const cfg = store.config;
+  const { session, config } = store;
   const picker = document.createElement("details");
   picker.className = "picker";
-  const label = session.auto_model ? `${session.provider} / auto (cheapest)` : `${session.provider} / ${session.model}`;
-  picker.innerHTML = `<summary class="chip" title="Switch provider or model">${escapeHtml(label)} ▾</summary><div class="picker-menu"></div>`;
+  const label = session.auto_model ? `auto · ${session.route_label}` : session.model;
+  picker.innerHTML =
+    `<summary class="chip" title="Choose the model">${escapeHtml(label)} \u25be</summary>` +
+    `<div class="picker-menu"></div>`;
   const menu = picker.querySelector(".picker-menu");
-  for (const [name, prov] of Object.entries(cfg.providers)) {
-    const h = document.createElement("h4"); h.textContent = name; menu.append(h);
-    const models = prov.openrouter ? ["", ...prov.models] : (prov.models.length ? prov.models : [prov.default_model]);
-    for (const m of models) {
+
+  const pick = async (body) => {
+    try {
+      await postJSON("api/session/model", body);
+      await refreshSession();
+    } catch (e) {
+      toast(e.message, "bad");
+    }
+    picker.open = false;
+  };
+
+  const heading = document.createElement("h4");
+  heading.textContent = config.provider || "models";
+  menu.append(heading);
+
+  // on OpenRouter an empty pick means "choose for me", so it leads the list
+  for (const model of config.openrouter ? ["", ...config.models] : config.models) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = model || "auto (cheapest that can call tools)";
+    const picked = model ? model === session.model && !session.auto_model : session.auto_model;
+    b.className = picked ? "on" : "";
+    b.addEventListener("click", () => pick({ model }));
+    menu.append(b);
+  }
+
+  if (config.openrouter) {
+    const routing = document.createElement("h4");
+    routing.textContent = "routing";
+    menu.append(routing);
+    for (const route of config.routes) {
       const b = document.createElement("button");
       b.type = "button";
-      const picked = name === session.provider && (m ? m === session.model : session.auto_model);
-      b.className = picked ? "on" : "";
-      b.textContent = m || "auto (cheapest eligible)";
-      b.addEventListener("click", async () => {
-        try { await postJSON("api/session/model", { provider: name, model: m }); await refreshSession(); }
-        catch (e) { toast(e.message, "bad"); }
-        picker.open = false;
-      });
+      b.textContent = route.label;
+      b.className = route.value === session.sort ? "on" : "";
+      b.addEventListener("click", () => pick({ model: session.model, sort: route.value }));
       menu.append(b);
     }
   }
-  if (Object.values(cfg.providers).some((p) => p.openrouter)) {
-    const hint = document.createElement("div"); hint.className = "hint";
-    hint.textContent = "OpenRouter: without a pick, the cheapest model allowed by the account guardrails is used automatically.";
-    menu.append(hint);
-  }
+
   const tools = session.tools || { local: 0 };
-  const inv = document.createElement("div"); inv.className = "hint";
-  inv.textContent = "Tools: " + [`${tools.local} local`]
-    .concat(tools.elab ? [`${tools.elab} eLabFTW`] : [], tools.dt ? [`${tools.dt} DataTagger`] : []).join(" · ");
-  menu.append(inv);
+  const inventory = document.createElement("div");
+  inventory.className = "hint";
+  inventory.textContent =
+    "Tools: " +
+    [`${tools.local} local`]
+      .concat(
+        tools.elab ? [`${tools.elab} eLabFTW`] : [],
+        tools.dt ? [`${tools.dt} DataTagger`] : [],
+      )
+      .join(" \u00b7 ");
+  menu.append(inventory);
   return picker;
 }

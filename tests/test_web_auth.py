@@ -46,7 +46,12 @@ PUBLIC_ROUTES = {
     "/auth/callback",
     "/auth/logout",
 }
-USER_ROUTES = {"/api/session", "/api/feedback"}
+USER_ROUTES = {
+    "/api/session",
+    "/api/feedback",
+    "/api/session/model",
+    "/api/session/params",
+}
 ADMIN_ROUTES = {
     "/admin",
     "/api/admin/people",

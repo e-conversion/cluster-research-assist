@@ -26,10 +26,12 @@ from cra.app.web import (
     route_auth,
     route_feedback,
     route_health,
+    route_preferences,
     route_session,
 )
 from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
+from cra.assistant.llm.selection import ModelCatalogue
 from cra.config.settings import Settings
 from cra.core.library.library import Library
 from cra.core.retrieval.encoder import OnnxEncoder
@@ -53,6 +55,7 @@ class AppContext:
     provider: AuthProvider
     http: httpx.AsyncClient
     policy: Policy
+    catalogue: ModelCatalogue
     limiter: RateLimiter = field(default_factory=RateLimiter)
     library: Library | None = None
     indexes: Indexes | None = None
@@ -93,6 +96,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         provider=make_provider(settings, repo, http),
         http=http,
         policy=Policy(settings),
+        catalogue=ModelCatalogue(settings),
     )
     app.extensions["cra"] = ctx
 
@@ -101,6 +105,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_session.bp,
         route_auth.bp,
         route_feedback.bp,
+        route_preferences.bp,
         route_admin.bp,
     ):
         app.register_blueprint(blueprint, url_prefix=base or None)
