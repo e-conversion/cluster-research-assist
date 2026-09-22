@@ -24,6 +24,7 @@ from cra.app.ratelimit import RateLimiter
 from cra.app.web import (
     route_admin,
     route_auth,
+    route_chat,
     route_feedback,
     route_health,
     route_preferences,
@@ -31,6 +32,8 @@ from cra.app.web import (
 )
 from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
+from cra.app.web.turns import TurnSlots
+from cra.assistant.chat import prompt as prompt_
 from cra.assistant.llm.selection import ModelCatalogue
 from cra.config.settings import Settings
 from cra.core.library.library import Library
@@ -57,9 +60,11 @@ class AppContext:
     policy: Policy
     catalogue: ModelCatalogue
     limiter: RateLimiter = field(default_factory=RateLimiter)
+    turns: TurnSlots = field(default_factory=TurnSlots)
     library: Library | None = None
     indexes: Indexes | None = None
     registry: Registry = field(default_factory=Registry)
+    system_prompt: str = ""
 
     def tool_context(self, tier: Tier) -> ToolContext:
         if self.indexes is None:
@@ -106,6 +111,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_auth.bp,
         route_feedback.bp,
         route_preferences.bp,
+        route_chat.bp,
         route_admin.bp,
     ):
         app.register_blueprint(blueprint, url_prefix=base or None)
@@ -136,6 +142,9 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
                 Indexes.build, ctx.library, _encoder(ctx.settings)
             )
             ctx.registry = load_tools(ctx.settings, ctx.indexes)
+            ctx.system_prompt = prompt_.build(
+                ctx.settings, ctx.library, {spec.name for spec in ctx.registry}
+            )
             await _check_schema(ctx)
             ctx.policy = await Policy.load(ctx.settings, ctx.repo)
             await ctx.provider.start()

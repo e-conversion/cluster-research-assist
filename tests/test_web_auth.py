@@ -51,6 +51,9 @@ USER_ROUTES = {
     "/api/feedback",
     "/api/session/model",
     "/api/session/params",
+    "/api/chat",
+    "/api/chat/stop",
+    "/api/chat/reset",
 }
 ADMIN_ROUTES = {
     "/admin",

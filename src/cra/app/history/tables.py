@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -69,6 +69,35 @@ class PolicySetting(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime]
     updated_by: Mapped[str] = mapped_column(String(200))
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    title: Mapped[str] = mapped_column(String(200), default="")
+    created_at: Mapped[datetime]
+    updated_at: Mapped[datetime]
+
+
+class Message(Base):
+    """One turn of a conversation. ``meta`` carries what the interface shows
+    above and below an answer: the model, how long it took and which tools ran.
+    """
+
+    __tablename__ = "messages"
+    __table_args__ = (Index("ix_messages_conversation", "conversation_id", "position"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("conversations.id", ondelete="CASCADE")
+    )
+    position: Mapped[int]
+    role: Mapped[str] = mapped_column(String(20))
+    content: Mapped[str] = mapped_column(Text, default="")
+    meta: Mapped[dict[str, Any]] = mapped_column(default=dict)
+    created_at: Mapped[datetime]
 
 
 class Feedback(Base):

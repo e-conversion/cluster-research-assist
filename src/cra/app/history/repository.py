@@ -1,15 +1,17 @@
 """The only place that talks to the database. Everything above it works with
 the ORM rows as plain objects and never imports SQLAlchemy."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cra.app.history.tables import (
+    Conversation,
     Feedback,
     Identity,
+    Message,
     PolicySetting,
     RegisteredEmail,
     User,
@@ -193,6 +195,97 @@ class Repository:
                 delete(PolicySetting).where(PolicySetting.key == key)
             )
             return result.rowcount == 1
+
+    # conversations
+
+    async def create_conversation(self, user_id: str, title: str = "") -> Conversation:
+        now = utcnow()
+        row = Conversation(user_id=user_id, title=title, created_at=now, updated_at=now)
+        async with self._sessions() as s, s.begin():
+            s.add(row)
+        return row
+
+    async def get_conversation(self, conversation_id: str) -> Conversation | None:
+        async with self._sessions() as s:
+            return await s.get(Conversation, conversation_id)
+
+    async def list_conversations(
+        self, user_id: str, limit: int = 100
+    ) -> list[Conversation]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(Conversation)
+                .where(Conversation.user_id == user_id)
+                .order_by(Conversation.updated_at.desc())
+                .limit(limit)
+            )
+            return list(rows)
+
+    async def rename_conversation(self, conversation_id: str, title: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(title=title[:200], updated_at=utcnow())
+            )
+            return result.rowcount == 1
+
+    async def delete_conversation(self, conversation_id: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                delete(Conversation).where(Conversation.id == conversation_id)
+            )
+            return result.rowcount == 1
+
+    async def messages(self, conversation_id: str) -> list[Message]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(Message)
+                .where(Message.conversation_id == conversation_id)
+                .order_by(Message.position)
+            )
+            return list(rows)
+
+    async def add_message(
+        self,
+        conversation_id: str,
+        role: str,
+        content: str,
+        meta: dict[str, Any] | None = None,
+    ) -> Message:
+        async with self._sessions() as s, s.begin():
+            position = len(
+                list(
+                    await s.scalars(
+                        select(Message.id).where(
+                            Message.conversation_id == conversation_id
+                        )
+                    )
+                )
+            )
+            row = Message(
+                conversation_id=conversation_id,
+                position=position,
+                role=role,
+                content=content,
+                meta=meta or {},
+                created_at=utcnow(),
+            )
+            s.add(row)
+            await s.execute(
+                update(Conversation)
+                .where(Conversation.id == conversation_id)
+                .values(updated_at=utcnow())
+            )
+        return row
+
+    async def purge_conversations(self, older_than_days: int) -> int:
+        cutoff = utcnow() - timedelta(days=older_than_days)
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                delete(Conversation).where(Conversation.updated_at < cutoff)
+            )
+            return int(result.rowcount)
 
     # feedback
 
