@@ -101,6 +101,8 @@ ignore = ["E501", "TRY003", "TD003", "G004"]
 "developer/*" = ["T20"]
 # providers implement the AuthProvider protocol and may not need every argument
 "src/cra/app/auth/*" = ["ARG002"]
+# every tool module's setup() takes the same arguments; few need all of them
+"src/cra/core/tools/*" = ["ARG001"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["cra"]

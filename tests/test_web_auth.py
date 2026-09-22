@@ -203,3 +203,14 @@ async def test_serving_refuses_an_outdated_schema(tmp_path):
     with pytest.raises(LifespanError, match="cra db upgrade"):
         async with app.test_app():
             pass
+
+
+async def test_the_session_reports_the_tools_the_caller_may_use(client):
+    await client.get("/auth/login")
+    body = await (await client.get("/api/session")).get_json()
+    # every tool but semantic search, which needs an encoder this test has not
+    # configured; the library's vectors alone still answer "papers like this one"
+    assert body["tools"]["local"] == 15
+    assert body["tools"]["total"] == 15
+    health = await (await client.get("/api/health")).get_json()
+    assert health["tools"] == 15

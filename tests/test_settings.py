@@ -27,8 +27,8 @@ def test_env_example_lists_every_field_and_loads():
         "pis",
         "proposal",
         "graph",
-        "status",
         "nomad",
+        "status",
     ]
 
 

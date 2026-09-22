@@ -54,6 +54,11 @@ def _placeholder(counts: dict[str, int]) -> str:
     )
 
 
+def _tool_counts(ctx, tier) -> dict[str, int]:
+    local = len(ctx.registry.specs(tier))
+    return {"local": local, "elab": 0, "dt": 0, "total": local}
+
+
 @bp.get("/api/session")
 async def session() -> dict[str, Any]:
     ctx = _ctx()
@@ -68,7 +73,7 @@ async def session() -> dict[str, Any]:
         "daily_limit": ctx.policy["user_chat_daily_limit"],
         "model": "",
         "connected": {},
-        "tools": {"local": 0, "elab": 0, "dt": 0, "total": 0},
+        "tools": _tool_counts(ctx, principal.tier),
         "turns": 0,
         "busy": False,
         "messages": [],

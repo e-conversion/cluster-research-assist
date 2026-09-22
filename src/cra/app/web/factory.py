@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import httpx
 from quart import Quart, Response, g, jsonify, redirect, request, send_from_directory
@@ -31,6 +32,11 @@ from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.config.settings import Settings
 from cra.core.library.library import Library
+from cra.core.retrieval.encoder import OnnxEncoder
+from cra.core.retrieval.indexes import Indexes
+from cra.core.tools.registry import Registry, ToolContext
+from cra.core.tools.registry import load as load_tools
+from cra.core.tools.tiers import Tier
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +55,15 @@ class AppContext:
     policy: Policy
     limiter: RateLimiter = field(default_factory=RateLimiter)
     library: Library | None = None
+    indexes: Indexes | None = None
+    registry: Registry = field(default_factory=Registry)
+
+    def tool_context(self, tier: Tier) -> ToolContext:
+        if self.indexes is None:
+            raise RuntimeError("the library is not loaded")
+        return ToolContext(
+            indexes=self.indexes, settings=self.settings, tier=tier, http=self.http
+        )
 
     @property
     def home(self) -> str:
@@ -112,6 +127,10 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
                 ctx.settings.library_path,
                 required_schema=ctx.settings.library_require_schema,
             )
+            ctx.indexes = await asyncio.to_thread(
+                Indexes.build, ctx.library, _encoder(ctx.settings)
+            )
+            ctx.registry = load_tools(ctx.settings, ctx.indexes)
             await _check_schema(ctx)
             ctx.policy = await Policy.load(ctx.settings, ctx.repo)
             await ctx.provider.start()
@@ -170,6 +189,18 @@ def _refuse(ctx: AppContext, required: Role) -> Response:
 def _wants_html() -> bool:
     accept = request.headers.get("Accept", "")
     return "text/html" in accept and "application/json" not in accept
+
+
+def _encoder(settings: Settings) -> Any:
+    """The query encoder, when one is configured. Without it the library still
+    serves everything but meaning-based search."""
+    if not settings.encoder_path:
+        return None
+    try:
+        return OnnxEncoder.load(settings.encoder_path)
+    except Exception:
+        log.exception("the query encoder did not load; semantic search is off")
+        return None
 
 
 async def _close(ctx: AppContext) -> None:

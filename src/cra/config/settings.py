@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     library_keep_versions: int = Field(default=3, ge=1)
 
     # tools
-    tool_modules: CommaList = ["papers", "pis", "proposal", "graph", "status", "nomad"]
+    tool_modules: CommaList = ["papers", "pis", "proposal", "graph", "nomad", "status"]
     fulltext_snippet_chars: int = Field(default=200, gt=0)
     fulltext_max_snippets: int = Field(default=5, gt=0)
 
