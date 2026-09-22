@@ -1,4 +1,4 @@
-"""One ``Corpus`` object per process, loaded explicitly from one directory.
+"""One ``Library`` object per process, loaded explicitly from one directory.
 
 Only ``papers.csv`` is required; each other file switches a capability on.
 Nothing here runs at import time.
@@ -14,15 +14,15 @@ import networkx as nx
 import numpy as np
 from networkx.readwrite import json_graph
 
-from cra.core.corpus import manifest as manifest_
-from cra.core.corpus.records import (
+from cra.core.library import manifest as manifest_
+from cra.core.library.records import (
     PI,
-    CorpusMap,
     Dataset,
     Embeddings,
     FullText,
     Paper,
     Proposal,
+    PublicationMap,
     normalise_doi,
 )
 
@@ -37,15 +37,15 @@ FILES = {
     "graph": "graph.json",
     "proposal": "proposal.md",
     "proposal_summary": "proposal_summary.md",
-    "map": "corpus_map.json",
+    "map": "publication_map.json",
 }
 
 
-class CorpusError(Exception):
+class LibraryError(Exception):
     pass
 
 
-class Corpus:
+class Library:
     def __init__(
         self,
         path: Path,
@@ -55,7 +55,7 @@ class Corpus:
         proposal: Proposal | None,
         embeddings: Embeddings | None,
         graph: nx.Graph | None,
-        map_: CorpusMap | None,
+        map_: PublicationMap | None,
     ) -> None:
         self.path = path
         self.papers = papers
@@ -69,20 +69,20 @@ class Corpus:
     @classmethod
     def load(
         cls, path: Path, *, verify: bool = True, required_schema: str = "1.x"
-    ) -> "Corpus":
+    ) -> "Library":
         path = Path(path)
         if not path.is_dir():
-            raise CorpusError(f"corpus directory {path} does not exist")
+            raise LibraryError(f"library directory {path} does not exist")
         if verify:
             problems = manifest_.check(path, required_schema)
             if problems:
-                raise CorpusError("corpus bundle rejected: " + "; ".join(problems))
+                raise LibraryError("library bundle rejected: " + "; ".join(problems))
         files = {key: path / name for key, name in FILES.items()}
         if not files["papers"].exists():
-            raise CorpusError(f"{FILES['papers']} missing in {path}")
+            raise LibraryError(f"{FILES['papers']} missing in {path}")
 
         papers = _load_papers(files["papers"], _load_json(files["abstracts"]) or {})
-        corpus = cls(
+        library = cls(
             path=path,
             papers=papers,
             fulltexts=_load_fulltexts(_load_json(files["fulltexts"]) or {}),
@@ -93,13 +93,15 @@ class Corpus:
             map_=_load_map(_load_json(files["map"])),
         )
         if verify:
-            problems = manifest_.check_counts(manifest_.read(path) or {}, corpus.counts)
+            problems = manifest_.check_counts(
+                manifest_.read(path) or {}, library.counts
+            )
             if problems:
-                raise CorpusError("corpus bundle rejected: " + "; ".join(problems))
+                raise LibraryError("library bundle rejected: " + "; ".join(problems))
         log.info(
-            "corpus loaded", extra={"fields": {"path": str(path), **corpus.counts}}
+            "library loaded", extra={"fields": {"path": str(path), **library.counts}}
         )
-        return corpus
+        return library
 
     @property
     def available(self) -> dict[str, bool]:
@@ -145,7 +147,7 @@ def _load_json(path: Path) -> Any:
         with path.open(encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError) as exc:
-        raise CorpusError(f"{path.name}: {exc}") from exc
+        raise LibraryError(f"{path.name}: {exc}") from exc
 
 
 def _split_authors(field: str) -> tuple[str, ...]:
@@ -259,23 +261,23 @@ def _load_graph(raw: dict[str, Any] | None) -> nx.Graph | None:
     return json_graph.node_link_graph(raw, edges="links")
 
 
-def _load_map(raw: dict[str, Any] | None) -> CorpusMap | None:
+def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:
     if raw is None:
         return None
     dois = tuple(normalise_doi(d) for d in raw.get("dois") or ())
     x, y = tuple(raw.get("x") or ()), tuple(raw.get("y") or ())
     if len(x) != len(dois) or len(y) != len(dois):
-        raise CorpusError(f"{FILES['map']}: one coordinate pair per DOI expected")
+        raise LibraryError(f"{FILES['map']}: one coordinate pair per DOI expected")
     clusters = {}
     for key, entry in (raw.get("clusters") or {}).items():
         assignments = tuple(int(a) for a in entry.get("assignments") or ())
         if len(assignments) != len(dois):
-            raise CorpusError(
+            raise LibraryError(
                 f"{FILES['map']}: clustering {key} does not cover every DOI"
             )
         clusters[int(key)] = (assignments, tuple(entry.get("labels") or ()))
     if not clusters:
-        raise CorpusError(f"{FILES['map']}: no clusterings")
-    return CorpusMap(
+        raise LibraryError(f"{FILES['map']}: no clusterings")
+    return PublicationMap(
         dois=dois, x=x, y=y, clusters=clusters, model=str(raw.get("model", ""))
     )

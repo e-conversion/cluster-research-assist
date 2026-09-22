@@ -1,4 +1,4 @@
-"""Immutable views over the corpus files."""
+"""Immutable views over the library files."""
 
 from dataclasses import dataclass, field
 
@@ -70,7 +70,7 @@ class Proposal:
 
 
 @dataclass(frozen=True)
-class CorpusMap:
+class PublicationMap:
     """Precomputed 2-D projection and every clustering the UI offers."""
 
     dois: tuple[str, ...]

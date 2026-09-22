@@ -1,5 +1,5 @@
-"""Writes a tiny corpus directory with known content so tests can assert exact
-results. The committed toy bundle under tests/data/corpus is the realistic one."""
+"""Writes a tiny library directory with known content so tests can assert exact
+results. The committed toy bundle under tests/data/library is the realistic one."""
 
 import csv
 import json
@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 from networkx.readwrite import json_graph
 
-from cra.core.corpus import manifest
+from cra.core.library import manifest
 
 PAPERS: list[dict[str, Any]] = [
     {
@@ -103,7 +103,7 @@ PROPOSAL = (
 )
 
 
-def write_corpus(
+def write_library(
     directory: Path,
     *,
     abstracts: bool = True,
@@ -111,7 +111,7 @@ def write_corpus(
     pis: bool = True,
     embeddings: bool = True,
     graph: bool = True,
-    corpus_map: bool = True,
+    publication_map: bool = True,
     proposal: bool = True,
     with_manifest: bool = True,
 ) -> Path:
@@ -220,9 +220,9 @@ def write_corpus(
         (directory / "proposal_summary.md").write_text(
             "Summary of the proposal: energy conversion.\n"
         )
-    if corpus_map:
+    if publication_map:
         dois = sorted(p["doi"] for p in PAPERS)
-        (directory / "corpus_map.json").write_text(
+        (directory / "publication_map.json").write_text(
             json.dumps(
                 {
                     "projection": "umap",
@@ -253,7 +253,7 @@ def write_corpus(
             "graph_nodes": 3 if graph else 0,
             "graph_edges": 2 if graph else 0,
             "embeddings": 3 if embeddings else 0,
-            "map_points": 3 if corpus_map else 0,
+            "map_points": 3 if publication_map else 0,
         }
         manifest.write(directory, counts, embedding_model="fake" if embeddings else "")
     return directory

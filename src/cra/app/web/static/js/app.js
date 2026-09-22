@@ -3,7 +3,7 @@ import { ApiError, getJSON, postJSON } from "./api.js";
 import { createRouter } from "./router.js";
 import { chatView } from "./chat.js";
 import { initDialogs, toast } from "./settings.js";
-import { corpusMapView } from "./views/corpus-map.js";
+import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration.js";
 
 export const store = {
@@ -72,7 +72,7 @@ async function boot() {
 
   const router = createRouter({
     "chat": chatView(store),
-    "corpus-map": corpusMapView(store),
+    "publication-map": libraryMapView(store),
     "collaboration": collaborationView(store),
   }, { container: view, nav: document.getElementById("nav") });
   router.start();

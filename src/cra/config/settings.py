@@ -45,9 +45,9 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     session_max_age_hours: float = Field(default=12, gt=0)
 
-    # corpus
-    corpus_path: Path
-    corpus_require_schema: str = "1.x"
+    # library
+    library_path: Path
+    library_require_schema: str = "1.x"
 
     # tools
     tool_modules: CommaList = ["papers", "pis", "proposal", "graph", "status", "nomad"]

@@ -1,6 +1,6 @@
 import pytest
 
-from cra.core.corpus.text import fold, overlap, query_tokens, words
+from cra.core.library.text import fold, overlap, query_tokens, words
 
 
 @pytest.mark.parametrize(

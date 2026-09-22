@@ -18,10 +18,10 @@ def test_no_command_prints_help_and_fails(capsys):
 
 def test_check_config_prints_redacted_settings(tmp_path, capsys):
     env = tmp_path / "my.env"
-    env.write_text("CRA_CORPUS_PATH=/c\nCRA_LLM_API_KEY=secret\n")
+    env.write_text("CRA_LIBRARY_PATH=/c\nCRA_LLM_API_KEY=secret\n")
     assert main(["--env-file", str(env), "check-config"]) == 0
     out = capsys.readouterr().out
-    assert "CRA_CORPUS_PATH=/c" in out
+    assert "CRA_LIBRARY_PATH=/c" in out
     assert "CRA_LLM_API_KEY=***" in out
     assert "secret" not in out
 
@@ -29,9 +29,9 @@ def test_check_config_prints_redacted_settings(tmp_path, capsys):
 @pytest.mark.parametrize(
     ("content", "message"),
     [
-        ("CRA_CORPUS_PATH=/c\nCRA_AUTH_PROVIDER=oidc\n", "CRA_OIDC_ISSUER"),
+        ("CRA_LIBRARY_PATH=/c\nCRA_AUTH_PROVIDER=oidc\n", "CRA_OIDC_ISSUER"),
         (
-            "CRA_CORPUS_PATH=/c\nCRA_LLM_MODLE=x\n",
+            "CRA_LIBRARY_PATH=/c\nCRA_LLM_MODLE=x\n",
             "unknown configuration keys: CRA_LLM_MODLE",
         ),
     ],
@@ -46,14 +46,14 @@ def test_check_config_fails_with_exit_2(tmp_path, capsys, content, message):
     assert message in capsys.readouterr().err
 
 
-def test_corpus_manifest_then_check(tmp_path, capsys):
-    from corpus_builder import write_corpus
+def test_library_manifest_then_check(tmp_path, capsys):
+    from library_builder import write_library
 
-    directory = write_corpus(tmp_path / "c", with_manifest=False)
+    directory = write_library(tmp_path / "c", with_manifest=False)
     env = tmp_path / "e"
-    env.write_text(f"CRA_CORPUS_PATH={directory}\n")
-    assert main(["--env-file", str(env), "corpus", "check"]) == 1
+    env.write_text(f"CRA_LIBRARY_PATH={directory}\n")
+    assert main(["--env-file", str(env), "library", "check"]) == 1
     assert "manifest.json missing" in capsys.readouterr().err
-    assert main(["--env-file", str(env), "corpus", "manifest"]) == 0
-    assert main(["--env-file", str(env), "corpus", "check", str(directory)]) == 0
+    assert main(["--env-file", str(env), "library", "manifest"]) == 0
+    assert main(["--env-file", str(env), "library", "check", str(directory)]) == 0
     assert "papers       3" in capsys.readouterr().out

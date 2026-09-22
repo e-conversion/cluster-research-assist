@@ -1,4 +1,4 @@
-// Corpus map: UMAP layout of the paper embeddings rendered with deck.gl.
+// Library map: UMAP layout of the paper embeddings rendered with deck.gl.
 import { getJSON } from "../api.js";
 
 const DECK_URL = "https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js";
@@ -15,12 +15,12 @@ function loadDeck() {
 
 const cache = new Map(); // clusters -> payload (server memoises too; this saves the round-trip)
 
-export function corpusMapView() {
+export function libraryMapView() {
   return {
     mount(container) {
       container.innerHTML = `
         <div class="page">
-          <h1>Corpus Map</h1>
+          <h1>Publication Map</h1>
           <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
             labeled with their top title keywords. Scroll to zoom, drag to pan, hover a point for its title —
             a visual answer to “which papers are near the one I'm reading?”</p>
@@ -113,13 +113,13 @@ export function corpusMapView() {
       }
 
       async function load(n) {
-        status.textContent = cache.has(n) ? "" : "Computing corpus map (UMAP + clustering)…";
+        status.textContent = cache.has(n) ? "" : "Computing publication map (UMAP + clustering)…";
         status.hidden = cache.has(n);
         try {
           let payload = cache.get(n);
-          if (!payload) { payload = await getJSON(`api/corpus-map?clusters=${n}`); if (payload.available) cache.set(n, payload); }
+          if (!payload) { payload = await getJSON(`api/publication-map?clusters=${n}`); if (payload.available) cache.set(n, payload); }
           if (disposed) return;
-          if (!payload.available) { status.textContent = payload.hint || "Corpus map not available."; status.hidden = false; return; }
+          if (!payload.available) { status.textContent = payload.hint || "Library map not available."; status.hidden = false; return; }
           await loadDeck();
           if (disposed) return;
           data = payload.points;

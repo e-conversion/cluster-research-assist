@@ -27,7 +27,7 @@ async def test_downgrade_to_base_drops_everything(engine):
 def test_cli_db_upgrade_and_current(tmp_path, capsys):
     env = tmp_path / "e"
     env.write_text(
-        f"CRA_CORPUS_PATH=/c\nCRA_HISTORY_URL=sqlite+aiosqlite:///{tmp_path}/x.sqlite\n"
+        f"CRA_LIBRARY_PATH=/c\nCRA_HISTORY_URL=sqlite+aiosqlite:///{tmp_path}/x.sqlite\n"
     )
     assert main(["--env-file", str(env), "db", "current"]) == 1
     assert main(["--env-file", str(env), "db", "upgrade"]) == 0

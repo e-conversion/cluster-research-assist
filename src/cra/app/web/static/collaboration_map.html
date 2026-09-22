@@ -181,7 +181,7 @@ function showCard(id) {
     <h3>${n.name}</h3><div class="grp">${n.group || "—"}</div>
     <div class="nums"><div><div class="n" style="color:${c}">${n.deg}</div><div class="l">collaborator${n.deg === 1 ? "" : "s"}</div></div>
       <div><div class="n">${n.papers}</div><div class="l">papers</div></div></div>
-    ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : `<div class="hintline">No co-authorships recorded in the corpus.</div>`}`;
+    ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : `<div class="hintline">No co-authorships recorded in the library.</div>`}`;
   card.classList.add("on");
 }
 // settle the layout before first paint so it opens at rest, not mid-jitter

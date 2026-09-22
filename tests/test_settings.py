@@ -21,7 +21,7 @@ def test_env_example_lists_every_field_and_loads():
     }
     assert keys == {f"CRA_{name.upper()}" for name in Settings.model_fields}
     settings = Settings.load(REPO / ".env.example")
-    assert settings.corpus_path == Path("corpus")
+    assert settings.library_path == Path("library")
     assert settings.tool_modules == [
         "papers",
         "pis",
@@ -33,15 +33,15 @@ def test_env_example_lists_every_field_and_loads():
 
 
 def test_environment_wins_over_file(tmp_path, monkeypatch):
-    env = write_env(tmp_path / ".env", corpus_path="/from/file", port="1")
+    env = write_env(tmp_path / ".env", library_path="/from/file", port="1")
     monkeypatch.setenv("CRA_PORT", "2")
     settings = Settings.load(env)
-    assert (settings.corpus_path, settings.port) == (Path("/from/file"), 2)
+    assert (settings.library_path, settings.port) == (Path("/from/file"), 2)
 
 
 def test_missing_file_is_skipped(tmp_path, monkeypatch):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
-    assert Settings.load(tmp_path / "absent").corpus_path == Path("/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    assert Settings.load(tmp_path / "absent").library_path == Path("/c")
 
 
 @pytest.mark.parametrize(
@@ -49,13 +49,13 @@ def test_missing_file_is_skipped(tmp_path, monkeypatch):
     [("a,b", ["a", "b"]), (" a , ,b ", ["a", "b"]), ("", [])],
 )
 def test_comma_lists(monkeypatch, raw, expected):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
     monkeypatch.setenv("CRA_LLM_MODELS", raw)
     assert Settings.load(None).llm_models == expected
 
 
 def test_default_model_is_offered_in_the_ui_list(monkeypatch):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
     monkeypatch.setenv("CRA_LLM_MODEL", "m0")
     monkeypatch.setenv("CRA_LLM_MODELS", "m1,m2")
     assert Settings.load(None).llm_models == ["m0", "m1", "m2"]
@@ -65,7 +65,7 @@ def test_default_model_is_offered_in_the_ui_list(monkeypatch):
     ("raw", "expected"), [("", ""), ("/a/b/", "/a/b"), ("  /a  ", "/a")]
 )
 def test_base_path_is_normalised(monkeypatch, raw, expected):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
     monkeypatch.setenv("CRA_BASE_PATH", raw)
     assert Settings.load(None).base_path == expected
 
@@ -88,20 +88,20 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
     ],
 )
 def test_invalid_configuration_is_rejected(monkeypatch, env):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     with pytest.raises(ValidationError):
         Settings.load(None)
 
 
-def test_corpus_path_is_required():
-    with pytest.raises(ValidationError, match="corpus_path"):
+def test_library_path_is_required():
+    with pytest.raises(ValidationError, match="library_path"):
         Settings.load(None)
 
 
 def test_dump_redacts_secrets_only_when_set(monkeypatch):
-    monkeypatch.setenv("CRA_CORPUS_PATH", "/c")
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
     monkeypatch.setenv("CRA_LLM_API_KEY", "hunter2")
     monkeypatch.setenv("CRA_LLM_MODELS", "a,b")
     dump = Settings.load(None).dump()

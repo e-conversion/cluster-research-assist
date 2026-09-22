@@ -1,16 +1,12 @@
 {
   "schema_version": "1.0",
-  "built_at": "2026-09-22T06:41:57+00:00",
-  "builder": "cra 0.1.dev10+g6a6419dd6.d20260922",
+  "built_at": "2026-09-22T12:54:27+00:00",
+  "builder": "cra 0.1.dev13+g8f8d52af2.d20260922",
   "embedding_model": "BAAI/bge-small-en-v1.5",
   "files": {
     "abstracts.json": {
       "sha256": "319255f4a96a587b8bae05c65661ade2590f0bdbfe5c2d2c7ba0e347a296aff9",
       "bytes": 31339
-    },
-    "corpus_map.json": {
-      "sha256": "14701f1d8a4f297b07f92e83693aecceb324a9ffaef318be5c8924127ca21f58",
-      "bytes": 8975
     },
     "embeddings.npz": {
       "sha256": "7dfbaecc21d23567bd989798bc756b5c362a212b94214ca252c9c703098fe195",
@@ -39,6 +35,10 @@
     "proposal_summary.md": {
       "sha256": "21b7125b4594c7581dc455c30e33599d83ffecc04c3ebfa4c31f4f3c0ba34357",
       "bytes": 1274
+    },
+    "publication_map.json": {
+      "sha256": "14701f1d8a4f297b07f92e83693aecceb324a9ffaef318be5c8924127ca21f58",
+      "bytes": 8975
     }
   },
   "counts": {

@@ -165,14 +165,14 @@ async function loadPolicy() {
   }
 }
 
-async function loadCorpus() {
-  const info = await getJSON("api/admin/corpus");
+async function loadLibrary() {
+  const info = await getJSON("api/admin/library");
   const counts = Object.entries(info.counts)
     .map(([k, v]) => `${k} ${v}`)
     .join(" · ");
   const built = info.manifest ? info.manifest.built_at : "unknown";
-  $("corpus").replaceChildren(
-    el("div", null, counts || "no corpus loaded"),
+  $("library").replaceChildren(
+    el("div", null, counts || "no library loaded"),
     el("div", "desc", `${info.path} · built ${built}`),
   );
 }
@@ -185,7 +185,7 @@ async function boot() {
     location.assign("./");
     return;
   }
-  await guard(() => Promise.all([loadUsers(), loadEmails(), loadPolicy(), loadCorpus()]));
+  await guard(() => Promise.all([loadUsers(), loadEmails(), loadPolicy(), loadLibrary()]));
   $("email-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     guard(async () => {

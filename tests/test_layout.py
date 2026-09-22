@@ -1,5 +1,5 @@
 """Repository layout rules from the design document: unique basenames, no
-catch-all module names, and the import layering that keeps the corpus tools
+catch-all module names, and the import layering that keeps the library tools
 extractable."""
 
 import ast

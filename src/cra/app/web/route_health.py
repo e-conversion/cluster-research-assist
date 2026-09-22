@@ -7,9 +7,9 @@ bp = Blueprint("health", __name__)
 
 @bp.get("/api/health")
 async def health() -> dict:
-    corpus = current_app.extensions["cra"].corpus
+    library = current_app.extensions["cra"].library
     return {
         "ok": True,
         "version": __version__,
-        "corpus": corpus.counts if corpus is not None else {},
+        "library": library.counts if library is not None else {},
     }

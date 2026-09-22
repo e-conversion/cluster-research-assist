@@ -20,15 +20,15 @@ Requires Python 3.11 or newer.
 cp .env.example .env      # fill in the values
 cra check-config          # validate and print the resolved settings
 cra db upgrade            # create or migrate the database (CRA_HISTORY_URL)
-cra corpus check          # verify the corpus bundle
+cra library check          # verify the library bundle
 cra serve
 ```
 
-## The corpus bundle
+## The library bundle
 
-`CRA_CORPUS_PATH` points at a directory holding the corpus: `papers.csv` is
+`CRA_LIBRARY_PATH` points at a directory holding the library: `papers.csv` is
 required, and each of `abstracts.json`, `fulltexts.json`, `pis.json`,
-`embeddings.npz`, `graph.json`, `proposal.md` and `corpus_map.json` switches on
+`embeddings.npz`, `graph.json`, `proposal.md` and `publication_map.json` switches on
 the tools that need it. `manifest.json` records a checksum per file and the
 expected counts; `cra serve` refuses a bundle that does not match it.
 
@@ -36,13 +36,13 @@ Everything expensive is computed when the bundle is built, never while serving:
 
 ```bash
 pip install "cluster-research-assist[build]"
-cra corpus build          # projection and clusterings for the corpus map
-cra corpus manifest       # refresh checksums and counts
+cra library build          # projection and clusterings for the publication map
+cra library manifest       # refresh checksums and counts
 ```
 
 ## Who may do what
 
-The site is public. Anyone may read the corpus, use the public tools and, within
+The site is public. Anyone may read the library, use the public tools and, within
 a daily budget, ask a question; the outward MCP endpoint serves the same public
 tier. Signing in adds the internal tier, which is the full texts and the
 proposal, plus a saved history. Admins additionally reach the console at
@@ -108,7 +108,7 @@ so a pull request cannot be merged before that.
 Conventions: conventional commits, no `os.environ` reads outside
 `cra.config.settings`, no module-level per-user state, no two files with the
 same basename, logging never `print`. `tests/test_layout.py` enforces the
-layout rules and the import layering: `cra.core` (corpus, retrieval,
+layout rules and the import layering: `cra.core` (library, retrieval,
 connectors, tools) never imports `cra.assistant` (llm, chat, mcpclient) or
 `cra.app` (web, auth, history, mcpserver, viz), and `cra.assistant` never
 imports `cra.app`.

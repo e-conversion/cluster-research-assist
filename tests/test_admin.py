@@ -151,8 +151,8 @@ async def test_unknown_setting_is_a_404(admin):
     ).status_code == 404
 
 
-async def test_corpus_page_reports_the_loaded_bundle(admin):
-    body = await json_of(await admin.get("/api/admin/corpus"))
+async def test_library_page_reports_the_loaded_bundle(admin):
+    body = await json_of(await admin.get("/api/admin/library"))
     assert body["counts"]["papers"] == 19
     assert body["manifest"]["schema_version"] == "1.0"
 

@@ -1,4 +1,4 @@
-# Serving image: no build extra, so no scikit-learn, umap or numba. The corpus
+# Serving image: no build extra, so no scikit-learn, umap or numba. The library
 # bundle is mounted at runtime, already carrying its derived artifacts.
 FROM python:3.13-slim AS build
 
@@ -23,13 +23,13 @@ ENV PATH=/opt/venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     CRA_HOST=0.0.0.0 \
     CRA_PORT=8501 \
-    CRA_CORPUS_PATH=/srv/corpus \
+    CRA_LIBRARY_PATH=/srv/library \
     CRA_LOG_DIR=/var/log/cra
 
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --uid 10001 cra \
-    && mkdir -p /srv/corpus /var/log/cra && chown cra /var/log/cra
+    && mkdir -p /srv/library /var/log/cra && chown cra /var/log/cra
 
 COPY --from=build /opt/venv /opt/venv
 

@@ -1,8 +1,8 @@
-# Toy corpus (`tests/data/corpus/`)
+# Toy library (`tests/data/library/`)
 
 A small, redistributable bundle of 19 arXiv preprints in four overlapping
 topical clusters, plus fictional PIs, a fictional proposal and precomputed
-embeddings. Built by `developer/make_toy_corpus.py`; every file's SHA-256 is
+embeddings. Built by `developer/make_toy_library.py`; every file's SHA-256 is
 recorded in `manifest.json`.
 
 ## Provenance
@@ -69,7 +69,7 @@ or made up and are not the papers' authors. PI `1002` bridges clusters (a) and
 uv venv /tmp/cra-toy/venv
 uv pip install --python /tmp/cra-toy/venv/bin/python \
     sentence-transformers httpx numpy networkx pymupdf4llm
-/tmp/cra-toy/venv/bin/python developer/make_toy_corpus.py tests/data/corpus
+/tmp/cra-toy/venv/bin/python developer/make_toy_library.py tests/data/library
 ```
 
 The script resolves each title through the arXiv API (falling back to the
@@ -83,7 +83,7 @@ edits change between rebuilds. Rebuilding after arXiv metadata changes
 
 ## Derived artifacts
 
-`corpus_map.json` is produced by `cra corpus build` (needs the `build` extra)
+`publication_map.json` is produced by `cra library build` (needs the `build` extra)
 and holds the 2-D projection plus one clustering per count the UI offers, so
-that serving the corpus map costs no computation. Rebuild it after changing
+that serving the publication map costs no computation. Rebuild it after changing
 the papers or the embeddings.

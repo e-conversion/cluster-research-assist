@@ -1,4 +1,4 @@
-"""Build the derived corpus artifacts.
+"""Build the derived library artifacts.
 
 Everything expensive is computed here, at bundle-build time, not while serving.
 The 2-D projection alone costs about 25 seconds on a thousand papers, most of
@@ -50,7 +50,7 @@ def label_clusters(
 ) -> list[str]:
     """Top TF-IDF terms of each cluster's concatenated titles.
 
-    TF-IDF rather than raw counts, so corpus-wide fillers such as "properties"
+    TF-IDF rather than raw counts, so library-wide fillers such as "properties"
     do not label every cluster; sublinear_tf damps one verbose title.
     """
     from sklearn.feature_extraction.text import TfidfVectorizer

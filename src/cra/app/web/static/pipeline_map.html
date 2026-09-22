@@ -117,15 +117,15 @@ const STAGES = {
   registry: { label: "Registry", v: "--reg" }, delivery: { label: "Delivery", v: "--deliver" },
 };
 const NODES = [
-  {id:"csv", lane:"sources", n:"data_publication_dois.csv", s:"956 pubs · 148 datasets", d:"Scraped from e-conversion.de/publikationen. The BM25 corpus foundation — the server refuses to start without it."},
-  {id:"enl", lane:"sources", n:"e-conversion-Converted.enl", s:"EndNote · ~1,584 recs", d:"Supplied EndNote library. Primary abstract source; 905 records overlap the corpus."},
+  {id:"csv", lane:"sources", n:"data_publication_dois.csv", s:"956 pubs · 148 datasets", d:"Scraped from e-conversion.de/publikationen. The BM25 library foundation — the server refuses to start without it."},
+  {id:"enl", lane:"sources", n:"e-conversion-Converted.enl", s:"EndNote · ~1,584 recs", d:"Supplied EndNote library. Primary abstract source; 905 records overlap the library."},
   {id:"scraper", lane:"sources", n:"scraper_cache.json", s:"raw scrape", d:"Raw e-conversion.de scraper output that the DOI list was derived from."},
   {id:"proposal", lane:"sources", n:"EXC_2089…Proposal.pdf", s:"DFG proposal · ~115K tok", d:"The e-conversion 2.0 DFG proposal PDF."},
   {id:"pdfs", lane:"sources", n:"sources/pdfs/", s:"549 collaborator PDFs", d:"Full-text PDFs supplied by a collaborator via institutional access, covering paywalled DOIs the network pipeline can't reach."},
   {id:"members", lane:"sources", n:"e-conversion.de/members", s:"live scrape", d:"PI staff pages, scraped to build the PI cache."},
   {id:"nomad", lane:"sources", n:"NOMAD API", s:"live · uncached", d:"Public NOMAD materials database. Queried live at call time — no local cache."},
 
-  {id:"b_abstracts", lane:"build", n:"build_abstracts_cache.py", s:"CSV+ENL+OpenAlex+S2", d:"Merges corpus DOIs with EndNote, OpenAlex and Semantic Scholar metadata into the abstracts cache."},
+  {id:"b_abstracts", lane:"build", n:"build_abstracts_cache.py", s:"CSV+ENL+OpenAlex+S2", d:"Merges library DOIs with EndNote, OpenAlex and Semantic Scholar metadata into the abstracts cache."},
   {id:"b_embed", lane:"build", n:"build_embeddings_cache.py", s:"abstracts → 384-d", d:"Reads abstracts_cache.json and embeds each abstract with BGE-small into a 384-d vector array."},
   {id:"b_fulltext", lane:"build", n:"build_fulltext_cache.py", s:"Unpaywall/PMC/arXiv", d:"Per-DOI network pipeline: arXiv → PMC → repos → publisher PDFs → HTML. Incremental & resumable."},
   {id:"b_ingest", lane:"build", n:"ingest_local_pdfs.py", s:"pdfs/ → fulltext", d:"Merges collaborator PDFs into the full-text cache; never overwrites network hits."},
@@ -134,7 +134,7 @@ const NODES = [
   {id:"b_proposal", lane:"build", n:"extract_proposal_summary.py", s:"proposal → md", d:"Extracts the proposal's Section 2 summary and the whole-document full text as markdown."},
 
   {id:"c_abstracts", lane:"cache", n:"abstracts_cache.json", s:"~953 abstracts", d:"One entry per DOI: abstract + OpenAlex authors, journal, citation count."},
-  {id:"c_embed", lane:"cache", n:"embeddings_cache.npz", s:"~956 × 384-d", d:"BGE-small vectors + a parallel DOI array. Backs semantic search and the corpus map."},
+  {id:"c_embed", lane:"cache", n:"embeddings_cache.npz", s:"~956 × 384-d", d:"BGE-small vectors + a parallel DOI array. Backs semantic search and the publication map."},
   {id:"c_fulltext", lane:"cache", n:"fulltext_cache.json", s:"947 full texts", d:"Full-text bodies keyed by DOI — network hits plus 544 locally-supplied PDFs (99% coverage)."},
   {id:"c_pis", lane:"cache", n:"pis_cache.json", s:"42 PIs", d:"PI profiles: group, department, institution, research focus, and linked publication DOIs."},
   {id:"c_graph", lane:"cache", n:"collaboration_graph.json", s:"co-authorship", d:"PI co-authorship graph (~42 nodes), node-link JSON."},
@@ -162,7 +162,7 @@ const NODES = [
   {id:"reg", lane:"registry", n:"FastMCP + openai_tools", s:"single source of truth", d:"Local tools are defined with @mcp.tool() in server.py; the openai_tools bridge derives OpenAI schemas from that registry, so the MCP server and chat app never drift."},
 
   {id:"d_mcp", lane:"delivery", n:"MCP server (stdio)", s:".mcp.json · econversion", d:"python src/server.py — the 15 local tools over stdio to Claude and other MCP clients."},
-  {id:"d_app", lane:"delivery", n:"Web app", s:"Chat · maps", d:"src/web.py + src/static — FastAPI app: streaming chat tool-use loop, corpus map, collaboration and pipeline views."},
+  {id:"d_app", lane:"delivery", n:"Web app", s:"Chat · maps", d:"src/web.py + src/static — FastAPI app: streaming chat tool-use loop, publication map, collaboration and pipeline views."},
   {id:"d_llm", lane:"delivery", n:"Multi-provider LLM", s:"gwdg · openrouter", d:"Sidebar provider select; OpenRouter auto-picks the cheapest guardrail-passing model."},
   {id:"d_panel", lane:"delivery", n:"Data-source panel", s:"BYOK eLab/DataTagger", d:"Where a user pastes personal tokens to attach their own lab data to the chat."},
   {id:"d_feedback", lane:"delivery", n:"Feedback form", s:"JSONL log", d:"Per-answer bug-report / general feedback, appended to data/feedback/feedback.jsonl."},

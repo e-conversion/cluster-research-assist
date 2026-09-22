@@ -308,7 +308,7 @@ button { font: inherit; }
 .toast.bad { background: var(--bad); color: #fff; }
 @keyframes rise { from { transform: translateY(6px); opacity: 0; } }
 
-/* ---------- corpus map ---------- */
+/* ---------- publication map ---------- */
 .map-toolbar { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; margin: 0 0 12px; }
 .map-toolbar label { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--ink-2); }
 .map-toolbar input[type="range"] { width: 160px; accent-color: var(--accent); }

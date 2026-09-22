@@ -54,83 +54,85 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return 0
 
 
-# corpus
+# library
 
 
-def cmd_corpus_check(args: argparse.Namespace) -> int:
-    from cra.core.corpus.corpus import Corpus, CorpusError
+def cmd_library_check(args: argparse.Namespace) -> int:
+    from cra.core.library.library import Library, LibraryError
 
     settings = load_settings(args)
-    directory = args.directory or settings.corpus_path
+    directory = args.directory or settings.library_path
     try:
-        corpus = Corpus.load(directory, required_schema=settings.corpus_require_schema)
-    except CorpusError as exc:
+        library = Library.load(
+            directory, required_schema=settings.library_require_schema
+        )
+    except LibraryError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
-    for key, value in corpus.counts.items():
+    for key, value in library.counts.items():
         _out(f"{key:12} {value}")
-    for key, ok in corpus.available.items():
+    for key, ok in library.available.items():
         if not ok:
             _out(f"{key:12} unavailable")
     return 0
 
 
-def cmd_corpus_build(args: argparse.Namespace) -> int:
+def cmd_library_build(args: argparse.Namespace) -> int:
     """Compute the derived artifacts so that serving needs no heavy work."""
     import json
     import time
 
-    from cra.core.corpus import manifest
-    from cra.core.corpus.corpus import FILES, Corpus, CorpusError
-    from cra.core.corpus.derive import build_map
+    from cra.core.library import manifest
+    from cra.core.library.derive import build_map
+    from cra.core.library.library import FILES, Library, LibraryError
 
     settings = load_settings(args)
-    directory = Path(args.directory or settings.corpus_path)
+    directory = Path(args.directory or settings.library_path)
     try:
-        corpus = Corpus.load(directory, verify=False)
-    except CorpusError as exc:
+        library = Library.load(directory, verify=False)
+    except LibraryError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
-    if corpus.embeddings is None:
+    if library.embeddings is None:
         sys.stderr.write(f"{FILES['embeddings']} missing: the map needs embeddings\n")
         return 1
 
     started = time.perf_counter()
     payload = build_map(
-        corpus.embeddings.dois,
-        corpus.embeddings.vectors,
-        {doi: paper.title for doi, paper in corpus.papers.items()},
-        model=corpus.embeddings.model,
+        library.embeddings.dois,
+        library.embeddings.vectors,
+        {doi: paper.title for doi, paper in library.papers.items()},
+        model=library.embeddings.model,
     )
     target = directory / FILES["map"]
     target.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     _out(f"wrote {target} in {time.perf_counter() - started:.1f}s")
 
-    corpus = Corpus.load(directory, verify=False)
+    library = Library.load(directory, verify=False)
     manifest.write(
         directory,
-        corpus.counts,
-        embedding_model=corpus.embeddings.model if corpus.embeddings else "",
+        library.counts,
+        embedding_model=library.embeddings.model if library.embeddings else "",
         builder=f"cra {__version__}",
     )
     _out(f"wrote {directory / manifest.MANIFEST}")
     return 0
 
 
-def cmd_corpus_manifest(args: argparse.Namespace) -> int:
-    from cra.core.corpus import manifest
-    from cra.core.corpus.corpus import Corpus, CorpusError
+def cmd_library_manifest(args: argparse.Namespace) -> int:
+    from cra.core.library import manifest
+    from cra.core.library.library import Library, LibraryError
 
     settings = load_settings(args)
-    directory = Path(args.directory or settings.corpus_path)
+    directory = Path(args.directory or settings.library_path)
     try:
-        corpus = Corpus.load(directory, verify=False)
-    except CorpusError as exc:
+        library = Library.load(directory, verify=False)
+    except LibraryError as exc:
         sys.stderr.write(f"{exc}\n")
         return 1
-    model = corpus.embeddings.model if corpus.embeddings is not None else ""
+    model = library.embeddings.model if library.embeddings is not None else ""
     manifest.write(
-        directory, corpus.counts, embedding_model=model, builder=f"cra {__version__}"
+        directory, library.counts, embedding_model=model, builder=f"cra {__version__}"
     )
     _out(f"wrote {directory / manifest.MANIFEST}")
     return 0
@@ -339,21 +341,25 @@ def build_parser() -> argparse.ArgumentParser:
     serve = sub.add_parser("serve", help="run the web application")
     serve.set_defaults(func=cmd_serve)
 
-    corpus = sub.add_parser("corpus", help="corpus bundle").add_subparsers(
-        dest="corpus_command", metavar="<command>", required=True
+    library = sub.add_parser("library", help="library bundle").add_subparsers(
+        dest="library_command", metavar="<command>", required=True
     )
     for name, func, help_text in (
-        ("check", cmd_corpus_check, "verify the manifest and print the counts"),
+        ("check", cmd_library_check, "verify the manifest and print the counts"),
         (
             "build",
-            cmd_corpus_build,
+            cmd_library_build,
             "compute the derived artifacts (needs the build extra)",
         ),
-        ("manifest", cmd_corpus_manifest, "write manifest.json for a corpus directory"),
+        (
+            "manifest",
+            cmd_library_manifest,
+            "write manifest.json for a library directory",
+        ),
     ):
-        p = corpus.add_parser(name, help=help_text)
+        p = library.add_parser(name, help=help_text)
         p.add_argument(
-            "directory", nargs="?", type=Path, help="default: CRA_CORPUS_PATH"
+            "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
         )
         p.set_defaults(func=func)
 

@@ -1,6 +1,6 @@
 """Who may reach which route.
 
-The site is public: anyone may read the corpus, use the public tools and,
+The site is public: anyone may read the library, use the public tools and,
 within a daily budget, ask a question. Signing in raises the data tier and
 attaches history; the console needs an admin. Routes declare what they need
 with the decorators below, and a test enumerates every route so that adding

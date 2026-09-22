@@ -18,7 +18,7 @@ def _ctx():
 async def config() -> dict[str, Any]:
     ctx = _ctx()
     settings, policy = ctx.settings, ctx.policy
-    counts = ctx.corpus.counts if ctx.corpus else {}
+    counts = ctx.library.counts if ctx.library else {}
     return {
         "title": settings.cluster_display_name,
         "cluster": {
@@ -32,7 +32,7 @@ async def config() -> dict[str, Any]:
             "logout_url": "auth/logout",
         },
         "notice": policy["notice"],
-        "corpus": counts,
+        "library": counts,
         "placeholder": _placeholder(counts),
         "examples": [],
         "models": policy["llm_models"],

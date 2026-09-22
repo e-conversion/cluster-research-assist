@@ -142,16 +142,16 @@ async def set_policy(key: str) -> Any:
     return {"key": key, "value": ctx.policy[key], "source": ctx.policy.source(key)}
 
 
-@bp.get("/api/admin/corpus")
+@bp.get("/api/admin/library")
 @requires_admin
-async def corpus() -> dict[str, Any]:
-    from cra.core.corpus import manifest as manifest_
+async def library() -> dict[str, Any]:
+    from cra.core.library import manifest as manifest_
 
     ctx = _ctx()
-    loaded = ctx.corpus
+    loaded = ctx.library
     return {
-        "path": str(ctx.settings.corpus_path),
+        "path": str(ctx.settings.library_path),
         "counts": loaded.counts if loaded else {},
         "available": loaded.available if loaded else {},
-        "manifest": manifest_.read(ctx.settings.corpus_path) if loaded else None,
+        "manifest": manifest_.read(ctx.settings.library_path) if loaded else None,
     }

@@ -1,4 +1,4 @@
-"""Usage: python developer/make_toy_corpus.py tests/data/corpus [--cache DIR]"""
+"""Usage: python developer/make_toy_library.py tests/data/library [--cache DIR]"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ ARXIV_OAI = "http://export.arxiv.org/oai2"
 ARXIV_DELAY_S = 3.0
 FULLTEXT_MAX_CHARS = 20_000
 SYNTHETIC_MIN_CHARS = 3_000
-USER_AGENT = "cra-toy-corpus/1.0 (developer/make_toy_corpus.py)"
+USER_AGENT = "cra-toy-library/1.0 (developer/make_toy_library.py)"
 
 NS = {
     "atom": "http://www.w3.org/2005/Atom",
@@ -754,7 +754,7 @@ def main() -> int:
     manifest = {
         "schema_version": "1.0",
         "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "builder": "developer/make_toy_corpus.py",
+        "builder": "developer/make_toy_library.py",
         "embedding_model": EMBEDDING_MODEL,
         "files": {
             f.name: {"sha256": sha256(f), "bytes": f.stat().st_size} for f in files

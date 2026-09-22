@@ -1,5 +1,5 @@
 """Quart application factory. Everything long-lived (engine, HTTP client,
-corpus, auth provider, policy) hangs off ``app.extensions["cra"]`` and is
+library, auth provider, policy) hangs off ``app.extensions["cra"]`` and is
 created once."""
 
 import asyncio
@@ -24,7 +24,7 @@ from cra.app.web import route_admin, route_auth, route_health, route_session
 from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.config.settings import Settings
-from cra.core.corpus.corpus import Corpus
+from cra.core.library.library import Library
 
 log = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class AppContext:
     http: httpx.AsyncClient
     policy: Policy
     limiter: RateLimiter = field(default_factory=RateLimiter)
-    corpus: Corpus | None = None
+    library: Library | None = None
 
     @property
     def home(self) -> str:
@@ -91,10 +91,10 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     @app.before_serving
     async def start() -> None:
         try:
-            ctx.corpus = await asyncio.to_thread(
-                Corpus.load,
-                ctx.settings.corpus_path,
-                required_schema=ctx.settings.corpus_require_schema,
+            ctx.library = await asyncio.to_thread(
+                Library.load,
+                ctx.settings.library_path,
+                required_schema=ctx.settings.library_require_schema,
             )
             await _check_schema(ctx)
             ctx.policy = await Policy.load(ctx.settings, ctx.repo)

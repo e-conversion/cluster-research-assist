@@ -1,4 +1,4 @@
-"""``manifest.json``: the contract between a corpus bundle and the code."""
+"""``manifest.json``: the contract between a library bundle and the code."""
 
 import hashlib
 import json
@@ -31,7 +31,7 @@ def write(
     counts: dict[str, int],
     *,
     embedding_model: str = "",
-    builder: str = "cra corpus manifest",
+    builder: str = "cra library manifest",
     provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     files = sorted(p for p in directory.iterdir() if p.is_file() and p.name != MANIFEST)
