@@ -44,7 +44,8 @@ async def resolve_login(repo: Repository, claims: Claims) -> LoginOutcome:
         return outcome
 
     if registered.user_id is None:
-        user = await repo.create_user(claims.display_name)
+        # an invitation may name the role the new account starts with
+        user = await repo.create_user(claims.display_name, role=registered.role)
         await repo.link_registered_email(email, user.id)
     else:
         existing = await repo.get_user(registered.user_id)

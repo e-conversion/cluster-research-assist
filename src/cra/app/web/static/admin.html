@@ -29,34 +29,37 @@
 
 <main class="admin">
   <h1>Administration</h1>
-  <p class="lede" id="intro">Accounts, the sign-in allow-list and the settings that may change while the service runs.</p>
 
-  <section>
-    <h2>Accounts</h2>
-    <table><thead><tr><th>Name</th><th>Role</th><th>Signed in from</th><th>Last sign-in</th><th></th></tr></thead>
-    <tbody id="users"><tr><td colspan="5" class="desc">Loading…</td></tr></tbody></table>
-  </section>
+  <nav class="tabs" id="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="accounts">Accounts</button>
+    <button type="button" role="tab" data-tab="settings">Settings</button>
+    <button type="button" role="tab" data-tab="library">Library</button>
+  </nav>
 
-  <section>
-    <h2>Sign-in allow-list</h2>
-    <p class="desc">Only these addresses can sign in. The first sign-in binds the address to an account permanently.</p>
-    <table><thead><tr><th>Address</th><th>Account</th><th>Added by</th><th></th></tr></thead>
-    <tbody id="emails"></tbody></table>
-    <form class="row-form" id="email-form">
-      <input type="email" id="email-input" placeholder="someone@university.de" required>
-      <button class="btn primary" type="submit">Add</button>
+  <section id="tab-accounts" role="tabpanel">
+    <p class="desc">Everyone who can sign in: accounts that have, addresses invited but not yet
+    used, and the addresses named in <code>CRA_AUTH_ADMINS</code>, which become admins on their
+    first sign-in.</p>
+    <table><thead><tr><th>Name</th><th>Role</th><th>From</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody id="people"><tr><td colspan="5" class="desc">Loading…</td></tr></tbody></table>
+    <form class="row-form" id="invite-form">
+      <input type="email" id="invite-email" placeholder="someone@university.de" required>
+      <select id="invite-role">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+      <button class="btn primary" type="submit">Invite</button>
     </form>
   </section>
 
-  <section>
-    <h2>Settings</h2>
-    <p class="desc">These take effect immediately. Endpoints, keys and paths are configuration, not settings: they live in the environment and need a restart.</p>
+  <section id="tab-settings" role="tabpanel" hidden>
+    <p class="desc">These take effect immediately. Endpoints, keys and paths are configuration,
+    not settings: they live in the environment and need a restart.</p>
     <table><thead><tr><th>Setting</th><th>Value</th><th>Source</th><th></th></tr></thead>
     <tbody id="policy"></tbody></table>
   </section>
 
-  <section>
-    <h2>Library</h2>
+  <section id="tab-library" role="tabpanel" hidden>
     <div id="library" class="desc">Loading…</div>
     <table id="versions-table" hidden><thead><tr><th>Version</th><th>Size</th><th>State</th><th></th></tr></thead>
     <tbody id="versions"></tbody></table>

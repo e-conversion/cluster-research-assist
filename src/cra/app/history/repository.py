@@ -31,8 +31,8 @@ class Repository:
 
     # users
 
-    async def create_user(self, display_name: str) -> User:
-        user = User(display_name=display_name, created_at=utcnow())
+    async def create_user(self, display_name: str, role: str = "user") -> User:
+        user = User(display_name=display_name, role=role, created_at=utcnow())
         async with self._sessions() as s, s.begin():
             s.add(user)
         return user
@@ -82,10 +82,13 @@ class Repository:
     # registered emails (the allow-list)
 
     async def add_registered_email(
-        self, email: str, created_by: str
+        self, email: str, created_by: str, role: str = "user"
     ) -> RegisteredEmail:
         row = RegisteredEmail(
-            email=normalise_email(email), created_by=created_by, created_at=utcnow()
+            email=normalise_email(email),
+            created_by=created_by,
+            role=role,
+            created_at=utcnow(),
         )
         async with self._sessions() as s, s.begin():
             s.add(row)
@@ -108,6 +111,15 @@ class Repository:
                 delete(RegisteredEmail).where(
                     RegisteredEmail.email == normalise_email(email)
                 )
+            )
+            return result.rowcount == 1
+
+    async def set_registered_email_role(self, email: str, role: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(RegisteredEmail)
+                .where(RegisteredEmail.email == normalise_email(email))
+                .values(role=role)
             )
             return result.rowcount == 1
 

@@ -40,7 +40,7 @@ PUBLIC_ROUTES = {
 USER_ROUTES = {"/api/session"}
 ADMIN_ROUTES = {
     "/admin",
-    "/api/admin/users",
+    "/api/admin/people",
     "/api/admin/users/<user_id>",
     "/api/admin/emails",
     "/api/admin/emails/<path:email>",

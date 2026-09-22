@@ -48,80 +48,116 @@ async function put(path, body) {
   return data;
 }
 
-async function loadUsers() {
-  const { users } = await getJSON("api/admin/users");
-  const body = $("users");
-  body.replaceChildren();
-  for (const u of users) {
-    const row = el("tr");
-    row.append(el("td", null, u.display_name + (u.self ? " (you)" : "")));
-
-    const roleCell = el("td");
-    const select = el("select");
-    for (const role of ["user", "admin"]) {
-      const option = el("option", null, role);
-      option.value = role;
-      option.selected = u.role === role;
-      select.append(option);
-    }
-    select.disabled = u.self;
-    select.addEventListener("change", () =>
-      guard(async () => {
-        await put(`api/admin/users/${u.id}`, { role: select.value });
-        toast(`${u.display_name} is now ${select.value}`);
-      }),
-    );
-    roleCell.append(select);
-    if (!u.is_active) roleCell.append(el("span", "src", " disabled"));
-    row.append(roleCell);
-
-    row.append(el("td", "desc", u.identities.map((i) => i.organization || i.issuer).join(", ")));
-    row.append(el("td", "desc", date(u.last_login_at)));
-
-    const actions = el("td", "actions");
-    if (!u.self) {
-      actions.append(
-        button(u.is_active ? "Disable" : "Enable", "ghost", () =>
-          guard(async () => {
-            await put(`api/admin/users/${u.id}`, { is_active: !u.is_active });
-            await loadUsers();
-          }),
-        ),
-        button("Delete", "ghost danger", () =>
-          guard(async () => {
-            if (!confirm(`Delete the account of ${u.display_name}? Their history goes with it.`)) return;
-            await del(`api/admin/users/${u.id}`);
-            await loadUsers();
-          }),
-        ),
-      );
-    }
-    row.append(actions);
-    body.append(row);
+function roleSelect(current, { disabled = false, onChange }) {
+  const select = el("select");
+  for (const role of ["user", "admin"]) {
+    const option = el("option", null, role);
+    option.value = role;
+    option.selected = current === role;
+    select.append(option);
   }
+  select.disabled = disabled;
+  select.addEventListener("change", () => onChange(select.value));
+  return select;
 }
 
-async function loadEmails() {
-  const { emails } = await getJSON("api/admin/emails");
-  const body = $("emails");
-  body.replaceChildren();
-  for (const e of emails) {
-    const row = el("tr");
-    row.append(el("td", null, e.email));
-    row.append(el("td", "desc", e.user_id ? "bound" : "not yet used"));
-    row.append(el("td", "desc", e.created_by));
-    const actions = el("td", "actions");
-    actions.append(
-      button("Remove", "ghost danger", () =>
+function accountRow(p) {
+  const row = el("tr");
+  const name = el("td");
+  name.append(el("div", null, p.name + (p.self ? " (you)" : "")));
+  if (p.email) name.append(el("div", "desc", p.email));
+  row.append(name);
+
+  const role = el("td");
+  role.append(
+    roleSelect(p.role, {
+      disabled: p.self,
+      onChange: (value) =>
         guard(async () => {
-          await del(`api/admin/emails/${encodeURIComponent(e.email)}`);
-          await loadEmails();
+          await put(`api/admin/users/${p.id}`, { role: value });
+          toast(`${p.name} is now ${value}`);
+          await loadPeople();
+        }),
+    }),
+  );
+  if (!p.active) role.append(el("span", "src", " disabled"));
+  row.append(role);
+
+  row.append(el("td", "desc", p.organizations.join(", ")));
+  row.append(el("td", "desc", date(p.last_login_at)));
+
+  const actions = el("td", "actions");
+  if (!p.self) {
+    actions.append(
+      button(p.active ? "Disable" : "Enable", "ghost", () =>
+        guard(async () => {
+          await put(`api/admin/users/${p.id}`, { is_active: !p.active });
+          await loadPeople();
+        }),
+      ),
+      button("Delete", "ghost danger", () =>
+        guard(async () => {
+          if (!confirm(`Delete the account of ${p.name}? Their history goes with it.`)) return;
+          await del(`api/admin/users/${p.id}`);
+          await loadPeople();
         }),
       ),
     );
-    row.append(actions);
-    body.append(row);
   }
+  row.append(actions);
+  return row;
+}
+
+function invitationRow(p) {
+  const row = el("tr");
+  const name = el("td");
+  name.append(el("div", null, p.email), el("div", "desc", `invited by ${p.invited_by}`));
+  row.append(name);
+
+  const role = el("td");
+  role.append(
+    roleSelect(p.role, {
+      onChange: (value) =>
+        guard(async () => {
+          await put(`api/admin/emails/${encodeURIComponent(p.email)}`, { role: value });
+          await loadPeople();
+        }),
+    }),
+  );
+  row.append(role);
+  row.append(el("td", "desc", "invited, not yet signed in"));
+  row.append(el("td", "desc", date(p.invited_at)));
+
+  const actions = el("td", "actions");
+  actions.append(
+    button("Revoke", "ghost danger", () =>
+      guard(async () => {
+        await del(`api/admin/emails/${encodeURIComponent(p.email)}`);
+        await loadPeople();
+      }),
+    ),
+  );
+  row.append(actions);
+  return row;
+}
+
+function configuredRow(p) {
+  const row = el("tr");
+  row.append(el("td", null, p.email));
+  row.append(el("td", "desc", `${p.role} by configuration`));
+  row.append(el("td", "desc", "CRA_AUTH_ADMINS"));
+  row.append(el("td", "desc", "never"));
+  row.append(el("td", "actions"));
+  return row;
+}
+
+const ROWS = { account: accountRow, invitation: invitationRow, configured: configuredRow };
+
+async function loadPeople() {
+  const { people } = await getJSON("api/admin/people");
+  const body = $("people");
+  body.replaceChildren();
+  for (const person of people) body.append(ROWS[person.kind](person));
 }
 
 async function loadPolicy() {
@@ -220,8 +256,30 @@ async function uploadLibrary(file) {
   return data;
 }
 
+const TABS = ["accounts", "settings", "library"];
+
+/** The open tab lives in the URL fragment, so a reload keeps it. */
+function showTab(name) {
+  const open = TABS.includes(name) ? name : TABS[0];
+  for (const tab of TABS) $(`tab-${tab}`).hidden = tab !== open;
+  for (const b of $("tabs").querySelectorAll("button")) {
+    b.classList.toggle("on", b.dataset.tab === open);
+    b.setAttribute("aria-selected", String(b.dataset.tab === open));
+  }
+}
+
+function initTabs() {
+  $("tabs").addEventListener("click", (ev) => {
+    const b = ev.target.closest("button[data-tab]");
+    if (b) location.hash = `#${b.dataset.tab}`;
+  });
+  addEventListener("hashchange", () => showTab(location.hash.slice(1)));
+  showTab(location.hash.slice(1));
+}
+
 async function boot() {
   $("theme-slot").append(themeControl());
+  initTabs();
   try {
     const session = await getJSON("api/session");
     $("user-label").textContent = session.user || "";
@@ -229,7 +287,7 @@ async function boot() {
     location.assign("./");
     return;
   }
-  await guard(() => Promise.all([loadUsers(), loadEmails(), loadPolicy(), loadLibrary()]));
+  await guard(() => Promise.all([loadPeople(), loadPolicy(), loadLibrary()]));
   $("upload-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const file = $("bundle-input").files[0];
@@ -247,12 +305,15 @@ async function boot() {
       submit.textContent = "Upload and activate";
     });
   });
-  $("email-form").addEventListener("submit", (ev) => {
+  $("invite-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     guard(async () => {
-      await postJSON("api/admin/emails", { email: $("email-input").value.trim() });
-      $("email-input").value = "";
-      await loadEmails();
+      await postJSON("api/admin/emails", {
+        email: $("invite-email").value.trim(),
+        role: $("invite-role").value,
+      });
+      $("invite-email").value = "";
+      await loadPeople();
     });
   });
 }

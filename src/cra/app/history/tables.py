@@ -37,6 +37,8 @@ class RegisteredEmail(Base):
     user_id: Mapped[str | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL")
     )
+    # the role the account gets when this address first signs in
+    role: Mapped[str] = mapped_column(String(20), default="user")
     created_by: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime]
 

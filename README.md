@@ -80,6 +80,11 @@ configured OpenID Connect issuer, and only pre-registered addresses may sign in.
 `CRA_AUTH_ADMINS` lists the addresses that become admin on sign-in, so a fresh
 deployment has an administrator without shell access.
 
+The console lists everyone who can sign in on one page: accounts, addresses
+invited but not yet used, and the addresses named in `CRA_AUTH_ADMINS`. An
+invitation carries the role its account will start with. The same from the
+command line:
+
 ```bash
 cra users add-email someone@university.de
 cra users list

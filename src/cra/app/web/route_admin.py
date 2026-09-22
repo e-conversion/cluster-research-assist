@@ -28,31 +28,54 @@ def _bad(message: str, status: int = 400) -> tuple[dict[str, str], int]:
     return {"error": message}, status
 
 
-@bp.get("/api/admin/users")
+@bp.get("/api/admin/people")
 @requires_admin
-async def list_users() -> dict[str, Any]:
-    repo = _ctx().repo
-    users = []
+async def list_people() -> dict[str, Any]:
+    """Accounts, invitations not yet used, and the admins named in the
+    configuration, in one list so that no source of access is hidden."""
+    ctx = _ctx()
+    repo = ctx.repo
+    invitations = await repo.list_registered_emails()
+    email_of = {i.user_id: i.email for i in invitations if i.user_id}
+
+    people = []
     for user in await repo.list_users():
         identities = await repo.list_identities(user.id)
-        users.append(
+        people.append(
             {
+                "kind": "account",
                 "id": user.id,
-                "display_name": user.display_name,
+                "name": user.display_name,
+                "email": email_of.get(user.id),
                 "role": user.role,
-                "is_active": user.is_active,
-                "created_at": user.created_at.isoformat(),
+                "active": user.is_active,
                 "last_login_at": user.last_login_at.isoformat()
                 if user.last_login_at
                 else None,
-                "identities": [
-                    {"issuer": i.issuer, "organization": i.home_organization}
-                    for i in identities
-                ],
+                "organizations": sorted(
+                    {i.home_organization or i.issuer for i in identities}
+                ),
                 "self": user.id == g.principal.user_id,
             }
         )
-    return {"users": users}
+    people += [
+        {
+            "kind": "invitation",
+            "email": row.email,
+            "role": row.role,
+            "invited_by": row.created_by,
+            "invited_at": row.created_at.isoformat(),
+        }
+        for row in invitations
+        if row.user_id is None
+    ]
+    known = {p.get("email") for p in people} | {p.get("name") for p in people}
+    people += [
+        {"kind": "configured", "email": address, "role": Role.ADMIN}
+        for address in ctx.settings.auth_admins
+        if address.strip().lower() not in {k.lower() for k in known if k}
+    ]
+    return {"people": people}
 
 
 @bp.put("/api/admin/users/<user_id>")
@@ -87,35 +110,33 @@ async def delete_user(user_id: str) -> Any:
     return {"ok": True}
 
 
-@bp.get("/api/admin/emails")
-@requires_admin
-async def list_emails() -> dict[str, Any]:
-    rows = await _ctx().repo.list_registered_emails()
-    return {
-        "emails": [
-            {
-                "email": row.email,
-                "user_id": row.user_id,
-                "created_by": row.created_by,
-                "created_at": row.created_at.isoformat(),
-            }
-            for row in rows
-        ]
-    }
-
-
 @bp.post("/api/admin/emails")
 @requires_admin
-async def add_email() -> Any:
+async def invite() -> Any:
     repo = _ctx().repo
     body = await request.get_json(silent=True) or {}
     email = str(body.get("email", "")).strip()
+    role = str(body.get("role", Role.USER))
     if "@" not in email:
         return _bad("that is not an email address")
+    if role not in (Role.USER, Role.ADMIN):
+        return _bad(f"role must be {Role.USER} or {Role.ADMIN}")
     if await repo.get_registered_email(email) is not None:
-        return _bad("already on the list")
-    await repo.add_registered_email(email, g.principal.display or "admin")
-    return {"ok": True}
+        return _bad("already invited")
+    await repo.add_registered_email(email, g.principal.display or "admin", role)
+    return {"email": email, "role": role}
+
+
+@bp.put("/api/admin/emails/<path:email>")
+@requires_admin
+async def update_invitation(email: str) -> Any:
+    body = await request.get_json(silent=True) or {}
+    role = str(body.get("role", ""))
+    if role not in (Role.USER, Role.ADMIN):
+        return _bad(f"role must be {Role.USER} or {Role.ADMIN}")
+    if not await _ctx().repo.set_registered_email_role(email, role):
+        return _bad("not invited", 404)
+    return {"email": email, "role": role}
 
 
 @bp.delete("/api/admin/emails/<path:email>")

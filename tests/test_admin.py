@@ -10,7 +10,9 @@ from cra.app.web.factory import create_app
 @pytest.fixture
 async def admin_app(tmp_path):
     app = create_app(
-        make_settings(tmp_path, auth_dev_user="root", auth_admins=["root"])
+        make_settings(
+            tmp_path, auth_dev_user="root", auth_admins=["root", "future@tum.de"]
+        )
     )
     async with app.test_app():
         yield app
@@ -27,11 +29,57 @@ async def json_of(response):
     return await response.get_json()
 
 
-async def test_accounts_are_listed_with_their_role(admin, admin_app):
-    body = await json_of(await admin.get("/api/admin/users"))
-    assert [(u["display_name"], u["role"], u["self"]) for u in body["users"]] == [
-        ("root", "admin", True)
+async def test_everyone_who_can_sign_in_is_in_one_list(admin, admin_app):
+    repo = admin_app.extensions["cra"].repo
+    await admin.post("/api/admin/emails", json={"email": "ada@tum.de", "role": "admin"})
+    await repo.add_registered_email("bound@tum.de", "cli")
+    user = await repo.create_user("bound")
+    await repo.link_registered_email("bound@tum.de", user.id)
+
+    people = (await json_of(await admin.get("/api/admin/people")))["people"]
+    by_kind = {}
+    for person in people:
+        by_kind.setdefault(person["kind"], []).append(person)
+
+    assert [(p["name"], p["role"], p["self"]) for p in by_kind["account"]] == [
+        ("root", "admin", True),
+        ("bound", "user", False),
     ]
+    assert by_kind["account"][1]["email"] == "bound@tum.de"
+    assert [(p["email"], p["role"]) for p in by_kind["invitation"]] == [
+        ("ada@tum.de", "admin")
+    ]
+    # a configured admin who has not signed in yet is visible; root already has
+    # an account, so it appears once, as that account
+    assert [p["email"] for p in by_kind["configured"]] == ["future@tum.de"]
+
+
+async def test_an_invitation_decides_the_role_of_the_account_it_creates(
+    admin, admin_app
+):
+    from cra.app.auth.binding import Claims, resolve_login
+
+    repo = admin_app.extensions["cra"].repo
+    await admin.post("/api/admin/emails", json={"email": "ada@tum.de", "role": "admin"})
+    outcome = await resolve_login(
+        repo,
+        Claims(issuer="https://idp", sub="s1", email="ada@tum.de", given_name="Ada"),
+    )
+    assert (await repo.get_user(outcome.user_id)).role == "admin"
+
+
+async def test_an_invitation_role_can_be_changed_before_it_is_used(admin):
+    await admin.post("/api/admin/emails", json={"email": "ada@tum.de"})
+    response = await admin.put("/api/admin/emails/ada@tum.de", json={"role": "admin"})
+    assert await json_of(response) == {"email": "ada@tum.de", "role": "admin"}
+    people = (await json_of(await admin.get("/api/admin/people")))["people"]
+    assert [p["role"] for p in people if p["kind"] == "invitation"] == ["admin"]
+    assert (
+        await admin.put("/api/admin/emails/ada@tum.de", json={"role": "wizard"})
+    ).status_code == 400
+    assert (
+        await admin.put("/api/admin/emails/nobody@tum.de", json={"role": "admin"})
+    ).status_code == 404
 
 
 async def test_an_admin_promotes_and_disables_another_account(admin, admin_app):
@@ -53,7 +101,7 @@ async def test_an_admin_promotes_and_disables_another_account(admin, admin_app):
     ids=["demote", "disable", "delete"],
 )
 async def test_an_admin_cannot_lock_themselves_out(admin, admin_app, payload, method):
-    me = (await json_of(await admin.get("/api/admin/users")))["users"][0]["id"]
+    me = (await json_of(await admin.get("/api/admin/people")))["people"][0]["id"]
     call = getattr(admin, method)
     response = await (
         call(f"/api/admin/users/{me}", json=payload)
@@ -74,19 +122,28 @@ async def test_deleting_an_account_frees_its_address(admin, admin_app):
     assert (await repo.get_registered_email("ada@example.org")).user_id is None
 
 
-async def test_the_allow_list_normalises_and_rejects_duplicates(admin):
+async def invitations(client):
+    people = (await json_of(await client.get("/api/admin/people")))["people"]
+    return [p["email"] for p in people if p["kind"] == "invitation"]
+
+
+async def test_invitations_are_normalised_and_not_repeated(admin):
     assert (
         await admin.post("/api/admin/emails", json={"email": " Ada@Example.ORG "})
     ).status_code == 200
-    body = await json_of(await admin.get("/api/admin/emails"))
-    assert [e["email"] for e in body["emails"]] == ["ada@example.org"]
+    assert await invitations(admin) == ["ada@example.org"]
     again = await admin.post("/api/admin/emails", json={"email": "ada@example.org"})
     assert again.status_code == 400
     assert (
         await admin.post("/api/admin/emails", json={"email": "nonsense"})
     ).status_code == 400
+    assert (
+        await admin.post(
+            "/api/admin/emails", json={"email": "a@b.de", "role": "wizard"}
+        )
+    ).status_code == 400
     assert (await admin.delete("/api/admin/emails/ada@example.org")).status_code == 200
-    assert (await json_of(await admin.get("/api/admin/emails")))["emails"] == []
+    assert await invitations(admin) == []
 
 
 async def test_settings_show_their_value_and_where_it_comes_from(admin):

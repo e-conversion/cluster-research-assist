@@ -126,9 +126,14 @@ button { font: inherit; }
 /* admin console */
 .admin { width: 100%; max-width: 1000px; margin: 0 auto; padding: 22px 18px 48px; }
 .admin h1 { font: 500 26px/1.2 var(--display); margin: 0 0 4px; }
-.admin section { margin-top: 30px; }
-.admin h2 { font: 600 13px/1 var(--body); letter-spacing: .08em; text-transform: uppercase;
-  color: var(--muted); margin: 0 0 10px; }
+.admin section { margin-top: 22px; }
+.admin .tabs { display: flex; gap: 4px; margin-top: 22px; border-bottom: 1px solid var(--hair); }
+.admin .tabs button { background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--muted); font: 500 14px/1 var(--body); padding: 10px 14px; cursor: pointer; }
+.admin .tabs button:hover { color: var(--ink); }
+.admin .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.admin .desc code { font: 12.5px var(--mono); background: var(--panel-2); padding: 1px 5px;
+  border-radius: 5px; }
 .admin table { width: 100%; border-collapse: collapse; font-size: 14px; }
 .admin th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px;
   padding: 6px 10px 6px 0; border-bottom: 1px solid var(--hair); }
