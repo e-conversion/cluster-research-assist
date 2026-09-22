@@ -222,3 +222,32 @@ async def test_the_session_reports_the_tools_the_caller_may_use(client):
     assert body["tools"]["total"] == 15
     health = await (await client.get("/api/health")).get_json()
     assert health["tools"] == 15
+
+
+async def test_the_session_hands_back_the_conversation_it_is_in(client, app):
+    ctx = app.extensions["cra"]
+    await client.get("/auth/login")
+    body = await (await client.get("/api/session")).get_json()
+    assert (body["messages"], body["turns"], body["conversation"]) == ([], 0, None)
+
+    # what a finished turn leaves behind
+    principal_id = (await ctx.repo.list_users())[0].id
+    conversation = await ctx.repo.create_conversation(principal_id, "About perovskites")
+    await ctx.repo.add_message(conversation.id, "user", "which papers?")
+    await ctx.repo.add_message(
+        conversation.id,
+        "assistant",
+        "These two.",
+        {"model": "m", "tools": [{"name": "t"}]},
+    )
+    from cra.app.web.sessions import COOKIE_NAME
+
+    cookie = next(c for c in client.cookie_jar if c.name == COOKIE_NAME)
+    state = await ctx.sessions.load(cookie.value)
+    state.data = {"conversation": conversation.id}
+    await ctx.sessions.save(state)
+
+    body = await (await client.get("/api/session")).get_json()
+    assert body["turns"] == 1
+    assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
+    assert body["messages"][1]["meta"]["model"] == "m"

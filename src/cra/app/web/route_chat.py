@@ -1,9 +1,10 @@
 """Asking a question, and watching the answer arrive."""
 
 import asyncio
-import contextlib
 import json
 import logging
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import Any
 
 from quart import Blueprint, Response, current_app, g, request
@@ -18,8 +19,6 @@ log = logging.getLogger(__name__)
 bp = Blueprint("chat", __name__)
 
 MAX_PROMPT_CHARS = 20_000
-# how often a silent stream sends something, so a proxy does not close it
-PING_S = 15
 
 
 def _ctx():
@@ -76,34 +75,36 @@ async def chat() -> Any:
     conversation_id = await _conversation(ctx, g.session, g.principal)
     history = await _history(ctx, conversation_id)
     await ctx.repo.add_message(conversation_id, "user", question)
-    if len(history) == 0:
+    if not history:
         await ctx.repo.rename_conversation(conversation_id, question[:120])
 
     slot = ctx.turns.of(g.session.id)
     epoch, cancel = await slot.start()
-    queue: asyncio.Queue = asyncio.Queue()
-    task = asyncio.create_task(
-        _run(ctx, conversation_id, chosen, history, question, cancel, queue)
+    # Everything the turn needs is read here, while the request context is
+    # still there: the generator below outlives it.
+    turn = _Turn(
+        ctx=ctx,
+        conversation_id=conversation_id,
+        chosen=chosen,
+        history=history,
+        question=question,
+        tier=g.principal.tier,
+        cancel=cancel,
     )
 
     async def stream():
         yield _frame({"type": "start", "model": chosen["model"]})
+        final: dict[str, Any] | None = None
         try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), PING_S)
-                except TimeoutError:
-                    yield ": ping\n\n"
-                    continue
-                if event is None:
-                    return
+            async for event in turn.run():
                 yield _frame(event)
+                if event["type"] in ("done", "error"):
+                    final = event
         finally:
-            # the reader is gone, or the answer is complete; either way the
-            # turn must not keep spending
+            # the reader may be gone; the answer still belongs in the history
             cancel.set()
             slot.finish(epoch)
-            await asyncio.shield(_settle(task))
+            await asyncio.shield(turn.store(final))
 
     return Response(
         stream(),
@@ -117,74 +118,55 @@ async def chat() -> Any:
     )
 
 
-async def _settle(task: asyncio.Task) -> None:
-    # the task reports its own failures as events; here we only wait for it
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
+@dataclass
+class _Turn:
+    """One answer, detached from the request that asked for it."""
 
+    ctx: Any
+    conversation_id: str
+    chosen: dict[str, Any]
+    history: list[dict[str, Any]]
+    question: str
+    tier: Any
+    cancel: asyncio.Event
 
-async def _run(
-    ctx: Any,
-    conversation_id: str,
-    chosen: dict[str, Any],
-    history: list[dict[str, Any]],
-    question: str,
-    cancel: asyncio.Event,
-    queue: asyncio.Queue,
-) -> None:
-    """Own one turn from the first token to the stored answer."""
-    tier = g.principal.tier
-    tool_ctx = ctx.tool_context(tier)
-    schemas = ctx.registry.schemas(tier)
-    fields = params_.request_fields(ctx.settings, chosen["params"])
-    extra_body, plain = params_.split(fields)
-    final: dict[str, Any] | None = None
-    try:
+    async def run(self) -> AsyncIterator[dict[str, Any]]:
+        ctx = self.ctx
+        tool_ctx = ctx.tool_context(self.tier)
+        fields = params_.request_fields(ctx.settings, self.chosen["params"])
+        extra_body, plain = params_.split(fields)
         async for event in run_turn(
             make_client(ctx.settings),
-            model=chosen["model"],
-            messages=[*history, {"role": "user", "content": question}],
+            model=self.chosen["model"],
+            messages=[*self.history, {"role": "user", "content": self.question}],
             system_prompt=ctx.system_prompt,
-            tools=schemas,
+            tools=ctx.registry.schemas(self.tier),
             call_tool=lambda name, arguments: ctx.registry.call(
                 name, arguments, tool_ctx
             ),
             base_url=ctx.settings.llm_base_url,
-            max_rounds=int(chosen["params"]["max_tool_rounds"] or 10),
-            cancel=cancel,
+            max_rounds=int(self.chosen["params"]["max_tool_rounds"] or 10),
+            cancel=self.cancel,
             extra_body=extra_body or None,
             fields=plain,
         ):
-            await queue.put(event)
-            if event["type"] in ("done", "error"):
-                final = event
-    except Exception as exc:
-        log.exception("the turn could not start")
-        final = {
-            "answer": f"Error: {exc}",
-            "elapsed": 0,
-            "rounds": 0,
-            "tools": [],
-            "error": type(exc).__name__,
-        }
-        await queue.put(
-            {"type": "error", "message": str(exc), "error_type": type(exc).__name__}
+            yield event
+
+    async def store(self, final: dict[str, Any] | None) -> None:
+        if final is None:
+            return
+        await self.ctx.repo.add_message(
+            self.conversation_id,
+            "assistant",
+            final.get("answer", ""),
+            {
+                "model": self.chosen["model"],
+                "elapsed": final.get("elapsed", 0),
+                "tools": final.get("tools", []),
+                "tool_calls": final.get("tool_calls", []),
+                "error": final.get("error"),
+            },
         )
-    finally:
-        if final is not None:
-            await ctx.repo.add_message(
-                conversation_id,
-                "assistant",
-                final.get("answer", ""),
-                {
-                    "model": chosen["model"],
-                    "elapsed": final.get("elapsed", 0),
-                    "tools": final.get("tools", []),
-                    "tool_calls": final.get("tool_calls", []),
-                    "error": final.get("error"),
-                },
-            )
-        await queue.put(None)
 
 
 @bp.post("/api/chat/stop")

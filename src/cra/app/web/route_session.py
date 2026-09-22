@@ -66,6 +66,21 @@ def _tool_counts(ctx, tier) -> dict[str, int]:
     return {"local": local, "elab": 0, "dt": 0, "total": local}
 
 
+async def _conversation_view(ctx, session) -> dict[str, Any]:
+    """The conversation this session is in, as the interface renders it."""
+    conversation_id = session.data.get("conversation") if session else None
+    if not conversation_id:
+        return {"conversation": None, "messages": [], "turns": 0}
+    stored = await ctx.repo.messages(str(conversation_id))
+    return {
+        "conversation": conversation_id,
+        "messages": [
+            {"role": m.role, "content": m.content, "meta": m.meta} for m in stored
+        ],
+        "turns": sum(1 for m in stored if m.role == "user"),
+    }
+
+
 @bp.get("/api/session")
 async def session() -> dict[str, Any]:
     ctx = _ctx()
@@ -81,7 +96,6 @@ async def session() -> dict[str, Any]:
         **await selection(ctx, g.session),
         "connected": {},
         "tools": _tool_counts(ctx, principal.tier),
-        "turns": 0,
-        "busy": False,
-        "messages": [],
+        "busy": ctx.turns.of(g.session.id).busy,
+        **await _conversation_view(ctx, g.session),
     }
