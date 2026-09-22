@@ -112,6 +112,15 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     async def stop() -> None:
         await _close(ctx)
 
+    @app.after_request
+    async def revalidate_static(response: Response) -> Response:
+        # Without this the browser caches a script for hours and silently keeps
+        # running the previous deployment's frontend. The ETag makes the
+        # revalidation a 304, so the cost is one conditional request.
+        if request.endpoint == "static":
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     @app.before_request
     async def guard() -> Response | None:
         g.session = await ctx.sessions.load(request.cookies.get(COOKIE_NAME))

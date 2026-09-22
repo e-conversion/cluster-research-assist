@@ -27,6 +27,15 @@ async def test_public_routes_answer_without_a_session(client):
     assert (await client.get("/static/js/app.js")).status_code == 200
 
 
+async def test_static_files_must_be_revalidated(client):
+    """Otherwise a browser keeps running the previous deployment's frontend."""
+    for path in ("/static/js/admin.js", "/static/css/app.css"):
+        response = await client.get(path)
+        assert response.headers["Cache-Control"] == "no-cache", path
+    page = await client.get("/admin", headers={"Accept": "application/json"})
+    assert page.status_code == 401
+
+
 # Every route, classified on purpose. A new route fails this test until it is
 # listed, which is what keeps "public by default" from becoming an oversight.
 PUBLIC_ROUTES = {
