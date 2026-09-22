@@ -19,51 +19,42 @@ export const store = {
 export async function refreshSession() {
   const session = await getJSON("api/session");
   store.update({ session });
+  renderIdentity();
   return session;
 }
 
-function renderSignIn(view, config) {
-  const page = document.createElement("div");
-  page.className = "landing signin";
-  page.innerHTML = `
-    <div class="landing-head">
-      <svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>
-      <h1>Sign in to ${config.title}</h1>
-    </div>
-    <p class="lede">The assistant answers questions about the research in ${config.cluster.name}.
-    Sign in with your institutional account to start.</p>
-    <p><a class="btn primary" href="${config.auth.login_url}">Sign in</a></p>`;
-  view.replaceChildren(page);
-  for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
+/** Header state follows the session: anonymous visitors see "Sign in". */
+function renderIdentity() {
+  const s = store.session || {};
+  const label = document.getElementById("user-label");
+  label.textContent = s.user || "";
+  label.hidden = !s.user;
+  document.getElementById("sign-in").hidden = !!s.signed_in;
+  document.getElementById("sign-out").hidden = !s.signed_in;
+  document.getElementById("admin-link").hidden = !s.is_admin;
 }
 
 async function boot() {
   const view = document.getElementById("view");
-  let config;
+  let config, session;
   try {
-    config = await getJSON("api/config");
+    [config, session] = await Promise.all([getJSON("api/config"), getJSON("api/session")]);
   } catch (e) {
-    view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
-    return;
-  }
-  document.title = config.title;
-  document.querySelector(".brand-name").textContent = config.title;
-  let session;
-  try {
-    session = await getJSON("api/session");
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 401) { renderSignIn(view, config); return; }
     view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
     return;
   }
   store.update({ config, session });
-  const userLabel = document.getElementById("user-label");
-  if (store.session.user) { userLabel.textContent = store.session.user; userLabel.hidden = false; }
-  const signOut = document.getElementById("sign-out");
-  signOut.hidden = false;
-  signOut.addEventListener("click", async () => {
+  document.title = config.title;
+  document.querySelector(".brand-name").textContent = config.title;
+  if (config.notice) {
+    const bar = document.getElementById("notice");
+    bar.textContent = config.notice;
+    bar.hidden = false;
+  }
+  renderIdentity();
+  document.getElementById("sign-out").addEventListener("click", async () => {
     try {
-      const r = await postJSON(config.auth.logout_url);
+      const r = await postJSON(store.config.auth.logout_url);
       location.assign(r.redirect);
     } catch (e) { toast(e.message, "bad"); }
   });

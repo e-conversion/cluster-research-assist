@@ -13,7 +13,7 @@ from quart import (
     request,
 )
 
-from cra.app.auth.principal import LoginDenied, LoginOutcome, SessionState
+from cra.app.auth.principal import LoginDenied, LoginOutcome, Role, SessionState
 from cra.app.web.sessions import COOKIE_NAME
 
 log = logging.getLogger(__name__)
@@ -87,6 +87,13 @@ async def _finish(state: SessionState, outcome: LoginOutcome) -> Response:
             ),
         )
         return Response(page, status=STATUS.get(denied, 403), content_type="text/html")
+    if outcome.grants_admin:
+        user = await ctx.repo.get_user(outcome.user_id)
+        if user is not None and user.role != Role.ADMIN:
+            await ctx.repo.set_user_role(outcome.user_id, Role.ADMIN)
+            log.info(
+                "granted admin from configuration", extra={"fields": {"user": user.id}}
+            )
     cookie, _ = await ctx.sessions.rotate(state, outcome.user_id)
     await ctx.repo.touch_login(outcome.user_id)
     log.info("login", extra={"fields": {"user": outcome.user_id}})

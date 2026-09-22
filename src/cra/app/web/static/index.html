@@ -52,6 +52,7 @@
   </nav>
   <div class="top-actions">
     <span class="user" id="user-label" hidden></span>
+    <a class="btn" id="sign-in" href="auth/login" hidden>Sign in</a>
     <button class="btn ghost" id="new-chat" title="Start a new conversation">New chat</button>
     <details class="menu" id="menu">
       <summary class="btn ghost icon" title="Menu" aria-label="Menu"><svg class="ico"><use href="#i-more"/></svg></summary>
@@ -64,12 +65,14 @@
         </div>
         <hr>
         <button type="button" class="menu-item" id="stats-btn">Stats for nerds</button>
+        <a class="menu-item" id="admin-link" href="admin" hidden>Admin console</a>
         <button type="button" class="menu-item" id="sign-out" hidden>Sign out</button>
       </div>
     </details>
   </div>
 </header>
 
+<div id="notice" class="notice-bar" hidden></div>
 <main id="view" class="view"></main>
 
 <dialog id="dlg-connect" class="dlg wide">

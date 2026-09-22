@@ -25,6 +25,7 @@ class User(Base):
     created_at: Mapped[datetime]
     last_login_at: Mapped[datetime | None]
     is_active: Mapped[bool] = mapped_column(default=True)
+    role: Mapped[str] = mapped_column(String(20), default="user")
 
 
 class RegisteredEmail(Base):
@@ -53,6 +54,19 @@ class Identity(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     home_organization: Mapped[str] = mapped_column(String(200), default="")
     bound_at: Mapped[datetime]
+
+
+class PolicySetting(Base):
+    """An operational setting an admin changed, overriding the configured
+    default. Endpoints, secrets and paths are not settings: they stay in the
+    environment, because changing them needs a restart."""
+
+    __tablename__ = "policy"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[dict[str, Any]] = mapped_column(JSON)
+    updated_at: Mapped[datetime]
+    updated_by: Mapped[str] = mapped_column(String(200))
 
 
 class WebSession(Base):

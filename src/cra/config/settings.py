@@ -68,6 +68,8 @@ class Settings(BaseSettings):
 
     # auth
     auth_provider: Literal["dev", "oidc"] = "dev"
+    # addresses that are made admin when they sign in; never demotes anyone
+    auth_admins: CommaList = []
     auth_dev_user: str = ""
     auth_user_header: str = ""
     auth_admin_contact: str = ""
@@ -76,6 +78,11 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr = SecretStr("")
     oidc_redirect_uri: str = ""
     oidc_scopes: str = "openid email profile"
+
+    # what an unauthenticated visitor may do
+    anonymous_chat_enabled: bool = True
+    anonymous_chat_daily_limit: int = Field(default=20, ge=1)
+    user_chat_daily_limit: int = Field(default=0, ge=0)
 
     # outward MCP surface
     mcp_server_enabled: bool = True

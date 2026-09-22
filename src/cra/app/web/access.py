@@ -1,16 +1,39 @@
-"""Deny by default: only the landing page, static files, health, config and
-the login routes answer without an active user."""
+"""Who may reach which route.
 
-PUBLIC_PATHS = frozenset({"", "/", "/api/health", "/api/config"})
-PUBLIC_PREFIXES = ("/static/", "/auth/")
+The site is public: anyone may read the corpus, use the public tools and,
+within a daily budget, ask a question. Signing in raises the data tier and
+attaches history; the console needs an admin. Routes declare what they need
+with the decorators below, and a test enumerates every route so that adding
+one is a deliberate decision rather than an oversight.
+"""
+
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
+
+from cra.app.auth.principal import Principal, Role
+
+REQUIREMENT = "_cra_requires"
+
+View = TypeVar("View", bound=Callable[..., Awaitable[Any]])
 
 
-def relative_path(path: str, base_path: str) -> str:
-    if base_path and path.startswith(base_path):
-        return path[len(base_path) :]
-    return path
+def requires_user(view: View) -> View:
+    view._cra_requires = Role.USER  # type: ignore[attr-defined]
+    return view
 
 
-def is_public(path: str, base_path: str) -> bool:
-    rel = relative_path(path, base_path)
-    return rel in PUBLIC_PATHS or rel.startswith(PUBLIC_PREFIXES)
+def requires_admin(view: View) -> View:
+    view._cra_requires = Role.ADMIN  # type: ignore[attr-defined]
+    return view
+
+
+def required_role(view: Callable[..., Any] | None) -> Role:
+    return getattr(view, REQUIREMENT, Role.ANONYMOUS)
+
+
+def satisfies(principal: Principal, required: Role) -> bool:
+    if required is Role.ANONYMOUS:
+        return True
+    if required is Role.USER:
+        return principal.signed_in
+    return principal.is_admin

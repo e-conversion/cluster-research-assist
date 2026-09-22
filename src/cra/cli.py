@@ -243,6 +243,67 @@ def cmd_users_remove_email(args: argparse.Namespace) -> int:
     return asyncio.run(run())
 
 
+def cmd_users_set_role(args: argparse.Namespace, role: str) -> int:
+    engine, repo = _repo(load_settings(args))
+
+    async def run() -> int:
+        changed = await repo.set_user_role(args.user_id, role)
+        await engine.dispose()
+        if not changed:
+            sys.stderr.write("no such user\n")
+        return 0 if changed else 1
+
+    return asyncio.run(run())
+
+
+def cmd_policy_list(args: argparse.Namespace) -> int:
+    from cra.app.policy import Policy
+
+    settings = load_settings(args)
+    engine, repo = _repo(settings)
+
+    async def run() -> int:
+        policy = await Policy.load(settings, repo)
+        await engine.dispose()
+        for entry in policy.describe():
+            marker = "*" if entry["source"] == "database" else " "
+            _out(f"{marker} {entry['key']:28} {entry['value']}")
+        _out("\n* changed from the configured default")
+        return 0
+
+    return asyncio.run(run())
+
+
+def cmd_policy_set(args: argparse.Namespace) -> int:
+    from cra.app.policy import KEYS, Policy, PolicyError
+
+    settings = load_settings(args)
+    engine, repo = _repo(settings)
+
+    async def run() -> int:
+        if args.key not in KEYS:
+            sys.stderr.write(f"unknown setting {args.key!r}; try `cra policy list`\n")
+            return 1
+        policy = await Policy.load(settings, repo)
+        try:
+            if args.reset:
+                await repo.clear_policy(args.key)
+                policy.clear(args.key)
+            else:
+                value = policy.set(args.key, args.value)
+                await repo.set_policy(args.key, value, "cli")
+        except (PolicyError, TypeError, ValueError) as exc:
+            sys.stderr.write(f"{exc}\n")
+            return 1
+        finally:
+            pass
+        _out(f"{args.key} = {policy[args.key]} ({policy.source(args.key)})")
+        await engine.dispose()
+        return 0
+
+    return asyncio.run(run())
+
+
 def cmd_users_set_active(args: argparse.Namespace, active: bool) -> int:
     engine, repo = _repo(load_settings(args))
 
@@ -329,6 +390,28 @@ def build_parser() -> argparse.ArgumentParser:
         p = users_sub.add_parser(name, help=f"{name} a user")
         p.add_argument("user_id")
         p.set_defaults(func=lambda a, active=active: cmd_users_set_active(a, active))
+    for name, role in (("promote", "admin"), ("demote", "user")):
+        p = users_sub.add_parser(
+            name,
+            help=f"make a user {'an admin' if role == 'admin' else 'an ordinary user'}",
+        )
+        p.add_argument("user_id")
+        p.set_defaults(func=lambda a, role=role: cmd_users_set_role(a, role))
+
+    policy = sub.add_parser("policy", help="operational settings admins may change")
+    policy_sub = policy.add_subparsers(
+        dest="policy_command", metavar="<command>", required=True
+    )
+    policy_sub.add_parser(
+        "list", help="show every setting and where its value comes from"
+    ).set_defaults(func=cmd_policy_list)
+    set_ = policy_sub.add_parser(
+        "set", help="change a setting, or reset it to the configured default"
+    )
+    set_.add_argument("key")
+    set_.add_argument("value", nargs="?", default=None)
+    set_.add_argument("--reset", action="store_true", help="drop the override")
+    set_.set_defaults(func=cmd_policy_set)
     return parser
 
 

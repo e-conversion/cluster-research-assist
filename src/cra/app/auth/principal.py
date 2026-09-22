@@ -1,16 +1,43 @@
-"""Who is calling. Providers turn a login into a ``LoginOutcome``; the web
-layer turns a stored user into a ``Principal`` per request."""
+"""Who is calling, and what that entitles them to.
+
+Anyone may use the site: an anonymous visitor is a principal too, with the
+public tier and no history. Signing in raises the tier and attaches the
+conversation history; an admin additionally reaches the console.
+"""
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from typing import Any, Protocol
+
+from cra.core.tools.tiers import Tier
+
+
+class Role(StrEnum):
+    ANONYMOUS = "anonymous"
+    USER = "user"
+    ADMIN = "admin"
 
 
 @dataclass(frozen=True)
 class Principal:
-    user_id: str
-    display: str
-    active: bool
+    user_id: str | None = None
+    display: str = ""
+    role: Role = Role.ANONYMOUS
+
+    @property
+    def tier(self) -> Tier:
+        return Tier.PUBLIC if self.role is Role.ANONYMOUS else Tier.INTERNAL
+
+    @property
+    def signed_in(self) -> bool:
+        return self.role is not Role.ANONYMOUS
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role is Role.ADMIN
+
+
+ANONYMOUS = Principal()
 
 
 class LoginDenied(Enum):
@@ -26,6 +53,8 @@ class LoginOutcome:
     denied: LoginDenied | None = None
     email: str = ""
     organization: str = ""
+    # the address this login came in on is listed in CRA_AUTH_ADMINS
+    grants_admin: bool = False
 
 
 @dataclass

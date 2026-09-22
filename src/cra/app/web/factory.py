@@ -1,24 +1,27 @@
 """Quart application factory. Everything long-lived (engine, HTTP client,
-auth provider) hangs off ``app.extensions["cra"]`` and is created once."""
+corpus, auth provider, policy) hangs off ``app.extensions["cra"]`` and is
+created once."""
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 
 import httpx
-from quart import Quart, Response, g, jsonify, request, send_from_directory
+from quart import Quart, Response, g, jsonify, redirect, request, send_from_directory
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cra.app.auth.dev import DevProvider
 from cra.app.auth.oidc import OidcProvider
-from cra.app.auth.principal import AuthProvider, Principal
+from cra.app.auth.principal import ANONYMOUS, AuthProvider, Principal, Role
 from cra.app.history import migrate
 from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
-from cra.app.web import route_auth, route_health, route_session
-from cra.app.web.access import is_public
+from cra.app.policy import Policy
+from cra.app.ratelimit import RateLimiter
+from cra.app.web import route_admin, route_auth, route_health, route_session
+from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.config.settings import Settings
 from cra.core.corpus.corpus import Corpus
@@ -37,6 +40,8 @@ class AppContext:
     sessions: SessionStore
     provider: AuthProvider
     http: httpx.AsyncClient
+    policy: Policy
+    limiter: RateLimiter = field(default_factory=RateLimiter)
     corpus: Corpus | None = None
 
     @property
@@ -65,17 +70,23 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         sessions=SessionStore(repo, timedelta(hours=settings.session_max_age_hours)),
         provider=make_provider(settings, repo, http),
         http=http,
+        policy=Policy(settings),
     )
     app.extensions["cra"] = ctx
 
-    for blueprint in (route_health.bp, route_session.bp, route_auth.bp):
+    for blueprint in (route_health.bp, route_session.bp, route_auth.bp, route_admin.bp):
         app.register_blueprint(blueprint, url_prefix=base or None)
 
     @app.get(f"{base}/")
     async def index() -> Response:
-        response = await send_from_directory(STATIC_DIR, "index.html")
-        response.headers["Cache-Control"] = "no-cache"
-        return response
+        return await _page("index.html")
+
+    @app.get(f"{base}/admin")
+    async def admin_console() -> Response:
+        return await _page("admin.html")
+
+    # the page itself is a shell; every call it makes is checked on its own
+    admin_console._cra_requires = Role.ADMIN  # type: ignore[attr-defined]
 
     @app.before_serving
     async def start() -> None:
@@ -85,8 +96,9 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
                 ctx.settings.corpus_path,
                 required_schema=ctx.settings.corpus_require_schema,
             )
-            await ctx.provider.start()
             await _check_schema(ctx)
+            ctx.policy = await Policy.load(ctx.settings, ctx.repo)
+            await ctx.provider.start()
         except Exception:
             # after_serving does not run when startup fails: release the pool here
             await _close(ctx)
@@ -100,15 +112,37 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     async def guard() -> Response | None:
         g.session = await ctx.sessions.load(request.cookies.get(COOKIE_NAME))
         g.principal = await _principal(ctx)
-        if is_public(request.path, base):
+        required = required_role(app.view_functions.get(request.endpoint or ""))
+        if satisfies(g.principal, required):
             return None
-        if g.principal is None or not g.principal.active:
-            response = jsonify(error="login_required", login_url=f"{base}/auth/login")
-            response.status_code = 401
-            return response
-        return None
+        return _refuse(ctx, required)
 
     return app
+
+
+async def _page(name: str) -> Response:
+    response = await send_from_directory(STATIC_DIR, name)
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
+def _refuse(ctx: AppContext, required: Role) -> Response:
+    login_url = f"{ctx.settings.base_path}/auth/login"
+    if required is Role.ADMIN and g.principal.signed_in:
+        response = jsonify(error="admin_required")
+        response.status_code = 403
+        return response
+    # a browser asking for a page is sent to sign in; an API caller gets JSON
+    if not g.principal.signed_in and _wants_html():
+        return redirect(login_url)
+    response = jsonify(error="login_required", login_url=login_url)
+    response.status_code = 401
+    return response
+
+
+def _wants_html() -> bool:
+    accept = request.headers.get("Accept", "")
+    return "text/html" in accept and "application/json" not in accept
 
 
 async def _close(ctx: AppContext) -> None:
@@ -116,13 +150,13 @@ async def _close(ctx: AppContext) -> None:
     await ctx.engine.dispose()
 
 
-async def _principal(ctx: AppContext) -> Principal | None:
+async def _principal(ctx: AppContext) -> Principal:
     if g.session is None or g.session.user_id is None:
-        return None
+        return ANONYMOUS
     user = await ctx.repo.get_user(g.session.user_id)
-    if user is None:
-        return None
-    return Principal(user_id=user.id, display=user.display_name, active=user.is_active)
+    if user is None or not user.is_active:
+        return ANONYMOUS
+    return Principal(user_id=user.id, display=user.display_name, role=Role(user.role))
 
 
 async def _check_schema(ctx: AppContext) -> None:

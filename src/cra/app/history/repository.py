@@ -7,7 +7,13 @@ from typing import Any
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from cra.app.history.tables import Identity, RegisteredEmail, User, WebSession
+from cra.app.history.tables import (
+    Identity,
+    PolicySetting,
+    RegisteredEmail,
+    User,
+    WebSession,
+)
 
 
 def utcnow() -> datetime:
@@ -39,6 +45,26 @@ class Repository:
         async with self._sessions() as s:
             rows = await s.scalars(select(User).order_by(User.created_at))
             return list(rows)
+
+    async def set_user_role(self, user_id: str, role: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(User).where(User.id == user_id).values(role=role)
+            )
+            return result.rowcount == 1
+
+    async def delete_user(self, user_id: str) -> bool:
+        """Removes the account and, by cascade, its identities and sessions.
+        The address stays on the allow-list, unlinked, so a fresh sign-in
+        creates a new account."""
+        async with self._sessions() as s, s.begin():
+            await s.execute(
+                update(RegisteredEmail)
+                .where(RegisteredEmail.user_id == user_id)
+                .values(user_id=None)
+            )
+            result = await s.execute(delete(User).where(User.id == user_id))
+            return result.rowcount == 1
 
     async def set_user_active(self, user_id: str, active: bool) -> bool:
         async with self._sessions() as s, s.begin():
@@ -123,6 +149,37 @@ class Repository:
                 .order_by(Identity.id)
             )
             return list(rows)
+
+    # policy overrides
+
+    async def get_policy(self) -> dict[str, Any]:
+        async with self._sessions() as s:
+            rows = await s.scalars(select(PolicySetting))
+            return {row.key: row.value["value"] for row in rows}
+
+    async def policy_rows(self) -> list[PolicySetting]:
+        async with self._sessions() as s:
+            rows = await s.scalars(select(PolicySetting).order_by(PolicySetting.key))
+            return list(rows)
+
+    async def set_policy(self, key: str, value: Any, updated_by: str) -> None:
+        async with self._sessions() as s, s.begin():
+            await s.merge(
+                PolicySetting(
+                    key=key,
+                    # JSON columns need an object at the top level
+                    value={"value": value},
+                    updated_at=utcnow(),
+                    updated_by=updated_by,
+                )
+            )
+
+    async def clear_policy(self, key: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                delete(PolicySetting).where(PolicySetting.key == key)
+            )
+            return result.rowcount == 1
 
     # web sessions
 

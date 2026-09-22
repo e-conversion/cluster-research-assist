@@ -40,15 +40,47 @@ cra corpus build          # projection and clusterings for the corpus map
 cra corpus manifest       # refresh checksums and counts
 ```
 
+## Who may do what
+
+The site is public. Anyone may read the corpus, use the public tools and, within
+a daily budget, ask a question; the outward MCP endpoint serves the same public
+tier. Signing in adds the internal tier, which is the full texts and the
+proposal, plus a saved history. Admins additionally reach the console at
+`/admin`.
+
+| | anonymous | signed in | admin |
+|---|---|---|---|
+| paper metadata, abstracts, PI profiles, the graph, the map | yes | yes | yes |
+| chat | within a daily cap | yes | yes |
+| full texts and the proposal | no | yes | yes |
+| saved history | no | yes | yes |
+| accounts, allow-list, settings | no | no | yes |
+
 Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
 `CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header
 `CRA_AUTH_USER_HEADER`). With `CRA_AUTH_PROVIDER=oidc` users log in at the
-configured OpenID Connect issuer, and only pre-registered addresses may sign in:
+configured OpenID Connect issuer, and only pre-registered addresses may sign in.
+`CRA_AUTH_ADMINS` lists the addresses that become admin on sign-in, so a fresh
+deployment has an administrator without shell access.
 
 ```bash
 cra users add-email someone@university.de
 cra users list
+cra users promote <user-id>
 cra users deactivate <user-id>
+```
+
+## Configuration and settings
+
+Endpoints, keys and paths are configuration: they live in `.env`, and changing
+one needs a restart. How the service behaves from day to day is policy, and
+admins change it in the console or on the command line without a restart:
+
+```bash
+cra policy list                          # every setting and where its value comes from
+cra policy set anonymous_chat_daily_limit 5
+cra policy set notice "Pilot running until Friday"
+cra policy set notice --reset            # back to the configured default
 ```
 
 ## Develop

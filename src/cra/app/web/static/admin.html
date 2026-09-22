@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin console</title>
+<link rel="icon" type="image/svg+xml" href="static/logo.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="static/css/app.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="./" title="Back to the assistant"><span class="brand-name">Admin console</span></a>
+  <div class="top-actions">
+    <span class="user" id="user-label"></span>
+    <a class="btn ghost" href="./">Back to the assistant</a>
+  </div>
+</header>
+
+<main class="admin">
+  <h1>Administration</h1>
+  <p class="lede" id="intro">Accounts, the sign-in allow-list and the settings that may change while the service runs.</p>
+
+  <section>
+    <h2>Accounts</h2>
+    <table><thead><tr><th>Name</th><th>Role</th><th>Signed in from</th><th>Last sign-in</th><th></th></tr></thead>
+    <tbody id="users"><tr><td colspan="5" class="desc">Loading…</td></tr></tbody></table>
+  </section>
+
+  <section>
+    <h2>Sign-in allow-list</h2>
+    <p class="desc">Only these addresses can sign in. The first sign-in binds the address to an account permanently.</p>
+    <table><thead><tr><th>Address</th><th>Account</th><th>Added by</th><th></th></tr></thead>
+    <tbody id="emails"></tbody></table>
+    <form class="row-form" id="email-form">
+      <input type="email" id="email-input" placeholder="someone@university.de" required>
+      <button class="btn primary" type="submit">Add</button>
+    </form>
+  </section>
+
+  <section>
+    <h2>Settings</h2>
+    <p class="desc">These take effect immediately. Endpoints, keys and paths are configuration, not settings: they live in the environment and need a restart.</p>
+    <table><thead><tr><th>Setting</th><th>Value</th><th>Source</th><th></th></tr></thead>
+    <tbody id="policy"></tbody></table>
+  </section>
+
+  <section>
+    <h2>Corpus</h2>
+    <div id="corpus" class="desc">Loading…</div>
+  </section>
+</main>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<script type="module" src="static/js/admin.js"></script>
+</body>
+</html>

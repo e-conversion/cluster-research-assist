@@ -49,6 +49,7 @@ class OidcProvider:
         self._client_secret = settings.oidc_client_secret.get_secret_value()
         self._redirect_uri = settings.oidc_redirect_uri
         self._scopes = settings.oidc_scopes
+        self._admins = {a.strip().lower() for a in settings.auth_admins}
         self._repo = repo
         self._http = http
         self._discovery: dict[str, Any] = {}
@@ -112,7 +113,9 @@ class OidcProvider:
         except (httpx.HTTPError, JoseError, KeyError, ValueError):
             log.exception("oidc token exchange or validation failed")
             return LoginOutcome(denied=LoginDenied.FAILED)
-        return await resolve_login(self._repo, claims)
+        outcome = await resolve_login(self._repo, claims)
+        outcome.grants_admin = bool(outcome.email) and outcome.email in self._admins
+        return outcome
 
     def logout_url(self, post_logout_uri: str) -> str | None:
         endpoint = self._discovery.get("end_session_endpoint")
