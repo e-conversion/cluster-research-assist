@@ -48,6 +48,8 @@
   <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></g></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-research" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></g></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></g></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V5h4v2M6 7l1 13h10l1-13"/></g></symbol>
   <symbol id="i-rerun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></g></symbol>
   <symbol id="i-modify" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="M14.5 6.5l3 3"/></g></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></g></symbol>
@@ -61,6 +63,7 @@
   </nav>
   <div class="top-actions">
     <span class="user" id="user-label" hidden></span>
+    <button class="btn ghost icon" id="history-btn" title="Past conversations" aria-label="Past conversations"><svg class="ico"><use href="#i-history"/></svg></button>
     <button class="btn ghost" id="new-chat" title="Start a new conversation">New chat</button>
     <details class="menu" id="menu">
       <summary class="btn ghost icon" title="Menu" aria-label="Menu"><svg class="ico"><use href="#i-more"/></svg></summary>
@@ -81,6 +84,11 @@
 </header>
 
 <div id="notice" class="notice-bar" hidden></div>
+<aside id="history" class="history" hidden>
+  <div class="history-head"><b>Conversations</b>
+    <button class="btn ghost icon" id="history-close" aria-label="Close">✕</button></div>
+  <div id="history-list"></div>
+</aside>
 <main id="view" class="view"></main>
 
 <dialog id="dlg-connect" class="dlg wide">

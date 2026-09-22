@@ -54,6 +54,11 @@ USER_ROUTES = {
     "/api/chat",
     "/api/chat/stop",
     "/api/chat/reset",
+    "/api/conversations",
+    "/api/conversations/<conversation_id>",
+    "/api/conversations/<conversation_id>/open",
+    "/api/publication-map",
+    "/api/collaboration-graph",
 }
 ADMIN_ROUTES = {
     "/admin",

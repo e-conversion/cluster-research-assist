@@ -25,10 +25,12 @@ from cra.app.web import (
     route_admin,
     route_auth,
     route_chat,
+    route_conversation,
     route_feedback,
     route_health,
     route_preferences,
     route_session,
+    route_views,
 )
 from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
@@ -112,6 +114,8 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_feedback.bp,
         route_preferences.bp,
         route_chat.bp,
+        route_conversation.bp,
+        route_views.bp,
         route_admin.bp,
     ):
         app.register_blueprint(blueprint, url_prefix=base or None)

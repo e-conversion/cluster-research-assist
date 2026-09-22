@@ -120,6 +120,17 @@ button { font: inherit; }
 .chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .messages { flex: 1; width: 100%; max-width: var(--col); margin: 0 auto; padding: 26px 18px 18px; }
 .signin-theme { margin-top: 26px; display: flex; justify-content: center; }
+.history { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 40;
+  background: var(--panel); border-left: 1px solid var(--hair); padding: 14px;
+  overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,.18); }
+.history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.history-item { display: flex; align-items: center; gap: 4px; border-radius: 9px; padding: 2px; }
+.history-item:hover { background: var(--panel-2); }
+.history-item.on { background: var(--panel-2); }
+.history-item > button.open { flex: 1; text-align: left; background: none; border: none; color: var(--ink);
+  font: inherit; font-size: 13.5px; padding: 8px; cursor: pointer; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.history-item .when { font-size: 11.5px; color: var(--muted); padding-right: 4px; }
 .notice-bar { padding: 9px 18px; background: var(--panel-2); border-bottom: 1px solid var(--hair);
   color: var(--ink-2); font-size: 13.5px; text-align: center; }
 

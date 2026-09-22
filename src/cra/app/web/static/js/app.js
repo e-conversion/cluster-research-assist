@@ -3,6 +3,7 @@ import { ApiError, getJSON, postJSON } from "./api.js";
 import { createRouter } from "./router.js";
 import { chatView } from "./chat.js";
 import { initDialogs, toast } from "./settings.js";
+import { initHistory } from "./history.js";
 import { themeControl } from "./theme.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration-graph.js";
@@ -87,6 +88,15 @@ async function boot() {
   });
 
   initDialogs(store);
+  // reopening a conversation replaces what the chat view is rendering
+  initHistory(store, {
+    toast,
+    onOpen: async () => {
+      await refreshSession();
+      location.hash = "#/chat";
+      store.update({ resetTick: (store.resetTick || 0) + 1 });
+    },
+  });
   document.getElementById("new-chat").addEventListener("click", async () => {
     if (store.streaming && store.stop) { store.stop(); await new Promise((r) => setTimeout(r, 150)); }
     try {
