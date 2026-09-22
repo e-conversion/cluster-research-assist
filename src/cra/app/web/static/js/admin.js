@@ -1,7 +1,6 @@
 // Admin console. Every call is authorised on the server; this page only
 // renders what it is allowed to see.
 import { del, getJSON, postJSON } from "./api.js";
-import { themeControl } from "./theme.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -278,7 +277,6 @@ function initTabs() {
 }
 
 async function boot() {
-  $("theme-slot").append(themeControl());
   initTabs();
   try {
     const session = await getJSON("api/session");
