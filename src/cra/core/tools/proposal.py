@@ -12,6 +12,9 @@ from cra.core.tools.tiers import Tier
 
 PARAGRAPHS = 5
 OVERVIEW_PARAGRAPHS = 5
+# a proposal has paragraphs that are really tables; one of those can be most of
+# an answer's context on its own
+PASSAGE_CHARS = 1_500
 
 
 @tool(tier=Tier.INTERNAL)
@@ -34,13 +37,18 @@ def get_proposal_fulltext(
         return {
             "char_count": len(proposal.text),
             "paragraph_count": len(proposal.paragraphs),
-            "opening": list(proposal.paragraphs[:OVERVIEW_PARAGRAPHS]),
+            "opening": [
+                p[:PASSAGE_CHARS] for p in proposal.paragraphs[:OVERVIEW_PARAGRAPHS]
+            ],
         }
     scored = [(overlap(p, tokens), p) for p in proposal.paragraphs]
     found = sorted((s for s in scored if s[0]), key=lambda s: -s[0])[:PARAGRAPHS]
     if not found:
         raise ToolError(f"{query!r} does not appear in the proposal.")
-    return {"count": len(found), "passages": [p for _, p in found]}
+    return {
+        "count": len(found),
+        "passages": [p[:PASSAGE_CHARS] for _, p in found],
+    }
 
 
 def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:

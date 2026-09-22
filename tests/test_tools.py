@@ -277,3 +277,19 @@ async def test_nomad_being_unreachable_is_reported(registry, ctx, settings):
         "not reachable"
         in (await call(registry, ctx, "search_nomad", text="water"))["error"]
     )
+
+
+async def test_a_proposal_passage_cannot_fill_the_context(registry, ctx, tmp_path):
+    """A real proposal has paragraphs that are tables; one of those would
+    otherwise be most of an answer's context."""
+    from cra.core.tools.proposal import PASSAGE_CHARS
+
+    library = ctx.indexes.library
+    long_paragraph = "work package 3 " + ("filler " * 5_000)
+    (library.path / "proposal.md").write_text(f"{long_paragraph}\n\nshort one\n")
+    reloaded = Library.load(library.path, verify=False)
+    fresh = ToolContext(
+        indexes=Indexes.build(reloaded), settings=ctx.settings, http=ctx.http
+    )
+    found = await call(registry, fresh, "get_proposal_fulltext", query="work package 3")
+    assert max(len(p) for p in found["passages"]) == PASSAGE_CHARS
