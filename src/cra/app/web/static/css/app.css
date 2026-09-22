@@ -185,13 +185,18 @@ button { font: inherit; }
 .msg.assistant .bubble { max-width: 100%; }
 .researched { font-size: 14px; color: var(--muted); margin: 0 0 8px; }
 .researched .ico { width: 18px; height: 18px; color: var(--faint); }
-.researched summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.researched summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center;
+  gap: 8px; padding: 3px 6px; margin-left: -6px; border-radius: 8px; }
+.researched summary:hover { background: var(--panel-2); }
 .researched summary::-webkit-details-marker { display: none; }
 .researched ul { margin: 8px 0 0 26px; padding: 0 0 0 14px; }
 .researched li { font-family: var(--mono); font-size: 12px; margin: 2px 0; }
 .researched.live .ico { animation: spin 1.2s linear infinite; }
 
-.researched .chev { width: 10px; text-align: center; color: var(--faint); font-size: 11px; transition: transform .15s; }
+.researched .chev { width: 18px; height: 18px; display: inline-flex; align-items: center;
+  justify-content: center; border-radius: 6px; color: var(--muted); font-size: 15px;
+  line-height: 1; transition: transform .15s, background .15s, color .15s; }
+.researched summary:hover .chev { background: var(--panel-2); color: var(--ink); }
 .researched[open] .chev { transform: rotate(180deg); }
 .researched.empty summary { cursor: default; }
 .researched.empty .chev { visibility: hidden; }

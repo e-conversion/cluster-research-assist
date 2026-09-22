@@ -120,3 +120,58 @@ async def test_another_persons_conversation_is_not_reachable(app, client):
     )
     assert renamed.status_code == 404
     assert (await ctx.repo.get_conversation(theirs.id)).title == "Private"
+
+
+async def test_the_first_turn_names_the_conversation(app, client, monkeypatch):
+    """The first question truncated reads badly in a list."""
+    from cra.app.web import route_chat
+    from cra.assistant.chat import title as title_
+
+    async def suggest(settings, model, question, answer):
+        return "Battery ageing models"
+
+    monkeypatch.setattr(route_chat.title_, "suggest", suggest)
+    ctx = app.extensions["cra"]
+    made = await ctx.repo.create_conversation((await ctx.repo.list_users())[0].id, "q?")
+    turn = route_chat._Turn(
+        ctx=ctx,
+        conversation_id=made.id,
+        chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
+        history=[],
+        question="I have an AI model that predicts battery degradation. Who can test it?",
+        tier=None,
+        cancel=None,
+        name_it=True,
+    )
+    await turn.store({"answer": "Talk to Helge Stein.", "elapsed": 1.0})
+    assert (await ctx.repo.get_conversation(made.id)).title == "Battery ageing models"
+    assert title_.MAX_CHARS
+
+
+async def test_a_later_turn_leaves_the_name_alone(app, client, monkeypatch):
+    from cra.app.web import route_chat
+
+    asked = []
+
+    async def suggest(settings, model, question, answer):
+        asked.append(question)
+        return "new"
+
+    monkeypatch.setattr(route_chat.title_, "suggest", suggest)
+    ctx = app.extensions["cra"]
+    made = await ctx.repo.create_conversation(
+        (await ctx.repo.list_users())[0].id, "Battery ageing"
+    )
+    turn = route_chat._Turn(
+        ctx=ctx,
+        conversation_id=made.id,
+        chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
+        history=[{"role": "user", "content": "earlier"}],
+        question="and what about temperature?",
+        tier=None,
+        cancel=None,
+        name_it=False,
+    )
+    await turn.store({"answer": "It matters.", "elapsed": 1.0})
+    assert asked == []
+    assert (await ctx.repo.get_conversation(made.id)).title == "Battery ageing"

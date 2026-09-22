@@ -10,6 +10,7 @@ from typing import Any
 from quart import Blueprint, Response, current_app, g, request
 
 from cra.app.web.route_preferences import selection
+from cra.assistant.chat import title as title_
 from cra.assistant.chat.orchestrator import run_turn
 from cra.assistant.llm import params as params_
 from cra.assistant.llm.client import make_client
@@ -75,8 +76,9 @@ async def chat() -> Any:
     conversation_id = await _conversation(ctx, g.session, g.principal)
     history = await _history(ctx, conversation_id)
     await ctx.repo.add_message(conversation_id, "user", question)
-    if not history:
-        await ctx.repo.rename_conversation(conversation_id, question[:120])
+    first_turn = not history
+    if first_turn:
+        await ctx.repo.rename_conversation(conversation_id, title_.fallback(question))
 
     slot = ctx.turns.of(g.session.id)
     epoch, cancel = await slot.start()
@@ -90,6 +92,7 @@ async def chat() -> Any:
         question=question,
         tier=g.principal.tier,
         cancel=cancel,
+        name_it=first_turn,
     )
 
     async def stream():
@@ -147,6 +150,7 @@ class _Turn:
     question: str
     tier: Any
     cancel: asyncio.Event
+    name_it: bool = False
 
     async def run(self) -> AsyncIterator[dict[str, Any]]:
         ctx = self.ctx
@@ -173,6 +177,7 @@ class _Turn:
     async def store(self, final: dict[str, Any] | None) -> None:
         if final is None:
             return
+        await self.name(final.get("answer", ""))
         await self.ctx.repo.add_message(
             self.conversation_id,
             "assistant",
@@ -185,6 +190,16 @@ class _Turn:
                 "error": final.get("error"),
             },
         )
+
+    async def name(self, answer: str) -> None:
+        """Give the conversation a readable name once it has an answer."""
+        if not self.name_it or not answer.strip():
+            return
+        suggested = await title_.suggest(
+            self.ctx.settings, self.chosen["model"], self.question, answer
+        )
+        if suggested:
+            await self.ctx.repo.rename_conversation(self.conversation_id, suggested)
 
 
 @bp.post("/api/chat/stop")

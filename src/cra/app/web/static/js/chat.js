@@ -23,6 +23,19 @@ function fmtSeconds(s) {
   return s == null ? "" : `researched for ${Number(s).toFixed(1)} s`;
 }
 
+/** "search_papers" reads as machinery; "searching papers" reads as work. */
+function toolPhrase(name) {
+  const words = String(name).replace(/_/g, " ");
+  return words
+    .replace(/^search /, "searching ")
+    .replace(/^semantic searching /, "searching ")
+    .replace(/^find /, "finding ")
+    .replace(/^get /, "reading ")
+    .replace(/^list /, "listing ")
+    .replace(/^collaboration /, "collaboration ")
+    .replace(/ fulltext$/, " full text");
+}
+
 function svgUse(id, cls = "ico") {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("class", cls);
@@ -69,6 +82,7 @@ class AssistantMessage {
     list.append(this.root);
     this.renderer = new StreamRenderer(this.md);
     this.toolSteps = new Map();
+    this.running = new Map();
     this.think = null;
     this.thinkText = "";
     this.text = "";
@@ -132,6 +146,8 @@ class AssistantMessage {
     this.closeThink();
     this.openHead();
     this.toolCount += 1;
+    this.running.set(data.id, data.name);
+    this.live();
     const d = el("details", "step running");
     const s = el("summary");
     const ico = el("span", "st-ico", "◌");
@@ -148,6 +164,9 @@ class AssistantMessage {
   }
 
   toolEnd(data) {
+    this.running.delete(data.id);
+    this.done_tools = (this.done_tools || 0) + 1;
+    this.live();
     const st = this.toolSteps.get(data.id);
     if (!st) return;
     st.root.classList.remove("running");
@@ -157,11 +176,32 @@ class AssistantMessage {
     st.body.append(el("div", "small muted", "result (preview)"), el("pre", null, data.preview || ""));
   }
 
+  /** The one line someone sees while the detail is collapsed. */
+  live() {
+    if (!this.head.classList.contains("live")) return;
+    const busy = [...new Set(this.running.values())].map(toolPhrase);
+    const done = this.done_tools || 0;
+    let text = "Researching…";
+    if (busy.length) {
+      text = busy.slice(0, 2).join(", ") + (busy.length > 2 ? ", …" : "") + "…";
+      text = text.charAt(0).toUpperCase() + text.slice(1);
+    } else if (done) {
+      text = `${done} tool call${done === 1 ? "" : "s"} · thinking…`;
+    }
+    this.headSummary.querySelector(".researched-text").textContent = text;
+  }
+
   summary(toolCalls, elapsed) {
     this.head.classList.remove("live");
     const n = toolCalls.length;
-    const parts = [elapsed != null ? `Researched ${Number(elapsed).toFixed(1)} s` : "Answered"];
-    if (n) parts.push(`${n} tool call${n === 1 ? "" : "s"}`);
+    const parts = [];
+    if (n) {
+      const names = [...new Set(toolCalls.map((c) => toolPhrase(c.replace(/^`/, "").split("(")[0])))];
+      parts.push(`${n} tool call${n === 1 ? "" : "s"}`, names.slice(0, 3).join(", ") + (names.length > 3 ? ", …" : ""));
+    } else {
+      parts.push("Answered without tools");
+    }
+    if (elapsed != null) parts.push(`${Number(elapsed).toFixed(1)} s`);
     this.headSummary.querySelector(".researched-text").textContent = parts.join(" · ");
     if (n) {
       this.head.classList.remove("empty");
