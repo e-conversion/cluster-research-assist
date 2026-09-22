@@ -1,6 +1,7 @@
 // Admin console. Every call is authorised on the server; this page only
 // renders what it is allowed to see.
 import { del, getJSON, postJSON } from "./api.js";
+import { themeControl } from "./theme.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -220,6 +221,7 @@ async function uploadLibrary(file) {
 }
 
 async function boot() {
+  $("theme-slot").append(themeControl());
   try {
     const session = await getJSON("api/session");
     $("user-label").textContent = session.user || "";

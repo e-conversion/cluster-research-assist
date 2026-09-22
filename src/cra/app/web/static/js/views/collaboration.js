@@ -1,5 +1,5 @@
 // PI co-authorship network — the self-contained d3 page, framed.
-import { propagateTheme } from "../settings.js";
+import { propagateTheme } from "../theme.js";
 
 export function collaborationView() {
   return {

@@ -2,6 +2,7 @@
 import { getJSON, postJSON, del } from "./api.js";
 import { refreshSession } from "./app.js";
 import { escapeHtml } from "./markdown.js";
+import { applyTheme, currentTheme, propagateTheme, syncControls } from "./theme.js";
 
 let store = null;
 
@@ -123,34 +124,9 @@ function renderStats(s) {
     `;
 }
 
-// ---------- theme ----------
-const THEME_KEY = "econverse-theme";
-
-export function applyTheme(mode) {
-  const root = document.documentElement;
-  if (mode === "light" || mode === "dark") root.dataset.theme = mode; else delete root.dataset.theme;
-  for (const b of document.querySelectorAll("#theme-seg button")) b.classList.toggle("on", b.dataset.theme === mode);
-  for (const f of document.querySelectorAll("iframe")) propagateTheme(f);
-  try { localStorage.setItem(THEME_KEY, mode); } catch { /* private mode */ }
-}
-
-export function currentTheme() {
-  try { return localStorage.getItem(THEME_KEY) || "system"; } catch { return "system"; }
-}
-
-/** Same-origin iframes (the maps) carry their own stylesheet; hand them the choice. */
-export function propagateTheme(iframe) {
-  try {
-    const root = iframe.contentDocument?.documentElement;
-    if (!root) return;
-    const mode = currentTheme();
-    if (mode === "light" || mode === "dark") root.dataset.theme = mode; else delete root.dataset.theme;
-  } catch { /* cross-origin (registration pages) */ }
-}
-
 export function initDialogs(s) {
   store = s;
-  applyTheme(currentTheme());
+  syncControls(currentTheme());
   document.getElementById("theme-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-theme]");
     if (b) applyTheme(b.dataset.theme);

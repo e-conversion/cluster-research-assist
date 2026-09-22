@@ -3,6 +3,7 @@ import { ApiError, getJSON, postJSON } from "./api.js";
 import { createRouter } from "./router.js";
 import { chatView } from "./chat.js";
 import { initDialogs, toast } from "./settings.js";
+import { themeControl } from "./theme.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration.js";
 
@@ -44,6 +45,10 @@ function renderSignIn(view, config) {
     <p class="lede">The assistant answers questions about the research in ${config.cluster.name}.
     Sign in with your institutional account to start.</p>
     <p><a class="btn primary" href="${config.auth.login_url}">Sign in</a></p>`;
+  const appearance = document.createElement("p");
+  appearance.className = "signin-theme";
+  appearance.append(themeControl());
+  page.append(appearance);
   view.replaceChildren(page);
   for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
