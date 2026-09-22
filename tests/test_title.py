@@ -77,3 +77,21 @@ def test_the_fallback_is_the_question_itself():
         == "Which papers cover perovskites?"
     )
     assert len(title_.fallback("x" * 500)) == title_.FALLBACK_CHARS
+
+
+async def test_the_least_thinking_is_asked_for_where_it_can_be(tmp_path, monkeypatch):
+    """Measured on a reasoning model: 14 seconds without it, under one with."""
+    client = Answering("A title")
+    monkeypatch.setattr(title_, "make_client", lambda _s: client)
+    openrouter = make_settings(
+        tmp_path,
+        llm_api_key="k",
+        llm_provider="openrouter",
+        llm_base_url="https://openrouter.ai/api/v1",
+    )
+    await title_.suggest(openrouter, "m", "q", "a")
+    assert client.calls[0]["extra_body"] == {"reasoning": {"effort": "minimal"}}
+
+    plain = make_settings(tmp_path, llm_api_key="k", llm_provider="gwdg")
+    await title_.suggest(plain, "m", "q", "a")
+    assert client.calls[1]["extra_body"] is None, "another gateway may reject the field"

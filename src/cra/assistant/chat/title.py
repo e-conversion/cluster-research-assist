@@ -9,6 +9,7 @@ should lose an answer over a title.
 import logging
 
 from cra.assistant.llm.client import make_client
+from cra.assistant.llm.params import is_openrouter
 from cra.config.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -17,7 +18,11 @@ INSTRUCTION = (
     "Name this exchange in at most six words, as a title in the language of the question. "
     "Name the subject, not the act of asking. No quotation marks, no final full stop."
 )
-MAX_TOKENS = 32
+# A reasoning model thinks before it answers, and a budget that only covers the
+# thinking returns nothing at all: measured, 32 tokens gave an empty answer and
+# 512 a title. Asking for the least thinking took it from 14 seconds to under
+# one, where the gateway allows that to be asked.
+MAX_TOKENS = 512
 TIMEOUT_S = 20.0
 MAX_CHARS = 80
 FALLBACK_CHARS = 120
@@ -39,11 +44,15 @@ async def suggest(settings: Settings, model: str, question: str, answer: str) ->
     if not settings.llm_api_key.get_secret_value():
         return ""
     client = make_client(settings)
+    extra_body = (
+        {"reasoning": {"effort": "minimal"}} if is_openrouter(settings) else None
+    )
     try:
         response = await client.chat.completions.create(
             model=model,
             max_tokens=MAX_TOKENS,
             timeout=TIMEOUT_S,
+            extra_body=extra_body,
             messages=[
                 {"role": "system", "content": INSTRUCTION},
                 {
