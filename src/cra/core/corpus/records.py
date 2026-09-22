@@ -70,6 +70,25 @@ class Proposal:
 
 
 @dataclass(frozen=True)
+class CorpusMap:
+    """Precomputed 2-D projection and every clustering the UI offers."""
+
+    dois: tuple[str, ...]
+    x: tuple[float, ...]
+    y: tuple[float, ...]
+    clusters: dict[int, tuple[tuple[int, ...], tuple[str, ...]]]
+    model: str = ""
+
+    @property
+    def available_counts(self) -> tuple[int, ...]:
+        return tuple(sorted(self.clusters))
+
+    def nearest_count(self, n_clusters: int) -> int:
+        """The precomputed clustering closest to what the caller asked for."""
+        return min(self.available_counts, key=lambda k: (abs(k - n_clusters), k))
+
+
+@dataclass(frozen=True)
 class Embeddings:
     dois: tuple[str, ...]
     vectors: np.ndarray

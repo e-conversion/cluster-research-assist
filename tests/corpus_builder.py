@@ -111,6 +111,7 @@ def write_corpus(
     pis: bool = True,
     embeddings: bool = True,
     graph: bool = True,
+    corpus_map: bool = True,
     proposal: bool = True,
     with_manifest: bool = True,
 ) -> Path:
@@ -219,6 +220,30 @@ def write_corpus(
         (directory / "proposal_summary.md").write_text(
             "Summary of the proposal: energy conversion.\n"
         )
+    if corpus_map:
+        dois = sorted(p["doi"] for p in PAPERS)
+        (directory / "corpus_map.json").write_text(
+            json.dumps(
+                {
+                    "projection": "umap",
+                    "params": {"seed": 42},
+                    "model": "fake",
+                    "dois": dois,
+                    "x": [0.0, 1.0, 2.0],
+                    "y": [0.0, 1.0, -1.0],
+                    "clusters": {
+                        "2": {
+                            "assignments": [0, 1, 1],
+                            "labels": ["perovskite", "copper"],
+                        },
+                        "3": {
+                            "assignments": [0, 1, 2],
+                            "labels": ["perovskite", "copper", "battery"],
+                        },
+                    },
+                }
+            )
+        )
     if with_manifest:
         counts = {
             "papers": 3,
@@ -228,6 +253,7 @@ def write_corpus(
             "graph_nodes": 3 if graph else 0,
             "graph_edges": 2 if graph else 0,
             "embeddings": 3 if embeddings else 0,
+            "map_points": 3 if corpus_map else 0,
         }
         manifest.write(directory, counts, embedding_model="fake" if embeddings else "")
     return directory

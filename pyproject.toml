@@ -45,7 +45,8 @@ dependencies = [
 
 [project.optional-dependencies]
 postgres = ["psycopg[binary]"]
-map = ["scikit-learn", "umap-learn"]
+# only `cra corpus build` needs these; the serving image does not
+build = ["scikit-learn", "umap-learn"]
 
 [project.scripts]
 cra = "cra.cli:main"

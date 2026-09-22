@@ -17,6 +17,7 @@ from networkx.readwrite import json_graph
 from cra.core.corpus import manifest as manifest_
 from cra.core.corpus.records import (
     PI,
+    CorpusMap,
     Dataset,
     Embeddings,
     FullText,
@@ -36,6 +37,7 @@ FILES = {
     "graph": "graph.json",
     "proposal": "proposal.md",
     "proposal_summary": "proposal_summary.md",
+    "map": "corpus_map.json",
 }
 
 
@@ -53,6 +55,7 @@ class Corpus:
         proposal: Proposal | None,
         embeddings: Embeddings | None,
         graph: nx.Graph | None,
+        map_: CorpusMap | None,
     ) -> None:
         self.path = path
         self.papers = papers
@@ -61,6 +64,7 @@ class Corpus:
         self.proposal = proposal
         self.embeddings = embeddings
         self.graph = graph
+        self.map = map_
 
     @classmethod
     def load(
@@ -86,6 +90,7 @@ class Corpus:
             proposal=_load_proposal(files["proposal"], files["proposal_summary"]),
             embeddings=_load_embeddings(files["embeddings"]),
             graph=_load_graph(_load_json(files["graph"])),
+            map_=_load_map(_load_json(files["map"])),
         )
         if verify:
             problems = manifest_.check_counts(manifest_.read(path) or {}, corpus.counts)
@@ -106,6 +111,7 @@ class Corpus:
             "embeddings": self.embeddings is not None,
             "graph": self.graph is not None,
             "proposal": self.proposal is not None,
+            "map": self.map is not None,
         }
 
     @property
@@ -122,6 +128,7 @@ class Corpus:
             if self.graph is not None
             else 0,
             "embeddings": len(self.embeddings) if self.embeddings is not None else 0,
+            "map_points": len(self.map.dois) if self.map is not None else 0,
         }
 
     def paper(self, doi: str) -> Paper | None:
@@ -250,3 +257,25 @@ def _load_graph(raw: dict[str, Any] | None) -> nx.Graph | None:
     if raw is None:
         return None
     return json_graph.node_link_graph(raw, edges="links")
+
+
+def _load_map(raw: dict[str, Any] | None) -> CorpusMap | None:
+    if raw is None:
+        return None
+    dois = tuple(normalise_doi(d) for d in raw.get("dois") or ())
+    x, y = tuple(raw.get("x") or ()), tuple(raw.get("y") or ())
+    if len(x) != len(dois) or len(y) != len(dois):
+        raise CorpusError(f"{FILES['map']}: one coordinate pair per DOI expected")
+    clusters = {}
+    for key, entry in (raw.get("clusters") or {}).items():
+        assignments = tuple(int(a) for a in entry.get("assignments") or ())
+        if len(assignments) != len(dois):
+            raise CorpusError(
+                f"{FILES['map']}: clustering {key} does not cover every DOI"
+            )
+        clusters[int(key)] = (assignments, tuple(entry.get("labels") or ()))
+    if not clusters:
+        raise CorpusError(f"{FILES['map']}: no clusterings")
+    return CorpusMap(
+        dois=dois, x=x, y=y, clusters=clusters, model=str(raw.get("model", ""))
+    )

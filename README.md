@@ -20,7 +20,24 @@ Requires Python 3.11 or newer.
 cp .env.example .env      # fill in the values
 cra check-config          # validate and print the resolved settings
 cra db upgrade            # create or migrate the database (CRA_HISTORY_URL)
+cra corpus check          # verify the corpus bundle
 cra serve
+```
+
+## The corpus bundle
+
+`CRA_CORPUS_PATH` points at a directory holding the corpus: `papers.csv` is
+required, and each of `abstracts.json`, `fulltexts.json`, `pis.json`,
+`embeddings.npz`, `graph.json`, `proposal.md` and `corpus_map.json` switches on
+the tools that need it. `manifest.json` records a checksum per file and the
+expected counts; `cra serve` refuses a bundle that does not match it.
+
+Everything expensive is computed when the bundle is built, never while serving:
+
+```bash
+pip install "cluster-research-assist[build]"
+cra corpus build          # projection and clusterings for the corpus map
+cra corpus manifest       # refresh checksums and counts
 ```
 
 Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as

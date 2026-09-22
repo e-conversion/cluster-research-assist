@@ -75,6 +75,48 @@ def cmd_corpus_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_corpus_build(args: argparse.Namespace) -> int:
+    """Compute the derived artifacts so that serving needs no heavy work."""
+    import json
+    import time
+
+    from cra.core.corpus import manifest
+    from cra.core.corpus.corpus import FILES, Corpus, CorpusError
+    from cra.core.corpus.derive import build_map
+
+    settings = load_settings(args)
+    directory = Path(args.directory or settings.corpus_path)
+    try:
+        corpus = Corpus.load(directory, verify=False)
+    except CorpusError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    if corpus.embeddings is None:
+        sys.stderr.write(f"{FILES['embeddings']} missing: the map needs embeddings\n")
+        return 1
+
+    started = time.perf_counter()
+    payload = build_map(
+        corpus.embeddings.dois,
+        corpus.embeddings.vectors,
+        {doi: paper.title for doi, paper in corpus.papers.items()},
+        model=corpus.embeddings.model,
+    )
+    target = directory / FILES["map"]
+    target.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    _out(f"wrote {target} in {time.perf_counter() - started:.1f}s")
+
+    corpus = Corpus.load(directory, verify=False)
+    manifest.write(
+        directory,
+        corpus.counts,
+        embedding_model=corpus.embeddings.model if corpus.embeddings else "",
+        builder=f"cra {__version__}",
+    )
+    _out(f"wrote {directory / manifest.MANIFEST}")
+    return 0
+
+
 def cmd_corpus_manifest(args: argparse.Namespace) -> int:
     from cra.core.corpus import manifest
     from cra.core.corpus.corpus import Corpus, CorpusError
@@ -241,6 +283,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     for name, func, help_text in (
         ("check", cmd_corpus_check, "verify the manifest and print the counts"),
+        (
+            "build",
+            cmd_corpus_build,
+            "compute the derived artifacts (needs the build extra)",
+        ),
         ("manifest", cmd_corpus_manifest, "write manifest.json for a corpus directory"),
     ):
         p = corpus.add_parser(name, help=help_text)

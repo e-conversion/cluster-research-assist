@@ -80,3 +80,10 @@ and embeds `f"{title}. {abstract}"` with `BAAI/bge-small-en-v1.5`
 `random.Random(42)`; only `fetched_at`/`built_at` and any upstream metadata
 edits change between rebuilds. Rebuilding after arXiv metadata changes
 (e.g. a new paper version) will change abstracts, embeddings and hashes.
+
+## Derived artifacts
+
+`corpus_map.json` is produced by `cra corpus build` (needs the `build` extra)
+and holds the 2-D projection plus one clustering per count the UI offers, so
+that serving the corpus map costs no computation. Rebuild it after changing
+the papers or the embeddings.
