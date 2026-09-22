@@ -79,15 +79,13 @@ class Settings(BaseSettings):
     oidc_redirect_uri: str = ""
     oidc_scopes: str = "openid email profile"
 
-    # what an unauthenticated visitor may do
-    anonymous_chat_enabled: bool = True
-    anonymous_chat_daily_limit: int = Field(default=20, ge=1)
+    # questions per signed-in user per day; 0 removes the limit
     user_chat_daily_limit: int = Field(default=0, ge=0)
 
-    # outward MCP surface
-    mcp_server_enabled: bool = True
+    # outward MCP surface, opt-in: it needs a reachable URL and a token secret
+    mcp_server_enabled: bool = False
     mcp_server_path: str = "/mcp"
-    mcp_server_require_token: bool = False
+    mcp_server_require_token: bool = True
     mcp_server_rate_limit: int = Field(default=60, ge=1)
     mcp_token_secret: SecretStr = SecretStr("")
 
@@ -139,7 +137,8 @@ class Settings(BaseSettings):
                     + ", ".join(f"CRA_{m.upper()}" for m in missing)
                 )
         if (
-            self.mcp_server_require_token
+            self.mcp_server_enabled
+            and self.mcp_server_require_token
             and not self.mcp_token_secret.get_secret_value()
         ):
             raise ValueError("CRA_MCP_SERVER_REQUIRE_TOKEN needs CRA_MCP_TOKEN_SECRET")

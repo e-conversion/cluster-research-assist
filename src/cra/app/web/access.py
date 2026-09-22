@@ -1,10 +1,12 @@
 """Who may reach which route.
 
-The site is public: anyone may read the library, use the public tools and,
-within a daily budget, ask a question. Signing in raises the data tier and
-attaches history; the console needs an admin. Routes declare what they need
-with the decorators below, and a test enumerates every route so that adding
-one is a deliberate decision rather than an oversight.
+Signing in is the rule: a route serves anonymous callers only when it says so,
+so a new route is closed until someone opens it deliberately. What stays open
+is the landing page, the static files, health, the public configuration the
+landing page needs, and the sign-in flow itself.
+
+The outward MCP endpoint is gated separately, by a token its owner mints while
+signed in, and serves the public tier only.
 """
 
 from collections.abc import Awaitable, Callable
@@ -17,8 +19,8 @@ REQUIREMENT = "_cra_requires"
 View = TypeVar("View", bound=Callable[..., Awaitable[Any]])
 
 
-def requires_user(view: View) -> View:
-    view._cra_requires = Role.USER  # type: ignore[attr-defined]
+def public(view: View) -> View:
+    view._cra_requires = Role.ANONYMOUS  # type: ignore[attr-defined]
     return view
 
 
@@ -28,7 +30,7 @@ def requires_admin(view: View) -> View:
 
 
 def required_role(view: Callable[..., Any] | None) -> Role:
-    return getattr(view, REQUIREMENT, Role.ANONYMOUS)
+    return getattr(view, REQUIREMENT, Role.USER)
 
 
 def satisfies(principal: Principal, required: Role) -> bool:

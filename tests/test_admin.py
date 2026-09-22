@@ -93,48 +93,41 @@ async def test_settings_show_their_value_and_where_it_comes_from(admin):
     body = await json_of(await admin.get("/api/admin/policy"))
     by_key = {s["key"]: s for s in body["settings"]}
     assert by_key.keys() == KEYS.keys()
-    assert by_key["anonymous_chat_daily_limit"]["source"] == "configuration"
-    assert by_key["anonymous_chat_daily_limit"]["value"] == 20
+    assert by_key["user_chat_daily_limit"]["source"] == "configuration"
+    assert by_key["user_chat_daily_limit"]["value"] == 0
 
 
-async def test_changing_a_setting_takes_effect_and_survives_a_restart(
-    admin, admin_app, tmp_path
-):
+async def test_changing_a_setting_takes_effect_and_survives_a_restart(admin, admin_app):
     response = await admin.put(
-        "/api/admin/policy/anonymous_chat_daily_limit", json={"value": 5}
+        "/api/admin/policy/user_chat_daily_limit", json={"value": 5}
     )
-    assert (await json_of(response))["source"] == "database"
-    assert admin_app.extensions["cra"].policy["anonymous_chat_daily_limit"] == 5
-
+    assert await json_of(response) == {
+        "key": "user_chat_daily_limit",
+        "value": 5,
+        "source": "database",
+    }
     ctx = admin_app.extensions["cra"]
-    reloaded = await Policy.load(ctx.settings, ctx.repo)
-    assert reloaded["anonymous_chat_daily_limit"] == 5
+    assert ctx.policy["user_chat_daily_limit"] == 5
+    assert (await Policy.load(ctx.settings, ctx.repo))["user_chat_daily_limit"] == 5
 
-    await admin.put(
-        "/api/admin/policy/anonymous_chat_daily_limit", json={"reset": True}
-    )
-    assert ctx.policy["anonymous_chat_daily_limit"] == 20
-    assert (await Policy.load(ctx.settings, ctx.repo))[
-        "anonymous_chat_daily_limit"
-    ] == 20
+    await admin.put("/api/admin/policy/user_chat_daily_limit", json={"reset": True})
+    assert ctx.policy["user_chat_daily_limit"] == 0
+    assert (await Policy.load(ctx.settings, ctx.repo))["user_chat_daily_limit"] == 0
 
 
-async def test_a_setting_reaches_the_public_configuration(admin, admin_app):
+async def test_a_setting_reaches_the_landing_page_without_signing_in(admin, admin_app):
     await admin.put("/api/admin/policy/notice", json={"value": "Maintenance on Friday"})
-    await admin.put("/api/admin/policy/anonymous_chat_enabled", json={"value": "false"})
     anonymous = admin_app.test_client()
     config = await json_of(await anonymous.get("/api/config"))
     assert config["notice"] == "Maintenance on Friday"
-    assert config["anonymous_chat"] is False
-    assert (await json_of(await anonymous.get("/api/session")))["can_chat"] is False
 
 
 @pytest.mark.parametrize(
     ("key", "value"),
     [
-        ("anonymous_chat_daily_limit", "0"),
-        ("anonymous_chat_daily_limit", "not a number"),
-        ("anonymous_chat_enabled", "maybe"),
+        ("llm_max_tool_rounds", "0"),
+        ("llm_max_tool_rounds", "not a number"),
+        ("user_chat_daily_limit", "-1"),
         ("tool_modules", "papers,papers"),
         ("notice", "x" * 501),
     ],

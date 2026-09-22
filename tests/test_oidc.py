@@ -2,18 +2,13 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from conftest import make_settings
+from conftest import make_settings, session_user
 from oidc_mock import CLIENT_ID, CLIENT_SECRET, ISSUER, MockIdp
 from quart.testing.app import LifespanError
 
 from cra.app.auth.principal import LoginDenied
 from cra.app.web.factory import create_app
 from cra.app.web.sessions import COOKIE_NAME
-
-
-async def signed_in_as(client) -> str | None:
-    """The display name the session reports, or None while anonymous."""
-    return (await (await client.get("/api/session")).get_json())["user"]
 
 
 @pytest.fixture
@@ -63,7 +58,7 @@ async def test_login_redirects_with_pkce_and_stores_the_pending_state(oidc_app, 
     assert query["code_challenge_method"] == ["S256"]
     assert query["redirect_uri"] == ["https://cra.test/auth/callback"]
     assert COOKIE_NAME in response.headers["set-cookie"]
-    assert await signed_in_as(client) is None
+    assert await session_user(client) is None
 
 
 async def test_full_login_binds_identity_and_signs_in(oidc_app, idp, repo):
@@ -111,7 +106,7 @@ async def test_inactive_user_sees_the_disabled_page(oidc_app, idp, repo):
     await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
     user_id = (await repo.get_identity(ISSUER, "pairwise-1")).user_id
     await repo.set_user_active(user_id, False)
-    assert await signed_in_as(client) is None
+    assert await session_user(client) is None
     query = await start_login(client, idp)
     response = await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
     assert response.status_code == 403
@@ -147,7 +142,7 @@ async def test_protocol_errors_fail_closed(oidc_app, idp, repo, respx_mock, tamp
     assert response.status_code == 400
     assert "Sign-in failed" in (await response.get_data()).decode()
     assert await repo.list_users() == []
-    assert await signed_in_as(client) is None
+    assert await session_user(client) is None
 
 
 async def test_logout_redirects_to_the_end_session_endpoint(oidc_app, idp, repo):
@@ -158,7 +153,7 @@ async def test_logout_redirects_to_the_end_session_endpoint(oidc_app, idp, repo)
     response = await client.post("/auth/logout")
     body = await response.get_json()
     assert body["redirect"].startswith(f"{ISSUER}/logout?post_logout_redirect_uri=")
-    assert await signed_in_as(client) is None
+    assert await session_user(client) is None
 
 
 async def test_provider_refuses_a_discovery_document_for_another_issuer(

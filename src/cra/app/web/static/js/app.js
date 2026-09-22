@@ -29,21 +29,34 @@ function renderIdentity() {
   const label = document.getElementById("user-label");
   label.textContent = s.user || "";
   label.hidden = !s.user;
-  document.getElementById("sign-in").hidden = !!s.signed_in;
   document.getElementById("sign-out").hidden = !s.signed_in;
   document.getElementById("admin-link").hidden = !s.is_admin;
 }
 
+function renderSignIn(view, config) {
+  const page = document.createElement("div");
+  page.className = "landing signin";
+  page.innerHTML = `
+    <div class="landing-head">
+      <svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>
+      <h1>Sign in to ${config.title}</h1>
+    </div>
+    <p class="lede">The assistant answers questions about the research in ${config.cluster.name}.
+    Sign in with your institutional account to start.</p>
+    <p><a class="btn primary" href="${config.auth.login_url}">Sign in</a></p>`;
+  view.replaceChildren(page);
+  for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
+}
+
 async function boot() {
   const view = document.getElementById("view");
-  let config, session;
+  let config;
   try {
-    [config, session] = await Promise.all([getJSON("api/config"), getJSON("api/session")]);
+    config = await getJSON("api/config");
   } catch (e) {
     view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
     return;
   }
-  store.update({ config, session });
   document.title = config.title;
   document.querySelector(".brand-name").textContent = config.title;
   if (config.notice) {
@@ -51,6 +64,15 @@ async function boot() {
     bar.textContent = config.notice;
     bar.hidden = false;
   }
+  let session;
+  try {
+    session = await getJSON("api/session");
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) { renderSignIn(view, config); return; }
+    view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
+    return;
+  }
+  store.update({ config, session });
   renderIdentity();
   document.getElementById("sign-out").addEventListener("click", async () => {
     try {

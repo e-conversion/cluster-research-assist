@@ -42,19 +42,22 @@ cra library manifest       # refresh checksums and counts
 
 ## Who may do what
 
-The site is public. Anyone may read the library, use the public tools and, within
-a daily budget, ask a question; the outward MCP endpoint serves the same public
-tier. Signing in adds the internal tier, which is the full texts and the
-proposal, plus a saved history. Admins additionally reach the console at
-`/admin`.
+Signing in is the rule. The landing page and the sign-in flow answer without an
+account; everything else needs one, and a test enumerates every route so a new
+one is closed until someone opens it deliberately.
 
-| | anonymous | signed in | admin |
-|---|---|---|---|
-| paper metadata, abstracts, PI profiles, the graph, the map | yes | yes | yes |
-| chat | within a daily cap | yes | yes |
-| full texts and the proposal | no | yes | yes |
-| saved history | no | yes | yes |
-| accounts, allow-list, settings | no | no | yes |
+| | signed in | admin |
+|---|---|---|
+| paper metadata, abstracts, PI profiles, the graph, the publication map | yes | yes |
+| chat, within a daily cap | yes | yes |
+| full texts and the proposal | yes | yes |
+| saved history | yes | yes |
+| accounts, allow-list, settings | no | yes |
+
+The outward MCP endpoint is gated separately by a token that a signed-in user
+mints, and serves the public tier only: metadata, abstracts, profiles, the graph
+and snippet-budgeted full-text search. The full texts and the proposal never
+leave through it.
 
 Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
 `CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header
@@ -78,7 +81,7 @@ admins change it in the console or on the command line without a restart:
 
 ```bash
 cra policy list                          # every setting and where its value comes from
-cra policy set anonymous_chat_daily_limit 5
+cra policy set user_chat_daily_limit 50
 cra policy set notice "Pilot running until Friday"
 cra policy set notice --reset            # back to the configured default
 ```

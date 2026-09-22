@@ -3,7 +3,7 @@
 Configuration and policy are different things. Endpoints, secrets and paths are
 configuration: they live in the environment, and changing one needs a restart.
 How the service behaves day to day is policy: which tools are on, which model
-answers, how much an anonymous visitor may ask. Each key below takes its
+answers, how many questions a person may ask in a day. Each key below takes its
 default from the configuration and may be overridden in the database, so a
 deployment still describes itself fully through its `.env`.
 """
@@ -95,18 +95,6 @@ KEYS: dict[str, PolicyKey] = {
             "llm_max_tool_rounds",
             _positive_int,
             "Tool rounds allowed per answer.",
-        ),
-        PolicyKey(
-            "anonymous_chat_enabled",
-            "anonymous_chat_enabled",
-            _boolean,
-            "Whether visitors may ask without signing in.",
-        ),
-        PolicyKey(
-            "anonymous_chat_daily_limit",
-            "anonymous_chat_daily_limit",
-            _positive_int,
-            "Questions per address per day without an account.",
         ),
         PolicyKey(
             "user_chat_daily_limit",

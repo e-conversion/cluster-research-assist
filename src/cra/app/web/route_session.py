@@ -1,11 +1,12 @@
-"""What the frontend asks on boot: the public configuration, and who is
-calling. Both answer for anonymous visitors, who may use the site."""
+"""What the frontend asks on boot: the configuration the landing page needs,
+which anyone may read, and the session, which needs a sign-in."""
 
 from typing import Any
 
 from quart import Blueprint, current_app, g
 
 from cra import __version__
+from cra.app.web.access import public
 
 bp = Blueprint("session", __name__)
 
@@ -15,6 +16,7 @@ def _ctx():
 
 
 @bp.get("/api/config")
+@public
 async def config() -> dict[str, Any]:
     ctx = _ctx()
     settings, policy = ctx.settings, ctx.policy
@@ -39,7 +41,6 @@ async def config() -> dict[str, Any]:
         "default_model": policy["llm_model"],
         "sources": {},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
-        "anonymous_chat": policy["anonymous_chat_enabled"],
         "version": {"version": __version__},
     }
 
@@ -57,11 +58,6 @@ def _placeholder(counts: dict[str, int]) -> str:
 async def session() -> dict[str, Any]:
     ctx = _ctx()
     principal = g.principal
-    limit = (
-        ctx.policy["anonymous_chat_daily_limit"]
-        if not principal.signed_in
-        else ctx.policy["user_chat_daily_limit"]
-    )
     return {
         "session": g.session.id[:12] if g.session else None,
         "user": principal.display or None,
@@ -69,8 +65,7 @@ async def session() -> dict[str, Any]:
         "tier": str(principal.tier),
         "signed_in": principal.signed_in,
         "is_admin": principal.is_admin,
-        "can_chat": principal.signed_in or ctx.policy["anonymous_chat_enabled"],
-        "daily_limit": limit,
+        "daily_limit": ctx.policy["user_chat_daily_limit"],
         "model": "",
         "connected": {},
         "tools": {"local": 0, "elab": 0, "dt": 0, "total": 0},

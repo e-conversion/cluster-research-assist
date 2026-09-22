@@ -26,6 +26,14 @@ def _clean_environment(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
 
+async def session_user(client) -> str | None:
+    """The display name the session reports, or None while not signed in."""
+    response = await client.get("/api/session")
+    if response.status_code == 401:
+        return None
+    return (await response.get_json())["user"]
+
+
 def make_settings(tmp_path: Path, **overrides) -> Settings:
     values = {
         "library_path": TOY_LIBRARY,

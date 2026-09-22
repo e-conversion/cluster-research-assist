@@ -1,7 +1,8 @@
 """Who is calling, and what that entitles them to.
 
-Anyone may use the site: an anonymous visitor is a principal too, with the
-public tier and no history. Signing in raises the tier and attaches the
+Someone who has not signed in is a principal too, at the public tier, which is
+what the landing page and the outward MCP endpoint serve. Signing in raises the
+tier to internal, where the full texts and the proposal are, and attaches the
 conversation history; an admin additionally reaches the console.
 """
 

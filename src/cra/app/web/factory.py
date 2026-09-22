@@ -81,6 +81,9 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     async def index() -> Response:
         return await _page("index.html")
 
+    # the landing page renders for anyone: it is where signing in starts
+    index._cra_requires = Role.ANONYMOUS  # type: ignore[attr-defined]
+
     @app.get(f"{base}/admin")
     async def admin_console() -> Response:
         return await _page("admin.html")
@@ -112,6 +115,8 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     async def guard() -> Response | None:
         g.session = await ctx.sessions.load(request.cookies.get(COOKIE_NAME))
         g.principal = await _principal(ctx)
+        if request.endpoint == "static":
+            return None
         required = required_role(app.view_functions.get(request.endpoint or ""))
         if satisfies(g.principal, required):
             return None

@@ -1,7 +1,7 @@
 import re
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, session_user
 from quart.testing.app import LifespanError
 
 from cra.app.web.factory import create_app
@@ -33,12 +33,11 @@ PUBLIC_ROUTES = {
     "/",
     "/api/health",
     "/api/config",
-    "/api/session",
     "/auth/login",
     "/auth/callback",
     "/auth/logout",
 }
-USER_ROUTES: set[str] = set()
+USER_ROUTES = {"/api/session"}
 ADMIN_ROUTES = {
     "/admin",
     "/api/admin/users",
@@ -90,18 +89,6 @@ async def test_a_browser_asking_for_a_page_is_sent_to_sign_in(client):
     assert response.headers["location"] == "/auth/login"
 
 
-async def test_anonymous_session_reports_the_public_tier(client):
-    body = await (await client.get("/api/session")).get_json()
-    assert body["role"] == "anonymous"
-    assert body["tier"] == "public"
-    assert body["signed_in"] is False
-    assert body["is_admin"] is False
-    assert body["can_chat"] is True
-    assert body["user"] is None
-    # reading the site costs no database row: a session appears at sign-in
-    assert body["session"] is None
-
-
 async def test_signing_in_raises_the_tier(client):
     await client.get("/auth/login")
     body = await (await client.get("/api/session")).get_json()
@@ -138,7 +125,7 @@ async def test_login_rotates_the_cookie(client):
     second = cookie_value(await client.get("/auth/login"))
     assert first != second
     client.set_cookie("localhost", COOKIE_NAME, first)
-    assert (await (await client.get("/api/session")).get_json())["signed_in"] is False
+    assert await session_user(client) is None
 
 
 async def test_logout_ends_the_session(client):
@@ -146,7 +133,7 @@ async def test_logout_ends_the_session(client):
     response = await client.post("/auth/logout")
     assert (await response.get_json()) == {"ok": True, "redirect": "/"}
     assert "Max-Age=0" in response.headers["set-cookie"]
-    assert (await (await client.get("/api/session")).get_json())["signed_in"] is False
+    assert await session_user(client) is None
 
 
 async def test_deactivated_user_is_locked_out(app, client):
@@ -154,7 +141,7 @@ async def test_deactivated_user_is_locked_out(app, client):
     repo = app.extensions["cra"].repo
     identity = await repo.get_identity("dev", "alice")
     await repo.set_user_active(identity.user_id, False)
-    assert (await (await client.get("/api/session")).get_json())["signed_in"] is False
+    assert await session_user(client) is None
     assert (await client.get("/auth/login")).status_code == 403
 
 
@@ -175,7 +162,8 @@ async def test_base_path_mounts_everything_under_the_prefix(tmp_path):
     app = create_app(make_settings(tmp_path, base_path=prefix))
     async with app.test_app():
         client = app.test_client()
-        assert (await client.get("/api/health")).status_code == 404
+        # nothing answers outside the prefix
+        assert (await client.get("/api/health")).status_code in (401, 404)
         assert (await client.get(f"{prefix}/api/health")).status_code == 200
         assert (await client.get(f"{prefix}/")).status_code == 200
         assert (await client.get(f"{prefix}/static/js/app.js")).status_code == 200

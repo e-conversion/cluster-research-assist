@@ -14,6 +14,7 @@ from quart import (
 )
 
 from cra.app.auth.principal import LoginDenied, LoginOutcome, Role, SessionState
+from cra.app.web.access import public
 from cra.app.web.sessions import COOKIE_NAME
 
 log = logging.getLogger(__name__)
@@ -101,6 +102,7 @@ async def _finish(state: SessionState, outcome: LoginOutcome) -> Response:
 
 
 @bp.get("/auth/login")
+@public
 async def login() -> Response:
     ctx = _ctx()
     cookie: str | None = None
@@ -117,6 +119,7 @@ async def login() -> Response:
 
 
 @bp.get("/auth/callback")
+@public
 async def callback() -> Response:
     ctx = _ctx()
     if g.session is None:
@@ -129,6 +132,7 @@ async def callback() -> Response:
 
 
 @bp.post("/auth/logout")
+@public
 async def logout() -> Response:
     ctx = _ctx()
     if g.session is not None:

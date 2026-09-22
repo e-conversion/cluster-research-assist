@@ -76,7 +76,7 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
         {"CRA_BASE_PATH": "nomad"},
         {"CRA_AUTH_PROVIDER": "oidc"},
         {"CRA_AUTH_PROVIDER": "saml"},
-        {"CRA_MCP_SERVER_REQUIRE_TOKEN": "true"},
+        {"CRA_MCP_SERVER_ENABLED": "true"},
         {"CRA_PORT": "0"},
     ],
     ids=[
