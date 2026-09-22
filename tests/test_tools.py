@@ -50,6 +50,7 @@ def test_every_tool_is_registered_with_a_tier(registry):
         "get_paper_by_doi": Tier.PUBLIC,
         "get_paper_fulltext": Tier.INTERNAL,
         "get_pi": Tier.PUBLIC,
+        "find_experts": Tier.PUBLIC,
         "get_proposal_fulltext": Tier.INTERNAL,
         "get_similar_papers": Tier.PUBLIC,
         "joint_papers": Tier.PUBLIC,
@@ -293,3 +294,72 @@ async def test_a_proposal_passage_cannot_fill_the_context(registry, ctx, tmp_pat
     )
     found = await call(registry, fresh, "get_proposal_fulltext", query="work package 3")
     assert max(len(p) for p in found["passages"]) == PASSAGE_CHARS
+
+
+@pytest.fixture
+def words_only(tmp_path, settings):
+    """Word matching alone, so the ranking here is exact rather than whatever a
+    stand-in encoder happens to place nearby."""
+    indexes = Indexes.build(Library.load(write_library(tmp_path / "words")))
+    return load(settings, indexes, ["pis"]), ToolContext(
+        indexes=indexes, settings=settings
+    )
+
+
+async def test_find_experts_answers_by_what_people_published(words_only):
+    """A profile rarely names a method; the papers do."""
+    registry, ctx = words_only
+    found = await call(registry, ctx, "find_experts", topic="electrocatalysis copper")
+    assert found["papers_considered"] == 1
+    # everyone who co-authored the matching paper, and nobody else
+    assert {p["name"] for p in found["results"]} == {
+        "Prof. Dr. Grace Hopper",
+        "Dr. Ada Lovelace",
+        "Dr. Emmy Noether",
+    }
+    assert found["results"][0]["evidence"][0]["doi"] == "10.1000/beta"
+    assert found["results"][0]["matching_papers"] == 1
+
+
+async def test_find_experts_ranks_by_how_much_of_their_work_matches(words_only):
+    registry, ctx = words_only
+    found = await call(
+        registry, ctx, "find_experts", topic="perovskite electrocatalysis"
+    )
+    # Lovelace and Hopper wrote both matching papers; Noether only one
+    assert [p["matching_papers"] for p in found["results"]] == [2, 2, 1]
+    assert found["results"][-1]["name"] == "Dr. Emmy Noether"
+
+
+async def test_find_experts_says_so_when_nobody_matches(words_only):
+    registry, ctx = words_only
+    assert (
+        "Nothing in the library"
+        in (await call(registry, ctx, "find_experts", topic="zebra husbandry"))["error"]
+    )
+
+
+async def test_a_distant_neighbour_is_not_an_expert(registry, ctx, monkeypatch):
+    """A dense search returns its nearest neighbours whatever is asked, so
+    without a floor every question would find an expert."""
+    from cra.core.tools import pis as pis_module
+
+    monkeypatch.setattr(pis_module, "MIN_SIMILARITY", 1.1)
+    assert (
+        "Nothing in the library"
+        in (await call(registry, ctx, "find_experts", topic="zebra husbandry"))["error"]
+    )
+
+
+def test_find_experts_needs_papers_attributed_to_people(tmp_path, settings):
+    """Profiles without publications cannot support the claim it makes."""
+    import json
+
+    directory = write_library(tmp_path / "unattributed")
+    pis = json.loads((directory / "pis.json").read_text())
+    for pi in pis:
+        pi["publication_dois"] = []
+    (directory / "pis.json").write_text(json.dumps(pis))
+    bare = Indexes.build(Library.load(directory, verify=False))
+    names = {spec.name for spec in load(settings, bare, ["pis"])}
+    assert names == {"search_pis", "get_pi"}

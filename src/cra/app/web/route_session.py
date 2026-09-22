@@ -6,6 +6,7 @@ from typing import Any
 from quart import Blueprint, current_app, g
 
 from cra import __version__
+from cra.app.web import examples
 from cra.app.web.access import public
 from cra.app.web.route_preferences import selection
 from cra.assistant.llm import params as params_
@@ -47,7 +48,7 @@ async def config() -> dict[str, Any]:
         "parameters": params_.payload(settings),
         "library": counts,
         "placeholder": _placeholder(counts),
-        "examples": [],
+        "examples": examples.some(),
         "sources": {},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
         "version": {"version": __version__},

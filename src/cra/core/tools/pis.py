@@ -13,6 +13,15 @@ from cra.core.tools.tiers import Tier
 from cra.core.tools.views import ABSTRACT_IN_LIST, paper_view, pi_view
 
 PUBLICATIONS_SHOWN = 10
+EVIDENCE_SHOWN = 3
+# wide enough that a person with a few matching papers is not missed, narrow
+# enough that everyone who ever touched the topic is not "an expert"
+EXPERT_PAPERS = 40
+# Nearest is not the same as relevant: a dense search returns its neighbours
+# whatever the question, so a floor is what makes "nobody" a possible answer.
+MIN_SIMILARITY = 0.35
+# a word match is evidence; a neighbour in the embedding space is a hint
+LEXICAL_WEIGHT = 2.0
 
 
 def _searchable(pi: PI) -> str:
@@ -104,3 +113,68 @@ def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
         return
     registry.register(search_pis)
     registry.register(get_pi)
+    if any(pi.publication_dois for pi in indexes.library.pis):
+        registry.register(find_experts)
+
+
+@tool(tier=Tier.PUBLIC)
+async def find_experts(
+    ctx: ToolContext,
+    topic: Annotated[str, Field(description="What you need expertise in.")],
+    limit: Annotated[
+        int, Field(description="How many people to return.", ge=1, le=20)
+    ] = 5,
+) -> dict[str, Any]:
+    """Who to talk to about a topic, judged by what they have published rather
+    than by how they describe themselves. Use this for "who could help me
+    with X" and "who should I collaborate with": a profile rarely names a
+    method, but the papers do."""
+    library = ctx.indexes.library
+    if not library.pis:
+        raise ToolError("This library has no principal investigators.")
+
+    papers = _matching_papers(ctx, topic)
+    if not papers:
+        raise ToolError(f"Nothing in the library matches {topic!r}.")
+
+    found = []
+    for pi in library.pis:
+        theirs = [
+            (doi, score) for doi, score in papers.items() if doi in pi.publication_dois
+        ]
+        if not theirs:
+            continue
+        theirs.sort(key=lambda pair: -pair[1])
+        found.append(
+            {
+                **pi_view(pi),
+                "matching_papers": len(theirs),
+                "evidence": [
+                    {"doi": doi, "title": library.papers[doi].title}
+                    for doi, _ in theirs[:EVIDENCE_SHOWN]
+                ],
+                "_score": sum(score for _, score in theirs),
+            }
+        )
+    found.sort(key=lambda person: -person["_score"])
+    for person in found:
+        del person["_score"]
+    return {
+        "count": len(found),
+        "papers_considered": len(papers),
+        "results": found[:limit],
+    }
+
+
+def _matching_papers(ctx: ToolContext, topic: str) -> dict[str, float]:
+    """Papers about the topic, by words and by meaning, scored together."""
+    indexes = ctx.indexes
+    scores: dict[str, float] = {}
+    for hit in indexes.lexical.search(topic, EXPERT_PAPERS):
+        scores[hit.doi] = scores.get(hit.doi, 0.0) + LEXICAL_WEIGHT
+    if indexes.semantic_ready and indexes.encoder and indexes.dense:
+        vector = indexes.encoder.encode(topic)
+        for hit in indexes.dense.search(vector, EXPERT_PAPERS):
+            if hit.score >= MIN_SIMILARITY:
+                scores[hit.doi] = scores.get(hit.doi, 0.0) + hit.score
+    return scores

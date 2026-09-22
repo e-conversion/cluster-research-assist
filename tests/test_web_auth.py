@@ -218,10 +218,10 @@ async def test_the_session_reports_the_tools_the_caller_may_use(client):
     body = await (await client.get("/api/session")).get_json()
     # every tool but semantic search, which needs an encoder this test has not
     # configured; the library's vectors alone still answer "papers like this one"
-    assert body["tools"]["local"] == 15
-    assert body["tools"]["total"] == 15
+    assert body["tools"]["local"] == 16
+    assert body["tools"]["total"] == 16
     health = await (await client.get("/api/health")).get_json()
-    assert health["tools"] == 15
+    assert health["tools"] == 16
 
 
 async def test_the_session_hands_back_the_conversation_it_is_in(client, app):

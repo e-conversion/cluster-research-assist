@@ -65,6 +65,12 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             "get_paper_fulltext reads one paper. Give it a query to get the relevant passages "
             "rather than the whole text."
         )
+    if "find_experts" in tool_names:
+        lines.append(
+            "\nfind_experts answers 'who could help me with this' by what people have "
+            "published, which is what a profile usually leaves out. Prefer it over search_pis "
+            "for a method or a technique, and use search_pis for a name or a stated field."
+        )
     if {"get_collaborators", "collaboration_centrality"} & tool_names:
         lines.append(
             "\nThe collaboration tools answer questions search cannot: who publishes with whom, "

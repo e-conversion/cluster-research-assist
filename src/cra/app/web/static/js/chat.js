@@ -50,17 +50,22 @@ class AssistantMessage {
   constructor(list) {
     this.root = el("div", "msg assistant");
     // Perplexity-style: the "Researched …" line sits above the answer
-    this.head = el("details", "researched live");
+    this.head = el("details", "researched live empty");
     this.headSummary = el("summary");
-    this.headSummary.append(svgUse("i-research"), el("span", "researched-text", "Researching…"));
+    this.headSummary.append(svgUse("i-research"), el("span", "researched-text", "Researching…"), el("span", "chev", "▾"));
     this.head.append(this.headSummary);
-    this.root.append(this.head);
     this.steps = el("div", "steps");
+    this.head.append(this.steps);
+    this.root.append(this.head);
+    // A real click on the disclosure triangle (not our own JS toggling it) means
+    // the user has an opinion — stop auto-opening/closing this message's dropdown.
+    this.userToggled = false;
+    this.headSummary.addEventListener("click", () => { this.userToggled = true; });
     this.bubble = el("div", "bubble");
     this.md = el("div", "md");
     this.bubble.append(this.md);
     this.foot = el("div", "msg-foot");
-    this.root.append(this.steps, this.bubble, this.foot);
+    this.root.append(this.bubble, this.foot);
     list.append(this.root);
     this.renderer = new StreamRenderer(this.md);
     this.toolSteps = new Map();
@@ -79,8 +84,18 @@ class AssistantMessage {
     return a;
   }
 
+  // Live steps live inside the collapsible "Researching…" dropdown; open it as
+  // soon as there's something to show, so the user watches progress without
+  // the page filling up with permanently-visible cards -- unless they've
+  // already clicked it themselves, in which case that choice sticks.
+  openHead() {
+    this.head.classList.remove("empty");
+    if (!this.userToggled) this.head.open = true;
+  }
+
   ensureThink() {
     if (this.think) return this.think;
+    this.openHead();
     const d = el("details", "step think running");
     d.open = true;
     const s = el("summary");
@@ -115,6 +130,7 @@ class AssistantMessage {
 
   toolStart(data) {
     this.closeThink();
+    this.openHead();
     this.toolCount += 1;
     const d = el("details", "step running");
     const s = el("summary");
@@ -148,12 +164,20 @@ class AssistantMessage {
     if (n) parts.push(`${n} tool call${n === 1 ? "" : "s"}`);
     this.headSummary.querySelector(".researched-text").textContent = parts.join(" · ");
     if (n) {
-      const ul = el("ul");
-      for (const c of toolCalls) ul.append(el("li", null, c.replace(/^`|`$/g, "")));
-      this.head.append(ul);
+      this.head.classList.remove("empty");
+      // Loaded from history: no live step cards were ever built, so fall back
+      // to a plain name list inside the same dropdown.
+      if (!this.steps.children.length) {
+        const ul = el("ul");
+        for (const c of toolCalls) ul.append(el("li", null, c.replace(/^`|`$/g, "")));
+        this.steps.append(ul);
+      }
     } else {
-      this.headSummary.style.cursor = "default";
+      this.head.classList.add("empty");
     }
+    // Collapse once the turn is done — the summary line stays, the detail is a click away.
+    // Skip it if the user already toggled this dropdown themselves; their choice sticks.
+    if (!this.userToggled) this.head.open = false;
     if (this.text) this.foot.append(copyButton(() => this.text));
   }
 
@@ -172,6 +196,9 @@ class AssistantMessage {
     for (const st of this.toolSteps.values()) if (st.root.classList.contains("running")) {
       st.root.classList.remove("running"); st.ico.textContent = "–"; st.ms.textContent = "";
     }
+    // A raw "error"/abort event never calls summary() (that's the "done" path),
+    // so stop the live spinner here or it spins forever on a failed turn.
+    this.head.classList.remove("live");
     this.renderer.finish();
     this.bubble.append(el("div", "note " + kind, text));
   }
@@ -246,7 +273,29 @@ export function chatView(store) {
       function appendUser(text) {
         const m = el("div", "msg user");
         m.append(el("div", "bubble", text));
+        const foot = el("div", "msg-foot user-foot");
+        foot.append(
+          iconButton("i-rerun", "Ask this again", () => submit(text)),
+          iconButton("i-modify", "Edit and ask again", () => {
+            ta.value = text;
+            ta.focus();
+            ta.setSelectionRange(text.length, text.length);
+            grow();
+          }),
+        );
+        m.append(foot);
         list.append(m);
+      }
+
+      /** A small icon button, as used under a question and under an answer. */
+      function iconButton(symbol, title, onClick) {
+        const b = el("button", "icon-btn");
+        b.type = "button";
+        b.title = title;
+        b.setAttribute("aria-label", title);
+        b.append(svgUse(symbol));
+        b.addEventListener("click", onClick);
+        return b;
       }
 
       function renderHistory() {
