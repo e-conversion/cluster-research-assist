@@ -244,3 +244,44 @@ async def test_cancelling_stops_the_turn_and_keeps_the_partial_answer():
     assert events[-1]["error"] == "cancelled"
     assert events[-1]["answer"] == "part of an answer"
     assert len(client.calls) == 1, "a cancelled turn does not ask again"
+
+
+async def test_a_repeated_call_is_answered_rather_than_run_again():
+    """A model that repeats itself would otherwise burn every round."""
+    ran = []
+
+    async def call_tool(name, arguments):
+        ran.append((name, arguments))
+        return {"results": []}
+
+    same = tool_chunk(0, id="c", name="search_pis", arguments='{"query": "x"}')
+    client = FakeOpenAI(
+        [
+            [tool_chunk(0, id="c1", name="search_pis", arguments='{"query": "x"}')],
+            [same],
+            [text_chunk("nothing found")],
+        ]
+    )
+    events = await collect(client, call_tool=call_tool)
+    assert ran == [("search_pis", {"query": "x"})], "the tool ran once"
+    previews = [e["preview"] for e in events if e["type"] == "tool_call_end"]
+    assert '"repeated": true' in previews[1]
+    assert events[-1]["answer"] == "nothing found"
+
+
+async def test_the_same_tool_with_different_arguments_still_runs():
+    ran = []
+
+    async def call_tool(name, arguments):
+        ran.append(arguments["query"])
+        return {}
+
+    client = FakeOpenAI(
+        [
+            [tool_chunk(0, id="a", name="search_pis", arguments='{"query": "one"}')],
+            [tool_chunk(0, id="b", name="search_pis", arguments='{"query": "two"}')],
+            [text_chunk("done")],
+        ]
+    )
+    await collect(client, call_tool=call_tool)
+    assert ran == ["one", "two"]

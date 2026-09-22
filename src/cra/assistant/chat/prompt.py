@@ -78,8 +78,9 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             "never present an entry as the data behind a cluster paper: there is no such link."
         )
     lines.append(
-        "\nFor a question about the cluster as a whole, one search is not enough: ask several "
-        "different ways, then summarise what you found."
+        "\nA broad question needs more than one search, but each one must ask something "
+        "different: never repeat a call you have already made, and stop searching once you "
+        "can answer. Say what you found rather than what you looked for."
     )
     lines.append("Answer in the language of the question.")
 

@@ -95,15 +95,33 @@ async def chat() -> Any:
     async def stream():
         yield _frame({"type": "start", "model": chosen["model"]})
         final: dict[str, Any] | None = None
+        sent = 0
+        reason = "complete"
         try:
             async for event in turn.run():
+                sent += 1
                 yield _frame(event)
                 if event["type"] in ("done", "error"):
                     final = event
+        except BaseException as exc:
+            reason = type(exc).__name__
+            raise
         finally:
             # the reader may be gone; the answer still belongs in the history
             cancel.set()
             slot.finish(epoch)
+            log.info(
+                "turn finished",
+                extra={
+                    "fields": {
+                        "reason": reason,
+                        "events": sent,
+                        "answered": final is not None,
+                        "rounds": (final or {}).get("rounds"),
+                        "error": (final or {}).get("error"),
+                    }
+                },
+            )
             await asyncio.shield(turn.store(final))
 
     return Response(

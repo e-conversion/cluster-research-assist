@@ -24,6 +24,10 @@ ARGUMENTS_IN_LOG = 80
 LIMIT_REACHED = (
     "I reached the limit on tool calls for one answer. Try asking something narrower."
 )
+REPEATED = (
+    "You already made this exact call earlier in this answer and have its result. "
+    "Use it, search for something different, or answer with what you have."
+)
 
 THINK_OPEN, THINK_CLOSE = "<think>", "</think>"
 
@@ -197,6 +201,10 @@ async def _rounds(
 ) -> AsyncIterator[dict[str, Any]]:
     conversation = [{"role": "system", "content": system_prompt}, *messages]
     stopped = lambda: cancel is not None and cancel.is_set()  # noqa: E731
+    # A model that repeats a call it already made will keep doing it until the
+    # round limit. Answering the repeat rather than running it again breaks the
+    # loop and costs one short message instead of a whole result.
+    already_called: set[tuple[str, str]] = set()
 
     for number in range(max_rounds):
         progress.rounds = number + 1
@@ -305,9 +313,14 @@ async def _rounds(
                 "round": progress.rounds,
             }
             at = time.perf_counter()
-            result = await call_tool(call["name"], arguments)
-            if not isinstance(result, str):
-                result = json.dumps(result, ensure_ascii=False, default=str)
+            signature = (call["name"], json.dumps(arguments, sort_keys=True))
+            if signature in already_called:
+                result = json.dumps({"repeated": True, "note": REPEATED})
+            else:
+                already_called.add(signature)
+                result = await call_tool(call["name"], arguments)
+                if not isinstance(result, str):
+                    result = json.dumps(result, ensure_ascii=False, default=str)
             took = (time.perf_counter() - at) * 1000
             succeeded = not result.lstrip().startswith('{"error"')
             progress.tools.append(
