@@ -201,6 +201,53 @@ async function loadPolicy() {
   }
 }
 
+async function loadFeedback() {
+  const { feedback } = await getJSON("api/admin/feedback");
+  const body = $("feedback");
+  body.replaceChildren();
+  if (!feedback.length) {
+    const empty = el("tr");
+    const cell = el("td", "desc", "Nothing yet.");
+    cell.colSpan = 5;
+    empty.append(cell);
+    body.append(empty);
+    return;
+  }
+  for (const f of feedback) {
+    const row = el("tr");
+    row.append(el("td", null, f.from));
+    row.append(el("td", "desc", f.category));
+
+    const note = el("td");
+    note.append(el("div", null, f.text));
+    if (f.messages.length) {
+      const details = el("details");
+      details.append(el("summary", "desc", `${f.messages.length} messages`));
+      for (const m of f.messages) {
+        const line = el("div", "desc");
+        line.append(el("b", null, `${m.role}: `), document.createTextNode(m.content));
+        details.append(line);
+      }
+      note.append(details);
+    }
+    if (f.model) note.append(el("div", "src", f.model));
+    row.append(note);
+
+    row.append(el("td", "desc", date(f.created_at)));
+    const actions = el("td", "actions");
+    actions.append(
+      button("Delete", "ghost danger", () =>
+        guard(async () => {
+          await del(`api/admin/feedback/${f.id}`);
+          await loadFeedback();
+        }),
+      ),
+    );
+    row.append(actions);
+    body.append(row);
+  }
+}
+
 const megabytes = (n) => `${(n / 1e6).toFixed(1)} MB`;
 
 async function loadLibrary() {
@@ -255,7 +302,7 @@ async function uploadLibrary(file) {
   return data;
 }
 
-const TABS = ["accounts", "settings", "library"];
+const TABS = ["accounts", "settings", "feedback", "library"];
 
 /** The open tab lives in the URL fragment, so a reload keeps it. */
 function showTab(name) {
@@ -285,7 +332,9 @@ async function boot() {
     location.assign("./");
     return;
   }
-  await guard(() => Promise.all([loadPeople(), loadPolicy(), loadLibrary()]));
+  await guard(() =>
+    Promise.all([loadPeople(), loadPolicy(), loadFeedback(), loadLibrary()]),
+  );
   $("upload-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     const file = $("bundle-input").files[0];

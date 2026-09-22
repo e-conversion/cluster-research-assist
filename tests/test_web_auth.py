@@ -46,13 +46,15 @@ PUBLIC_ROUTES = {
     "/auth/callback",
     "/auth/logout",
 }
-USER_ROUTES = {"/api/session"}
+USER_ROUTES = {"/api/session", "/api/feedback"}
 ADMIN_ROUTES = {
     "/admin",
     "/api/admin/people",
     "/api/admin/users/<user_id>",
     "/api/admin/emails",
     "/api/admin/emails/<path:email>",
+    "/api/admin/feedback",
+    "/api/admin/feedback/<int:feedback_id>",
     "/api/admin/policy",
     "/api/admin/policy/<key>",
     "/api/admin/library",
@@ -77,7 +79,9 @@ def as_request(app, template: str) -> tuple[str, str]:
     """A callable path and a supported method for a route template."""
     rule = next(r for r in app.url_map.iter_rules() if r.rule == template)
     method = next(m for m in ("GET", "POST", "PUT", "DELETE") if m in rule.methods)
-    return re.sub(r"<[^>]+>", "placeholder", template), method
+    # a placeholder the route's converter accepts, or it 404s before the guard
+    path = re.sub(r"<int:[^>]+>", "1", template)
+    return re.sub(r"<[^>]+>", "placeholder", path), method
 
 
 @pytest.mark.parametrize("template", sorted(ADMIN_ROUTES))

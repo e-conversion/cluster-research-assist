@@ -20,7 +20,13 @@ from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
 from cra.app.policy import Policy
 from cra.app.ratelimit import RateLimiter
-from cra.app.web import route_admin, route_auth, route_health, route_session
+from cra.app.web import (
+    route_admin,
+    route_auth,
+    route_feedback,
+    route_health,
+    route_session,
+)
 from cra.app.web.access import required_role, satisfies
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.config.settings import Settings
@@ -75,7 +81,13 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     )
     app.extensions["cra"] = ctx
 
-    for blueprint in (route_health.bp, route_session.bp, route_auth.bp, route_admin.bp):
+    for blueprint in (
+        route_health.bp,
+        route_session.bp,
+        route_auth.bp,
+        route_feedback.bp,
+        route_admin.bp,
+    ):
         app.register_blueprint(blueprint, url_prefix=base or None)
 
     @app.get(f"{base}/")

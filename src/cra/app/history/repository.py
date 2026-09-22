@@ -8,6 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cra.app.history.tables import (
+    Feedback,
     Identity,
     PolicySetting,
     RegisteredEmail,
@@ -192,6 +193,50 @@ class Repository:
                 delete(PolicySetting).where(PolicySetting.key == key)
             )
             return result.rowcount == 1
+
+    # feedback
+
+    async def add_feedback(
+        self,
+        user_id: str,
+        category: str,
+        text: str,
+        model: str = "",
+        messages: list[Any] | None = None,
+    ) -> Feedback:
+        row = Feedback(
+            user_id=user_id,
+            created_at=utcnow(),
+            category=category,
+            text=text,
+            model=model,
+            messages=messages or [],
+        )
+        async with self._sessions() as s, s.begin():
+            s.add(row)
+        return row
+
+    async def list_feedback(
+        self, limit: int = 200
+    ) -> list[tuple[Feedback, str | None]]:
+        """Newest first, each with the name of whoever sent it."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(Feedback, User.display_name)
+                .join(User, User.id == Feedback.user_id, isouter=True)
+                .order_by(Feedback.created_at.desc(), Feedback.id.desc())
+                .limit(limit)
+            )
+            return [(row[0], row[1]) for row in rows]
+
+    async def delete_feedback(self, feedback_id: int) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(delete(Feedback).where(Feedback.id == feedback_id))
+            return result.rowcount == 1
+
+    async def count_feedback(self) -> int:
+        async with self._sessions() as s:
+            return len(list(await s.scalars(select(Feedback.id))))
 
     # web sessions
 

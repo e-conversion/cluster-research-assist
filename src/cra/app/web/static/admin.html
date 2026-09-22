@@ -32,6 +32,7 @@
   <nav class="tabs" id="tabs" role="tablist">
     <button type="button" role="tab" data-tab="accounts">Accounts</button>
     <button type="button" role="tab" data-tab="settings">Settings</button>
+    <button type="button" role="tab" data-tab="feedback">Feedback</button>
     <button type="button" role="tab" data-tab="library">Library</button>
   </nav>
 
@@ -56,6 +57,13 @@
     not settings: they live in the environment and need a restart.</p>
     <table><thead><tr><th>Setting</th><th>Value</th><th>Source</th><th></th></tr></thead>
     <tbody id="policy"></tbody></table>
+  </section>
+
+  <section id="tab-feedback" role="tabpanel" hidden>
+    <p class="desc">Bug reports and notes people sent, newest first. The conversation each was sent
+    from is attached; open a row to read it.</p>
+    <table><thead><tr><th>From</th><th>Kind</th><th>Note</th><th>When</th><th></th></tr></thead>
+    <tbody id="feedback"></tbody></table>
   </section>
 
   <section id="tab-library" role="tabpanel" hidden>

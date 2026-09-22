@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime
 from typing import Any, ClassVar
 
-from sqlalchemy import JSON, ForeignKey, String, UniqueConstraint
+from sqlalchemy import JSON, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -14,7 +14,7 @@ def new_id() -> str:
 
 
 class Base(DeclarativeBase):
-    type_annotation_map: ClassVar = {dict[str, Any]: JSON}
+    type_annotation_map: ClassVar = {dict[str, Any]: JSON, list[Any]: JSON}
 
 
 class User(Base):
@@ -69,6 +69,25 @@ class PolicySetting(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSON)
     updated_at: Mapped[datetime]
     updated_by: Mapped[str] = mapped_column(String(200))
+
+
+class Feedback(Base):
+    """A bug report or a note about an answer.
+
+    The conversation it was sent from is attached, so a report can be read
+    without asking the person what they had asked. It goes when the account
+    goes, which is what deleting an account promises.
+    """
+
+    __tablename__ = "feedback"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime]
+    category: Mapped[str] = mapped_column(String(40))
+    text: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(120), default="")
+    messages: Mapped[list[Any]] = mapped_column(default=list)
 
 
 class WebSession(Base):

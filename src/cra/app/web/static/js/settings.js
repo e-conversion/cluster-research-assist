@@ -78,7 +78,15 @@ async function submitFeedback() {
   const err = document.getElementById("feedback-error");
   if (!text) { err.textContent = "Add a note before submitting."; err.hidden = false; return; }
   try {
-    await postJSON("api/feedback", { category, text });
+    await postJSON("api/feedback", {
+      category,
+      text,
+      model: store.session?.model || "",
+      messages: (store.session?.messages || []).map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+    });
     document.getElementById("dlg-feedback").close();
     toast("Thanks — recorded.");
   } catch (e) { err.textContent = e.message; err.hidden = false; }

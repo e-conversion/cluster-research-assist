@@ -147,6 +147,34 @@ async def remove_email(email: str) -> Any:
     return {"ok": True}
 
 
+@bp.get("/api/admin/feedback")
+@requires_admin
+async def feedback() -> dict[str, Any]:
+    rows = await _ctx().repo.list_feedback()
+    return {
+        "feedback": [
+            {
+                "id": row.id,
+                "from": name or "a deleted account",
+                "created_at": row.created_at.isoformat(),
+                "category": row.category,
+                "text": row.text,
+                "model": row.model,
+                "messages": row.messages,
+            }
+            for row, name in rows
+        ]
+    }
+
+
+@bp.delete("/api/admin/feedback/<int:feedback_id>")
+@requires_admin
+async def delete_feedback(feedback_id: int) -> Any:
+    if not await _ctx().repo.delete_feedback(feedback_id):
+        return _bad("no such feedback", 404)
+    return {"ok": True}
+
+
 @bp.get("/api/admin/policy")
 @requires_admin
 async def get_policy() -> dict[str, Any]:
