@@ -198,6 +198,22 @@ def cmd_library_init_root(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_encoder_fetch(args: argparse.Namespace) -> int:
+    from cra.core.retrieval.encoder import fetch
+
+    settings = load_settings(args)
+    model = args.model or settings.encoder_model
+    path = Path(args.directory or settings.encoder_path or "encoder")
+    _out(f"downloading {model} into {path}")
+    try:
+        fetch(model, path, onnx_file=args.onnx_file)
+    except Exception as exc:  # noqa: BLE001 -- the hub raises a family of errors
+        sys.stderr.write(f"download failed: {exc}\n")
+        return 1
+    _out(f"set CRA_ENCODER_PATH={path}")
+    return 0
+
+
 # database
 
 
@@ -482,6 +498,23 @@ def build_parser() -> argparse.ArgumentParser:
         )
         p.add_argument("user_id")
         p.set_defaults(func=lambda a, role=role: cmd_users_set_role(a, role))
+
+    encoder = sub.add_parser("encoder", help="the query encoder").add_subparsers(
+        dest="encoder_command", metavar="<command>", required=True
+    )
+    fetch_parser = encoder.add_parser(
+        "fetch", help="download the model and its tokenizer"
+    )
+    fetch_parser.add_argument(
+        "directory", nargs="?", type=Path, help="default: CRA_ENCODER_PATH"
+    )
+    fetch_parser.add_argument("--model", help="default: CRA_ENCODER_MODEL")
+    fetch_parser.add_argument(
+        "--onnx-file",
+        default="onnx/model.onnx",
+        help="path to the ONNX file in the repository",
+    )
+    fetch_parser.set_defaults(func=cmd_encoder_fetch)
 
     policy = sub.add_parser("policy", help="operational settings admins may change")
     policy_sub = policy.add_subparsers(

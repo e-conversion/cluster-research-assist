@@ -5,7 +5,7 @@ import { chatView } from "./chat.js";
 import { initDialogs, toast } from "./settings.js";
 import { themeControl } from "./theme.js";
 import { libraryMapView } from "./views/publication-map.js";
-import { collaborationView } from "./views/collaboration.js";
+import { collaborationView } from "./views/collaboration-graph.js";
 
 export const store = {
   config: null,
@@ -100,7 +100,7 @@ async function boot() {
   const router = createRouter({
     "chat": chatView(store),
     "publication-map": libraryMapView(store),
-    "collaboration": collaborationView(store),
+    "collaboration-graph": collaborationView(store),
   }, { container: view, nav: document.getElementById("nav") });
   router.start();
 }

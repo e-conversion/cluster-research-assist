@@ -13,6 +13,8 @@ from cra.config.settings import Settings
 
 # read at import time: the autouse fixture below wipes CRA_ variables per test
 POSTGRES_URL = os.environ.get("CRA_TEST_POSTGRES_URL", "")
+# 19 real arXiv preprints; rebuilt by developer/make_toy_library.py, which needs
+# the network and the build extras and so is not part of the suite
 TOY_LIBRARY = Path(__file__).resolve().parent / "data" / "library"
 
 

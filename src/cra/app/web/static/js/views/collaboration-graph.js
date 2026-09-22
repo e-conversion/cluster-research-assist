@@ -11,7 +11,7 @@ export function collaborationView() {
             of collaborators, colored by institution), edges are shared papers (thicker = more). Click a PI to isolate
             who they publish with.</p>
         </div>
-        <div class="frame-fill"><iframe src="static/collaboration_map.html" title="Collaboration network" style="min-height:720px"></iframe></div>`;
+        <div class="frame-fill"><iframe src="static/collaboration_graph.html" title="Collaboration network" style="min-height:720px"></iframe></div>`;
       const f = container.querySelector("iframe");
       f.addEventListener("load", () => propagateTheme(f), { once: true });
     },

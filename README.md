@@ -54,6 +54,22 @@ cra library build          # projection and clusterings for the publication map
 cra library manifest       # refresh checksums and counts
 ```
 
+## Semantic search
+
+The library ships the paper vectors, so ranking needs no model. Only the query
+has to be encoded, and that one forward pass runs on onnxruntime rather than
+torch, which keeps a CUDA-capable tensor library out of an image that would
+never use it:
+
+```bash
+cra encoder fetch           # 127 MB into CRA_ENCODER_PATH
+```
+
+The model must be the one the library was built with; a mismatch is refused,
+because two models' vectors are not comparable even when the widths agree.
+Leaving `CRA_ENCODER_PATH` empty turns semantic search off and leaves keyword
+search, the publication map and everything else working.
+
 ## Who may do what
 
 Signing in is the rule. The landing page and the sign-in flow answer without an
