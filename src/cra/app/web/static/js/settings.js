@@ -178,8 +178,10 @@ export function renderSettingsRow(store, el) {
   const cfg = store.config;
   el.replaceChildren();
 
-  for (const [kind, src] of Object.entries(cfg.sources)) {
-    const conn = session.connected[kind] || { active: false, tools: 0 };
+  // Each part appears only once the server offers what it needs, so the row
+  // still carries the feedback button while the rest is being built.
+  for (const [kind, src] of Object.entries(cfg.sources || {})) {
+    const conn = (session.connected || {})[kind] || { active: false, tools: 0 };
     const b = document.createElement("button");
     b.type = "button";
     b.className = "chip" + (conn.active ? " on" : "");
@@ -189,6 +191,19 @@ export function renderSettingsRow(store, el) {
     el.append(b);
   }
 
+  if (Object.keys(cfg.providers || {}).length) el.append(modelPicker(store));
+
+  const spacer = document.createElement("span"); spacer.className = "spacer"; el.append(spacer);
+  const fb = document.createElement("button");
+  fb.type = "button"; fb.className = "chip"; fb.textContent = "Feedback";
+  fb.title = "Report a bug or leave a note about an answer";
+  fb.addEventListener("click", openFeedback);
+  el.append(fb);
+}
+
+function modelPicker(store) {
+  const session = store.session;
+  const cfg = store.config;
   const picker = document.createElement("details");
   picker.className = "picker";
   const label = session.auto_model ? `${session.provider} / auto (cheapest)` : `${session.provider} / ${session.model}`;
@@ -216,18 +231,10 @@ export function renderSettingsRow(store, el) {
     hint.textContent = "OpenRouter: without a pick, the cheapest model allowed by the account guardrails is used automatically.";
     menu.append(hint);
   }
-  const tools = session.tools;
+  const tools = session.tools || { local: 0 };
   const inv = document.createElement("div"); inv.className = "hint";
   inv.textContent = "Tools: " + [`${tools.local} local`]
     .concat(tools.elab ? [`${tools.elab} eLabFTW`] : [], tools.dt ? [`${tools.dt} DataTagger`] : []).join(" · ");
   menu.append(inv);
-  el.append(picker);
-  document.addEventListener("click", (ev) => { if (picker.open && !picker.contains(ev.target)) picker.open = false; });
-
-  const spacer = document.createElement("span"); spacer.className = "spacer"; el.append(spacer);
-  const fb = document.createElement("button");
-  fb.type = "button"; fb.className = "chip"; fb.textContent = "Feedback";
-  fb.title = "Bug report or note about the last answer";
-  fb.addEventListener("click", openFeedback);
-  el.append(fb);
+  return picker;
 }
