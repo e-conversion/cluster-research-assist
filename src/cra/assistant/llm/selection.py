@@ -135,22 +135,21 @@ async def available(
 
 async def resolve(
     settings: Settings,
-    catalogue: ModelCatalogue | None,
-    client: httpx.AsyncClient | None,
+    catalogue: ModelCatalogue | None = None,
+    client: httpx.AsyncClient | None = None,
     wanted: str = "",
     offered_models: list[str] | None = None,
 ) -> Choice:
-    """The model for one turn. An empty pick means the deployment's default, or
-    on OpenRouter the cheapest eligible model."""
-    available = offered(settings, offered_models)
-    if wanted and wanted in available:
+    """The model for one turn. An empty pick means the deployment's default,
+    or on OpenRouter the cheapest model that is good enough."""
+    choices = await available(settings, offered_models, catalogue, client)
+    if wanted and wanted in choices:
         return Choice(wanted, automatic=False)
     if not is_openrouter(settings):
         return Choice(
-            settings.llm_model or (available[0] if available else ""), automatic=False
+            settings.llm_model or (choices[0] if choices else ""), automatic=False
         )
-    if catalogue is not None and client is not None:
-        cheapest = await catalogue.cheapest_first(client)
-        if cheapest:
-            return Choice(cheapest[0], automatic=True)
+    if choices and choices[0] != settings.llm_model:
+        # the catalogue answered, and it is ordered cheapest first
+        return Choice(choices[0], automatic=True)
     return Choice(settings.llm_model, automatic=bool(settings.llm_model))

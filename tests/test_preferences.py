@@ -273,3 +273,47 @@ async def test_a_named_list_is_the_whole_choice(tmp_path):
 
     settings = make_settings(tmp_path, llm_models=MODELS, llm_model=MODELS[0])
     assert await available(settings, MODELS) == MODELS
+
+
+@respx.mock
+async def test_a_model_from_the_catalogue_can_be_chosen(tmp_path):
+    """Choosing one must beat the automatic pick, or the picker is decoration."""
+    settings = make_settings(
+        tmp_path,
+        llm_provider="openrouter",
+        llm_base_url="https://openrouter.test/api/v1",
+        llm_api_key="a-key",
+        llm_model="fallback/model",
+        llm_models=[],
+    )
+    entry = {
+        "pricing": {"prompt": "0.0000002", "completion": "0.0000002"},
+        "benchmarks": {"artificial_analysis": {"intelligence_index": 50}},
+        "supported_parameters": ["tools"],
+    }
+    respx.get("https://openrouter.test/api/v1/models/user").mock(
+        return_value=httpx.Response(
+            200, json={"data": [{"id": "a/cheap"}, {"id": "b/dearer"}]}
+        )
+    )
+    respx.get("https://openrouter.test/api/v1/models").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        **entry,
+                        "id": "b/dearer",
+                        "pricing": {"prompt": "0.0000009", "completion": "0.0000009"},
+                    },
+                    {**entry, "id": "a/cheap"},
+                ]
+            },
+        )
+    )
+    async with httpx.AsyncClient() as http:
+        catalogue = ModelCatalogue(settings)
+        automatic = await resolve(settings, catalogue, http)
+        picked = await resolve(settings, catalogue, http, wanted="b/dearer")
+    assert (automatic.model, automatic.automatic) == ("a/cheap", True)
+    assert (picked.model, picked.automatic) == ("b/dearer", False)
