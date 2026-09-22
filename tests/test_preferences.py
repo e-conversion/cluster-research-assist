@@ -154,7 +154,10 @@ async def test_openrouter_picks_the_cheapest_model_that_can_call_tools(tmp_path)
     good = {
         "id": "cheap/model",
         "pricing": {"prompt": "0.0000002", "completion": "0.0000002"},
-        "benchmarks": {"artificial_analysis": {"agentic_index": 40}},
+        # most models carry only the intelligence index, so one of the two is enough
+        "benchmarks": {
+            "artificial_analysis": {"agentic_index": None, "intelligence_index": 40}
+        },
         "supported_parameters": ["tools"],
     }
     respx.get("https://openrouter.test/api/v1/models/user").mock(
@@ -181,6 +184,12 @@ async def test_openrouter_picks_the_cheapest_model_that_can_call_tools(tmp_path)
                     },
                     good,
                     {**good, "id": "no/tools", "supported_parameters": []},
+                    {
+                        **good,
+                        "id": "unbenchmarked/model",
+                        "pricing": {"prompt": "0.0000001", "completion": "0.0000001"},
+                        "benchmarks": {},
+                    },
                     {**good, "id": "free/model:free"},
                 ]
             },
@@ -188,6 +197,7 @@ async def test_openrouter_picks_the_cheapest_model_that_can_call_tools(tmp_path)
     )
     async with httpx.AsyncClient() as http:
         choice = await resolve(settings, ModelCatalogue(settings), http)
+    # unbenchmarked/model is cheaper but nothing says it can do the job
     assert choice.model == "cheap/model"
     assert choice.automatic is True
 

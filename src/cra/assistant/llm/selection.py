@@ -49,15 +49,15 @@ class ModelCatalogue:
         cap = self._settings.openrouter_max_price_per_mtok / 1_000_000
         if prompt < 0 or completion < 0 or prompt > cap or completion > cap:
             return False
-        benchmarks = (model.get("benchmarks") or {}).get("artificial_analysis") or {}
-        try:
-            agentic = float(benchmarks.get("agentic_index") or 0)
-        except (TypeError, ValueError):
+        # the assistant answers by calling tools, so one that cannot is useless
+        if "tools" not in (model.get("supported_parameters") or []):
             return False
-        # the assistant answers by calling tools, so a model that cannot is useless
-        return agentic >= self._settings.openrouter_min_agentic_index and "tools" in (
-            model.get("supported_parameters") or []
-        )
+        # Cheapest-first without a quality floor would pick something unusable.
+        # Most models carry only one of the two indices, so either will do.
+        benchmarks = (model.get("benchmarks") or {}).get("artificial_analysis") or {}
+        scores = [benchmarks.get("agentic_index"), benchmarks.get("intelligence_index")]
+        best = max((float(s) for s in scores if s is not None), default=0.0)
+        return best >= self._settings.openrouter_min_agentic_index
 
     async def cheapest_first(self, client: httpx.AsyncClient) -> list[str]:
         key = self._settings.llm_api_key.get_secret_value()

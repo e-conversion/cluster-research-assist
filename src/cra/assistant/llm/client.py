@@ -17,12 +17,7 @@ from cra.config.settings import Settings
 
 log = logging.getLogger(__name__)
 
-# A gateway that stops sending for this long is hung, not thinking.
-READ_TIMEOUT_S = 120.0
 CONNECT_TIMEOUT_S = 15.0
-# The endpoint returns an immediate 500 often enough that a turn would
-# otherwise fail for no reason; these are cheap because they fail fast.
-RETRIES = 5
 
 # Endpoints that answered a usage request with an error. Module level because
 # it is a fact about a URL, not about a user, and it carries no user data.
@@ -31,11 +26,17 @@ _lock = threading.Lock()
 
 
 def make_client(settings: Settings) -> openai.AsyncOpenAI:
+    """A client that gives up rather than waiting forever.
+
+    Some gateways answer a share of requests with an immediate error, which a
+    retry fixes, and hang on others, which only a timeout ends. The two
+    together bound how long someone waits: retries times the timeout.
+    """
     return openai.AsyncOpenAI(
         api_key=settings.llm_api_key.get_secret_value(),
         base_url=settings.llm_base_url,
-        max_retries=RETRIES,
-        timeout=httpx.Timeout(READ_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),
+        max_retries=settings.llm_retries,
+        timeout=httpx.Timeout(settings.llm_timeout_s, connect=CONNECT_TIMEOUT_S),
     )
 
 

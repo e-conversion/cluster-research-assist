@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_models: CommaList = []
     llm_max_tool_rounds: int = Field(default=10, ge=1)
+    # a stream that sends nothing for this long is hung, not thinking
+    llm_timeout_s: float = Field(default=90.0, gt=0)
+    llm_retries: int = Field(default=3, ge=0)
     llm_max_tokens: int = Field(default=8192, ge=1)
     llm_max_context_tokens: int = Field(default=64000, ge=1)
     openrouter_max_price_per_mtok: float = Field(default=1.0, ge=0)
