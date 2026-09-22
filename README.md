@@ -26,11 +26,25 @@ cra serve
 
 ## The library bundle
 
-`CRA_LIBRARY_PATH` points at a directory holding the library: `papers.csv` is
-required, and each of `abstracts.json`, `fulltexts.json`, `pis.json`,
-`embeddings.npz`, `graph.json`, `proposal.md` and `publication_map.json` switches on
-the tools that need it. `manifest.json` records a checksum per file and the
-expected counts; `cra serve` refuses a bundle that does not match it.
+`CRA_LIBRARY_PATH` points at the library: `papers.csv` is required, and each of
+`abstracts.json`, `fulltexts.json`, `pis.json`, `embeddings.npz`, `graph.json`,
+`proposal.md` and `publication_map.json` switches on the tools that need it.
+`manifest.json` records a checksum per file and the expected counts; `cra serve`
+refuses a bundle that does not match it.
+
+The path may name either a plain bundle, which nothing can write to, or a
+versioned root, which an admin can replace while the service runs:
+
+```bash
+cra library init-root        # versions/<timestamp>/ plus a `current` link
+cra library versions
+cra library activate <version>
+```
+
+With a root, the console takes an uploaded bundle, unpacks it beside the live
+one, verifies it in full, and only then moves the link, in one atomic step. A
+bad upload leaves the running service untouched, and the previous versions stay,
+so rolling back is moving the link again.
 
 Everything expensive is computed when the bundle is built, never while serving:
 

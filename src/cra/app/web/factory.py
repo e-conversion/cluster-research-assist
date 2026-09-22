@@ -60,6 +60,7 @@ def make_provider(
 def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     base = settings.base_path
     app = Quart("cra", static_folder=str(STATIC_DIR), static_url_path=f"{base}/static")
+    app.config["MAX_CONTENT_LENGTH"] = settings.library_max_upload_mb * 1024 * 1024
     engine = engine or make_engine(settings.history_url)
     repo = Repository(make_session_factory(engine))
     http = httpx.AsyncClient(timeout=HTTP_TIMEOUT)

@@ -165,6 +165,8 @@ async function loadPolicy() {
   }
 }
 
+const megabytes = (n) => `${(n / 1e6).toFixed(1)} MB`;
+
 async function loadLibrary() {
   const info = await getJSON("api/admin/library");
   const counts = Object.entries(info.counts)
@@ -173,8 +175,48 @@ async function loadLibrary() {
   const built = info.manifest ? info.manifest.built_at : "unknown";
   $("library").replaceChildren(
     el("div", null, counts || "no library loaded"),
-    el("div", "desc", `${info.path} · built ${built}`),
+    el("div", "desc", `${info.active || info.path} · built ${built}`),
   );
+
+  $("versions-table").hidden = !info.updatable;
+  $("upload-form").hidden = !info.updatable;
+  const hint = $("upload-hint");
+  hint.hidden = false;
+  hint.textContent = info.updatable
+    ? `A bundle is verified in full before it replaces the live one, and the previous versions stay so you can switch back. Up to ${info.max_upload_mb} MB.`
+    : "This deployment points at a fixed library directory. Run `cra library init-root` to make it updatable.";
+
+  const body = $("versions");
+  body.replaceChildren();
+  for (const v of info.versions) {
+    const row = el("tr");
+    row.append(el("td", null, v.name));
+    row.append(el("td", "desc", megabytes(v.bytes)));
+    row.append(el("td", "desc", v.active ? "live" : ""));
+    const actions = el("td", "actions");
+    if (!v.active) {
+      actions.append(
+        button("Switch to this", "ghost", () =>
+          guard(async () => {
+            await postJSON(`api/admin/library/${encodeURIComponent(v.name)}/activate`);
+            toast(`now serving ${v.name}`);
+            await loadLibrary();
+          }),
+        ),
+      );
+    }
+    row.append(actions);
+    body.append(row);
+  }
+}
+
+async function uploadLibrary(file) {
+  const form = new FormData();
+  form.append("bundle", file);
+  const res = await fetch("api/admin/library", { method: "POST", body: form });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || res.statusText);
+  return data;
 }
 
 async function boot() {
@@ -186,6 +228,23 @@ async function boot() {
     return;
   }
   await guard(() => Promise.all([loadUsers(), loadEmails(), loadPolicy(), loadLibrary()]));
+  $("upload-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const file = $("bundle-input").files[0];
+    if (!file) return;
+    const submit = ev.target.querySelector("button");
+    submit.disabled = true;
+    submit.textContent = "Uploading…";
+    guard(async () => {
+      const r = await uploadLibrary(file);
+      toast(`now serving ${r.version}: ${r.counts.papers} papers`);
+      $("bundle-input").value = "";
+      await loadLibrary();
+    }).finally(() => {
+      submit.disabled = false;
+      submit.textContent = "Upload and activate";
+    });
+  });
   $("email-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
     guard(async () => {

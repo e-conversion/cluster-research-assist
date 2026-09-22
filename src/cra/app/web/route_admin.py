@@ -1,5 +1,10 @@
 """The admin console: accounts, the sign-in allow-list, and policy."""
 
+import asyncio
+import logging
+import tarfile
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from quart import Blueprint, current_app, g, request
@@ -7,6 +12,10 @@ from quart import Blueprint, current_app, g, request
 from cra.app.auth.principal import Role
 from cra.app.policy import KEYS, PolicyError
 from cra.app.web.access import requires_admin
+from cra.core.library import versions as versioning
+from cra.core.library.library import Library, LibraryError
+
+log = logging.getLogger(__name__)
 
 bp = Blueprint("admin", __name__)
 
@@ -149,9 +158,102 @@ async def library() -> dict[str, Any]:
 
     ctx = _ctx()
     loaded = ctx.library
+    root = ctx.settings.library_path
     return {
-        "path": str(ctx.settings.library_path),
+        "path": str(root),
+        "active": str(loaded.path) if loaded else None,
         "counts": loaded.counts if loaded else {},
         "available": loaded.available if loaded else {},
-        "manifest": manifest_.read(ctx.settings.library_path) if loaded else None,
+        "manifest": manifest_.read(loaded.path) if loaded else None,
+        "updatable": versioning.writable(root),
+        "max_upload_mb": ctx.settings.library_max_upload_mb,
+        "versions": [
+            {"name": v.name, "active": v.active, "bytes": v.bytes}
+            for v in versioning.versions(root)
+        ],
     }
+
+
+@bp.post("/api/admin/library")
+@requires_admin
+async def upload_library() -> Any:
+    """Install an uploaded bundle beside the live one and switch to it.
+
+    The new version is verified in full before anything moves, so a bad upload
+    leaves the running service untouched.
+    """
+    ctx = _ctx()
+    root = Path(ctx.settings.library_path)
+    if not versioning.writable(root):
+        return _bad(
+            "this deployment points at a fixed bundle; "
+            "run `cra library init-root` to make it updatable",
+            409,
+        )
+    files = await request.files
+    upload = files.get("bundle")
+    if upload is None:
+        return _bad("attach the bundle as the form field 'bundle'")
+
+    with tempfile.TemporaryDirectory() as staging:
+        archive = Path(staging) / "bundle.tar.gz"
+        await upload.save(str(archive))
+        try:
+            installed = await asyncio.to_thread(versioning.unpack, archive, root)
+        except (versioning.LibraryLayoutError, tarfile.TarError, OSError) as exc:
+            log.warning(
+                "library upload rejected", extra={"fields": {"error": str(exc)}}
+            )
+            return _bad(f"the archive could not be unpacked: {exc}")
+
+    try:
+        library = await asyncio.to_thread(
+            Library.load, installed, required_schema=ctx.settings.library_require_schema
+        )
+    except LibraryError as exc:
+        await asyncio.to_thread(_discard, installed)
+        return _bad(str(exc))
+
+    await asyncio.to_thread(versioning.activate, root, installed.name)
+    ctx.library = library
+    await asyncio.to_thread(versioning.prune, root, ctx.settings.library_keep_versions)
+    log.info(
+        "library replaced",
+        extra={
+            "fields": {
+                "version": installed.name,
+                "by": g.principal.user_id,
+                **library.counts,
+            }
+        },
+    )
+    return {"version": installed.name, "counts": library.counts}
+
+
+@bp.post("/api/admin/library/<version>/activate")
+@requires_admin
+async def activate_library(version: str) -> Any:
+    ctx = _ctx()
+    root = Path(ctx.settings.library_path)
+    if not versioning.writable(root):
+        return _bad("this deployment points at a fixed bundle", 409)
+    target = root / versioning.VERSIONS / version
+    try:
+        library = await asyncio.to_thread(
+            Library.load, target, required_schema=ctx.settings.library_require_schema
+        )
+        await asyncio.to_thread(versioning.activate, root, version)
+    except (versioning.LibraryLayoutError, LibraryError) as exc:
+        return _bad(str(exc), 404 if not target.exists() else 400)
+    ctx.library = library
+    log.info(
+        "library version activated",
+        extra={"fields": {"version": version, "by": g.principal.user_id}},
+    )
+    return {"version": version, "counts": library.counts}
+
+
+def _discard(path: Path) -> None:
+    import shutil
+
+    shutil.rmtree(path, ignore_errors=True)

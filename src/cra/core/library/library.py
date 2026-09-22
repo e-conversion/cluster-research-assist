@@ -25,6 +25,7 @@ from cra.core.library.records import (
     PublicationMap,
     normalise_doi,
 )
+from cra.core.library.versions import resolve
 
 log = logging.getLogger(__name__)
 
@@ -70,9 +71,11 @@ class Library:
     def load(
         cls, path: Path, *, verify: bool = True, required_schema: str = "1.x"
     ) -> "Library":
-        path = Path(path)
-        if not path.is_dir():
-            raise LibraryError(f"library directory {path} does not exist")
+        configured = Path(path)
+        if not configured.is_dir():
+            raise LibraryError(f"library directory {configured} does not exist")
+        # the configured path may be a bundle or a root holding versions
+        path = resolve(configured)
         if verify:
             problems = manifest_.check(path, required_schema)
             if problems:

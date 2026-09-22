@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import shutil
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -135,6 +136,65 @@ def cmd_library_manifest(args: argparse.Namespace) -> int:
         directory, library.counts, embedding_model=model, builder=f"cra {__version__}"
     )
     _out(f"wrote {directory / manifest.MANIFEST}")
+    return 0
+
+
+def cmd_library_versions(args: argparse.Namespace) -> int:
+    from cra.core.library import versions as versioning
+
+    settings = load_settings(args)
+    root = Path(args.directory or settings.library_path)
+    found = versioning.versions(root)
+    if not found:
+        sys.stderr.write(f"{root} holds no versions; see `cra library init-root`\n")
+        return 1
+    for version in found:
+        marker = "*" if version.active else " "
+        _out(f"{marker} {version.name:24} {version.bytes / 1e6:7.1f} MB")
+    return 0
+
+
+def cmd_library_activate(args: argparse.Namespace) -> int:
+    from cra.core.library import versions as versioning
+    from cra.core.library.library import Library, LibraryError
+
+    settings = load_settings(args)
+    root = Path(args.directory or settings.library_path)
+    target = root / versioning.VERSIONS / args.version
+    try:
+        Library.load(target, required_schema=settings.library_require_schema)
+        versioning.activate(root, args.version)
+    except (versioning.LibraryLayoutError, LibraryError) as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    _out(f"active version is now {args.version}")
+    return 0
+
+
+def cmd_library_init_root(args: argparse.Namespace) -> int:
+    """Turn a plain bundle into a root that can be updated while serving."""
+    from cra.core.library import versions as versioning
+
+    settings = load_settings(args)
+    root = Path(args.directory or settings.library_path)
+    bundle = Path(args.bundle) if args.bundle else root
+    if versioning.is_root(root) and not args.bundle:
+        sys.stderr.write(f"{root} is already a versioned root\n")
+        return 1
+    try:
+        if bundle == root:
+            # move the bundle aside so the root can hold it as its first version
+            staging = root.parent / f".{root.name}-bundle"
+            root.rename(staging)
+            root.mkdir()
+            active = versioning.init_root(root, staging)
+            shutil.rmtree(staging)
+        else:
+            active = versioning.init_root(root, bundle)
+    except (versioning.LibraryLayoutError, OSError) as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    _out(f"{root} is a versioned root; active version {active.name}")
     return 0
 
 
@@ -356,12 +416,31 @@ def build_parser() -> argparse.ArgumentParser:
             cmd_library_manifest,
             "write manifest.json for a library directory",
         ),
+        ("versions", cmd_library_versions, "list the installed versions"),
     ):
         p = library.add_parser(name, help=help_text)
         p.add_argument(
             "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
         )
         p.set_defaults(func=func)
+
+    activate = library.add_parser("activate", help="switch to an installed version")
+    activate.add_argument("version")
+    activate.add_argument(
+        "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
+    )
+    activate.set_defaults(func=cmd_library_activate)
+
+    init_root = library.add_parser(
+        "init-root", help="turn a bundle directory into a root that can be updated"
+    )
+    init_root.add_argument(
+        "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
+    )
+    init_root.add_argument(
+        "--bundle", type=Path, help="install this bundle as the first version"
+    )
+    init_root.set_defaults(func=cmd_library_init_root)
 
     db = sub.add_parser("db", help="database schema").add_subparsers(
         dest="db_command", metavar="<command>", required=True

@@ -154,3 +154,146 @@ def test_policy_rejects_unknown_keys_outside_the_registry(tmp_path):
     policy = Policy(make_settings(tmp_path))
     with pytest.raises(PolicyError, match="unknown setting"):
         policy.set("nope", 1)
+
+
+# --- replacing the library while the service runs ---------------------------
+
+
+@pytest.fixture
+async def updatable(tmp_path):
+    """An admin session whose library is a versioned root."""
+    from library_builder import write_library
+
+    from cra.core.library.versions import init_root
+
+    root = tmp_path / "library"
+    init_root(root, write_library(tmp_path / "bundle"))
+    app = create_app(
+        make_settings(
+            tmp_path, library_path=root, auth_dev_user="root", auth_admins=["root"]
+        )
+    )
+    async with app.test_app():
+        client = app.test_client()
+        await client.get("/auth/login")
+        yield app, client, root
+
+
+def tarball(directory, path):
+    import tarfile
+
+    with tarfile.open(path, "w:gz") as tar:
+        tar.add(directory, arcname=".")
+    return path
+
+
+async def upload(client, path):
+    from quart.datastructures import FileStorage
+
+    with path.open("rb") as handle:
+        storage = FileStorage(handle, filename="bundle.tar.gz")
+        return await client.post("/api/admin/library", files={"bundle": storage})
+
+
+async def test_a_fixed_bundle_reports_that_it_cannot_be_updated(admin):
+    body = await json_of(await admin.get("/api/admin/library"))
+    assert body["updatable"] is False
+    assert body["versions"] == []
+    assert body["counts"]["papers"] == 19
+
+
+async def test_a_root_lists_its_versions(updatable):
+    _, client, _ = updatable
+    body = await json_of(await client.get("/api/admin/library"))
+    assert body["updatable"] is True
+    assert [v["active"] for v in body["versions"]] == [True]
+
+
+async def test_uploading_a_bundle_replaces_the_live_library(updatable, tmp_path):
+    from library_builder import PAPERS, write_library
+
+    app, client, _ = updatable
+    smaller = write_library(tmp_path / "smaller")
+    (smaller / "pis.json").write_text("[]")
+    import json as json_module
+
+    manifest = json_module.loads((smaller / "manifest.json").read_text())
+    manifest["counts"]["pis"] = 0
+    (smaller / "manifest.json").write_text(json_module.dumps(manifest))
+    from cra.core.library import manifest as manifest_
+
+    manifest_.write(smaller, manifest["counts"])
+
+    response = await upload(client, tarball(smaller, tmp_path / "new.tar.gz"))
+    body = await json_of(response)
+    assert response.status_code == 200
+    assert body["counts"]["pis"] == 0
+    assert body["counts"]["papers"] == len(PAPERS)
+
+    # the running application serves the new one without a restart
+    assert app.extensions["cra"].library.counts["pis"] == 0
+    health = await json_of(await client.get("/api/health"))
+    assert health["library"]["pis"] == 0
+
+    listing = await json_of(await client.get("/api/admin/library"))
+    assert [v["name"] for v in listing["versions"] if v["active"]] == [body["version"]]
+    assert len(listing["versions"]) == 2
+
+
+async def test_a_broken_upload_leaves_the_running_library_alone(updatable, tmp_path):
+    from library_builder import write_library
+
+    app, client, _ = updatable
+    before = app.extensions["cra"].library.counts
+    # a bundle whose manifest no longer matches its contents
+    broken = write_library(tmp_path / "broken")
+    (broken / "pis.json").write_text('[{"smid": "9"}]')
+
+    response = await upload(client, tarball(broken, tmp_path / "broken.tar.gz"))
+    assert response.status_code == 400
+    assert app.extensions["cra"].library.counts == before
+    listing = await json_of(await client.get("/api/admin/library"))
+    assert len(listing["versions"]) == 1, "a rejected upload leaves no version behind"
+
+
+async def test_an_archive_without_a_bundle_is_refused(updatable, tmp_path):
+    _, client, _ = updatable
+    junk = tmp_path / "junk"
+    junk.mkdir()
+    (junk / "readme.txt").write_text("nothing here")
+    response = await upload(client, tarball(junk, tmp_path / "junk.tar.gz"))
+    assert response.status_code == 400
+    assert "unpacked" in (await json_of(response))["error"]
+
+
+async def test_rolling_back_to_an_earlier_version(updatable, tmp_path):
+    _, client, _ = updatable
+    first = (await json_of(await client.get("/api/admin/library")))["versions"][0][
+        "name"
+    ]
+    from library_builder import write_library
+
+    await upload(
+        client, tarball(write_library(tmp_path / "second"), tmp_path / "s.tar.gz")
+    )
+
+    response = await client.post(f"/api/admin/library/{first}/activate")
+    assert response.status_code == 200
+    assert (await json_of(response))["version"] == first
+    listing = await json_of(await client.get("/api/admin/library"))
+    assert [v["name"] for v in listing["versions"] if v["active"]] == [first]
+
+
+async def test_activating_an_unknown_version_is_a_404(updatable):
+    _, client, _ = updatable
+    assert (await client.post("/api/admin/library/nope/activate")).status_code == 404
+
+
+async def test_uploading_to_a_fixed_bundle_is_refused(admin, tmp_path):
+    from library_builder import write_library
+
+    response = await upload(
+        admin, tarball(write_library(tmp_path / "b"), tmp_path / "b.tar.gz")
+    )
+    assert response.status_code == 409
+    assert "init-root" in (await json_of(response))["error"]

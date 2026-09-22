@@ -47,6 +47,7 @@ ADMIN_ROUTES = {
     "/api/admin/policy",
     "/api/admin/policy/<key>",
     "/api/admin/library",
+    "/api/admin/library/<version>/activate",
 }
 
 

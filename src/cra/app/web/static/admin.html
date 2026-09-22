@@ -50,6 +50,13 @@
   <section>
     <h2>Library</h2>
     <div id="library" class="desc">Loading…</div>
+    <table id="versions-table" hidden><thead><tr><th>Version</th><th>Size</th><th>State</th><th></th></tr></thead>
+    <tbody id="versions"></tbody></table>
+    <form class="row-form" id="upload-form" hidden>
+      <input type="file" id="bundle-input" accept=".tar.gz,.tgz,application/gzip" required>
+      <button class="btn primary" type="submit">Upload and activate</button>
+    </form>
+    <p class="desc" id="upload-hint" hidden></p>
   </section>
 </main>
 
