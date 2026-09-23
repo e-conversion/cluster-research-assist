@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ENV_PREFIX = "CRA_"
 REDACTED = "***"
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 
 
 def _split_commas(value: Any) -> Any:
@@ -43,7 +44,10 @@ class Settings(BaseSettings):
     port: int = Field(default=8000, ge=1, le=65535)
     base_path: str = ""
     cookie_secure: bool = True
+    # a session ends after this long unused, and unconditionally after
+    # session_absolute_hours, however busy it is
     session_max_age_hours: float = Field(default=12, gt=0)
+    session_absolute_hours: float = Field(default=168, gt=0)
 
     # library
     library_path: Path
@@ -79,10 +83,16 @@ class Settings(BaseSettings):
 
     # auth
     auth_provider: Literal["dev", "oidc"] = "dev"
-    # addresses that are made admin when they sign in; never demotes anyone
+    # addresses that are made admin the first time they bind an identity;
+    # never demotes anyone, and never consulted again for a bound identity
     auth_admins: CommaList = []
+    # home organisations (schacHomeOrganization) an invitation may be claimed
+    # from; empty accepts any identity provider in the federation
+    auth_home_organizations: CommaList = []
     auth_dev_user: str = ""
     auth_user_header: str = ""
+    # the dev provider signs anyone in: off a loopback address it needs this
+    auth_dev_insecure: bool = False
     auth_admin_contact: str = ""
     oidc_issuer: str = ""
     oidc_client_id: str = ""
@@ -91,13 +101,15 @@ class Settings(BaseSettings):
     oidc_scopes: str = "openid email profile"
 
     # questions per signed-in user per day; 0 removes the limit
-    user_chat_daily_limit: int = Field(default=0, ge=0)
+    user_chat_daily_limit: int = Field(default=200, ge=0)
 
     # outward MCP surface, opt-in: it needs a reachable URL and a token secret
     mcp_server_enabled: bool = False
     mcp_server_path: str = "/mcp"
     mcp_server_require_token: bool = True
     mcp_server_rate_limit: int = Field(default=60, ge=1)
+    # Host values the endpoint answers to; empty turns DNS-rebinding checks off
+    mcp_server_allowed_hosts: CommaList = []
     mcp_token_secret: SecretStr = SecretStr("")
 
     # history
@@ -113,6 +125,9 @@ class Settings(BaseSettings):
     mcp_datatagger_register_url: str = ""
     mcp_datatagger_base_url: str = ""
     mcp_pool_idle_s: float = Field(default=600, gt=0)
+    # offer remote tools that change data (eLN writes) to the model; off, only
+    # tools declared or named read-only are listed
+    remote_write_tools: bool = False
 
     # connectors
     nomad_base_url: str = "https://nomad-lab.eu/prod/v1/api/v1"
@@ -136,6 +151,15 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_cross_field(self) -> "Settings":
+        if (
+            self.auth_provider == "dev"
+            and self.host not in LOOPBACK_HOSTS
+            and not self.auth_dev_insecure
+        ):
+            raise ValueError(
+                f"auth_provider=dev signs anyone in; on host {self.host!r} it needs "
+                "CRA_AUTH_DEV_INSECURE=true (or CRA_AUTH_PROVIDER=oidc)"
+            )
         if self.auth_provider == "oidc":
             missing = [
                 name

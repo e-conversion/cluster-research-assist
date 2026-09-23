@@ -11,6 +11,7 @@ from cra.assistant.chat.orchestrator import (
     ANSWER_NOW,
     LIMIT_REACHED,
     ThinkSplitter,
+    framed,
     run_turn,
 )
 
@@ -80,11 +81,14 @@ async def test_a_tool_is_called_and_its_result_goes_back():
     # the second round sees the call and its result
     second = client.calls[1]["messages"]
     assert second[-2]["tool_calls"][0]["function"]["name"] == "search_papers"
+    # the result reaches the model framed as data, never as bare text it
+    # might take instructions from
     assert second[-1] == {
         "role": "tool",
         "tool_call_id": "c1",
-        "content": '{"papers": 2}',
+        "content": framed('{"papers": 2}'),
     }
+    assert "not instructions" in second[-1]["content"]
 
 
 async def test_what_the_model_says_between_tool_calls_is_not_the_answer():

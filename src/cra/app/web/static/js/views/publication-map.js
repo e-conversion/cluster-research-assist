@@ -2,12 +2,15 @@
 import { getJSON } from "../api.js";
 
 const DECK_URL = "https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js";
+// pinned build; bump both together
+const DECK_INTEGRITY = "sha384-tEG529toczQRv/bqd2PyHy5vTO49FMjQri0c1oB44gSkYiNouZz8L9yNTVx0YGl+";
 let deckLoading = null;
 function loadDeck() {
   if (window.deck) return Promise.resolve();
   if (!deckLoading) deckLoading = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = DECK_URL; s.onload = resolve; s.onerror = () => reject(new Error("deck.gl failed to load"));
+    s.src = DECK_URL; s.integrity = DECK_INTEGRITY; s.crossOrigin = "anonymous";
+    s.onload = resolve; s.onerror = () => reject(new Error("deck.gl failed to load"));
     document.head.append(s);
   });
   return deckLoading;

@@ -59,7 +59,7 @@ def test_every_tool_is_registered_with_a_tier(registry):
         "list_papers": Tier.PUBLIC,
         "list_pis": Tier.PUBLIC,
         "most_collaborative_papers": Tier.PUBLIC,
-        "search_fulltext": Tier.PUBLIC,
+        "search_fulltext": Tier.INTERNAL,
         "search_nomad": Tier.PUBLIC,
         "search_papers": Tier.PUBLIC,
         "search_pis": Tier.PUBLIC,
@@ -67,12 +67,12 @@ def test_every_tool_is_registered_with_a_tier(registry):
     }
 
 
-def test_the_two_things_that_stay_inside_are_internal(registry):
+def test_everything_that_touches_the_full_texts_is_internal(registry):
     public = {spec.name for spec in registry.specs(Tier.PUBLIC)}
     assert "get_paper_fulltext" not in public
     assert "get_proposal_fulltext" not in public
-    assert "search_fulltext" in public, (
-        "searching inside the text is public, reading it is not"
+    assert "search_fulltext" not in public, (
+        "passages around a query reconstruct the text, one query at a time"
     )
 
 

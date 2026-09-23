@@ -1,6 +1,8 @@
 from datetime import timedelta
 
-from cra.app.history.repository import utcnow
+import pytest
+
+from cra.app.history.repository import utcnow, valid_email
 
 
 async def test_registered_emails_are_normalised(repo):
@@ -65,3 +67,23 @@ async def test_session_data_and_user_are_updated(repo):
     assert row.data == {"oidc": {"state": "x"}}
     await repo.delete_session("sid")
     assert await repo.get_session("sid") is None
+
+
+@pytest.mark.parametrize(
+    ("address", "ok"),
+    [
+        ("Ada@Example.org", True),
+        ("ab12cde@mytum.de", True),
+        ("first.last+tag@sub.uni.de", True),
+        ("ada", False),
+        ("ada@localhost", False),
+        ("a@b@c.de", False),
+        ("ada@exämple.de", False),
+        ('"ada l"@example.org', False),
+        ("ada@example.org (comment)", False),
+        ("ada..l@example.org", False),
+        ("", False),
+    ],
+)
+def test_only_plain_addresses_can_be_invited(address, ok):
+    assert valid_email(address) is ok

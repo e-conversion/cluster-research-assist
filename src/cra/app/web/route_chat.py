@@ -67,10 +67,16 @@ async def paced(
 
 
 async def _conversation(ctx: Any, session: Any, principal: Any) -> str:
-    """The conversation this session is in, started on first use."""
+    """The conversation this session is in, started on first use.
+
+    The session is trusted for the id only, never for who may continue it:
+    the conversation has to belong to the principal, or a fresh one starts.
+    """
     known = session.data.get("conversation")
-    if known and await ctx.repo.get_conversation(known):
-        return str(known)
+    if known:
+        found = await ctx.repo.get_conversation(str(known))
+        if found is not None and found.user_id == principal.user_id:
+            return str(known)
     created = await ctx.repo.create_conversation(principal.user_id)
     session.data = {**session.data, "conversation": created.id}
     await ctx.sessions.save(session)

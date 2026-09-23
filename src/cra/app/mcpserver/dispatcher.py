@@ -15,6 +15,7 @@ import logging
 from typing import Any
 
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.server.transport_security import TransportSecuritySettings
 from quart import Quart
 
 from cra.app.auth import tokens
@@ -34,7 +35,10 @@ class Dispatcher:
         # stateless: every request stands on its own, so nothing has to be
         # remembered between them and a restart costs a caller nothing
         self._manager = StreamableHTTPSessionManager(
-            facade.build(ctx), stateless=True, json_response=True
+            facade.build(ctx),
+            stateless=True,
+            json_response=True,
+            security_settings=_security(ctx.settings.mcp_server_allowed_hosts),
         )
 
     async def __call__(self, scope: dict, receive: Any, send: Any) -> None:
@@ -98,17 +102,34 @@ def _stamped(scope: dict, subject: str) -> dict:
     return {**scope, "headers": headers}
 
 
+def _security(allowed_hosts: list[str]) -> TransportSecuritySettings | None:
+    """Host and Origin checks against DNS rebinding, when the deployment says
+    what it is called; a browser page on another site must not be able to
+    reach this endpoint through the caller's own resolver."""
+    if not allowed_hosts:
+        return None
+    hosts = [h.strip() for h in allowed_hosts if h.strip()]
+    origins = [f"{scheme}://{h}" for h in hosts for scheme in ("https", "http")]
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=hosts,
+        allowed_origins=origins,
+    )
+
+
 def _address(scope: dict, headers: dict[str, bytes]) -> str:
     """Who to count an untokened request against.
 
     Behind the cluster's proxy every socket comes from the same address, so the
-    forwarded one is the only thing that separates callers. Trusting it is fine
-    here: the limit is cost control, and a deployment that needs a boundary
-    turns the token gate on, where the bucket is the token's subject instead.
+    forwarded one is the only thing that separates callers. The proxy appends
+    the address it saw, so the last entry is its word and the earlier ones are
+    the caller's; only the last is taken. The limit is cost control, and a
+    deployment that needs a boundary turns the token gate on, where the bucket
+    is the token's subject instead.
     """
     forwarded = headers.get("x-forwarded-for", b"").decode("latin-1")
-    if first := forwarded.split(",")[0].strip():
-        return first
+    if last := forwarded.rpartition(",")[2].strip():
+        return last
     client = scope.get("client")
     return client[0] if client else "unknown"
 

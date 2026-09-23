@@ -13,6 +13,7 @@ import pytest
 from conftest import make_settings
 from mcp.server.mcpserver import MCPServer
 from mcp.shared.memory import create_client_server_memory_streams
+from mcp.types import ToolAnnotations
 
 from cra.app.web import route_chat
 from cra.app.web.factory import create_app
@@ -41,7 +42,7 @@ class Toy:
         self.connections = 0
         self.server = MCPServer("toy")
 
-        @self.server.tool()
+        @self.server.tool(annotations=ToolAnnotations(read_only_hint=True))
         def echo(text: str) -> str:
             """Say it back."""
             return f"echo: {text}"
@@ -50,6 +51,18 @@ class Toy:
         def count_items() -> int:
             """How many items there are."""
             return 7
+
+        # what the proxies really look like: writes with no annotation, told
+        # apart by the verb, and one that declares itself despite its name
+        @self.server.tool()
+        def create_item(title: str) -> str:
+            """Add an item."""
+            return f"created {title}"
+
+        @self.server.tool(annotations=ToolAnnotations(read_only_hint=False))
+        def lookup_and_mark(item: int) -> str:
+            """Marks an item as seen."""
+            return f"marked {item}"
 
     @contextlib.asynccontextmanager
     async def transport(self, url: str):
@@ -76,8 +89,10 @@ def toy():
     return Toy()
 
 
-def make_host(toy: Toy, idle_s: float = 600.0) -> RemoteHost:
-    return RemoteHost({"elab": ELAB}, RemotePool(idle_s, toy.transport))
+def make_host(toy: Toy, idle_s: float = 600.0, allow_write: bool = False) -> RemoteHost:
+    return RemoteHost(
+        {"elab": ELAB}, RemotePool(idle_s, toy.transport), allow_write=allow_write
+    )
 
 
 @pytest.fixture
@@ -257,3 +272,44 @@ async def test_a_turn_offers_both_tool_sets_and_routes_by_name(connected_app):
     assert "echo: hi" in await turn.call("elab_echo", {"text": "hi"}, tool_ctx)
     local = await turn.call("library_status", {}, tool_ctx)
     assert local["counts"]["papers"] == 19
+
+
+async def test_tools_that_write_are_withheld_unless_the_deployment_opts_in(toy):
+    """A tool result can steer the model; a steered model must not be able to
+    change the user's lab notebook. Read-only by annotation or by name."""
+    guarded = make_host(toy)
+    await guarded.connect(SESSION, "elab", "good")
+    names = [s["function"]["name"] for s in await guarded.schemas(SESSION)]
+    assert names == ["elab_echo", "elab_count_items"]
+    refused = await guarded.call(SESSION, "elab_create_item", {"title": "x"})
+    assert json.loads(refused)["error"].startswith("Unknown tool")
+    await guarded.aclose()
+
+    open_host = make_host(toy, allow_write=True)
+    await open_host.connect(SESSION, "elab", "good")
+    names = [s["function"]["name"] for s in await open_host.schemas(SESSION)]
+    assert names == [
+        "elab_echo",
+        "elab_count_items",
+        "elab_create_item",
+        "elab_lookup_and_mark",
+    ]
+    assert "created x" in await open_host.call(
+        SESSION, "elab_create_item", {"title": "x"}
+    )
+    await open_host.aclose()
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        RuntimeError("HTTP 500 for https://proxy/el/mcp?token=SECRET-TOKEN&x=1"),
+        ConnectionError("cannot reach https://proxy/el/mcp?token=SECRET-TOKEN"),
+    ],
+)
+def test_errors_never_carry_the_token(exc):
+    from cra.assistant.mcpclient.degraded import friendly_error
+
+    text = friendly_error(exc)
+    assert "SECRET-TOKEN" not in text
+    assert "token=***" in text or "did not answer" in text

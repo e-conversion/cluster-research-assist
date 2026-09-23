@@ -222,3 +222,51 @@ def test_the_configured_modules_decide_what_is_loaded(indexes, tmp_path):
     settings = make_settings(tmp_path)
     assert [s.name for s in load(settings, indexes, ["status"])] == ["library_status"]
     assert len(load(settings, indexes, [])) == 0
+
+
+@pytest.fixture
+def bounded():
+    from typing import Annotated
+
+    from pydantic import Field
+
+    @tool(tier=Tier.PUBLIC, name="listing")
+    def listing(
+        ctx: ToolContext, limit: Annotated[int, Field(ge=1, le=50)] = 5
+    ) -> dict:
+        """Lists things."""
+        return {"limit": limit}
+
+    registry = Registry()
+    registry.register(listing)
+    return registry
+
+
+@pytest.mark.parametrize(
+    ("arguments", "problem"),
+    [
+        ({"limit": 10**9}, "less than or equal to 50"),
+        ({"limit": 0}, "greater than or equal to 1"),
+        ({"limit": "many"}, "integer"),
+        ({"limit": 5, "offset": 3}, "offset"),
+    ],
+    ids=["above bound", "below bound", "wrong type", "unknown argument"],
+)
+async def test_arguments_outside_the_schema_are_refused(
+    bounded, ctx, arguments, problem
+):
+    """The bound in the schema is a bound the tool can rely on, not advice."""
+    result = await bounded.call("listing", arguments, ctx)
+    assert result["error"].startswith("listing was not called correctly")
+    assert problem in result["error"]
+
+
+async def test_arguments_inside_the_schema_arrive_typed(bounded, ctx):
+    assert await bounded.call("listing", {"limit": "7"}, ctx) == {"limit": 7}
+    assert await bounded.call("listing", {}, ctx) == {"limit": 5}
+
+
+def test_the_schema_does_not_switch_endpoints_into_strict_mode(bounded):
+    spec = next(iter(bounded))
+    assert "additionalProperties" not in spec.parameters
+    assert spec.parameters["properties"]["limit"]["maximum"] == 50

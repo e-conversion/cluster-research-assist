@@ -5,10 +5,18 @@ are replaced by a single entry saying so, which is both an honest answer to
 "what can you do" and something the model can report to the user.
 """
 
+import re
 from typing import Any
 
 # the prefix already ends in "_": the name reads elab___unavailable__
 UNAVAILABLE = "__unavailable__"
+# the proxies take the token in the URL, and httpx puts the URL in its error
+# messages: anything derived from an exception goes through this first
+_TOKEN = re.compile(r"(token=)[^&\s'\"]*", re.IGNORECASE)
+
+
+def redacted(text: str) -> str:
+    return _TOKEN.sub(r"\1***", text)
 
 
 def unavailable_name(prefix: str) -> str:
@@ -53,4 +61,4 @@ def friendly_error(exc: BaseException) -> str:
 
 
 def _plain(exc: BaseException) -> str:
-    return f"{type(exc).__name__}: {exc}"[:200]
+    return redacted(f"{type(exc).__name__}: {exc}")[:200]
