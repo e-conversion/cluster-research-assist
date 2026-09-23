@@ -80,17 +80,33 @@ class CollaborationGraph:
         edge = self._graph.edges[first, second]
         return int(edge["weight"]), list(edge.get("shared_dois", ()))
 
-    def centrality(self, limit: int = 10) -> list[dict[str, Any]]:
-        """Who bridges otherwise weakly connected groups.
+    def centrality(
+        self, limit: int = 10, by: str = "betweenness"
+    ) -> list[dict[str, Any]]:
+        """Who bridges otherwise weakly connected groups, or who has the most
+        collaborators.
 
         Unweighted betweenness: a high score means many shortest paths run
-        through this person, not that they publish a lot.
+        through this person, not that they publish a lot. The collaborator
+        count and the shared-paper total come along either way, so one call
+        also answers "most different partners" and "most joint papers".
         """
-        ranked = sorted(self._betweenness.items(), key=lambda kv: -kv[1])[:limit]
-        return [
-            {**vars(self.person(node)), "betweenness": round(score, 4)}
-            for node, score in ranked
+        rows = [
+            {
+                **vars(self.person(node)),
+                "betweenness": round(self._betweenness[node], 4),
+                "collaborators": int(self._graph.degree(node)),
+                "shared_papers": int(self._graph.degree(node, weight="weight")),
+            }
+            for node in self._graph.nodes
         ]
+        key = (
+            by
+            if by in ("betweenness", "collaborators", "shared_papers")
+            else "betweenness"
+        )
+        rows.sort(key=lambda row: (-row[key], row["name"]))
+        return rows[:limit]
 
     def communities(self) -> dict[str, Any]:
         """Clusters that collaborate internally. People with no shared paper at

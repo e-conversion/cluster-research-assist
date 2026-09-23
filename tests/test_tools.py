@@ -56,6 +56,8 @@ def test_every_tool_is_registered_with_a_tier(registry):
         "joint_papers": Tier.PUBLIC,
         "library_status": Tier.PUBLIC,
         "list_papers": Tier.PUBLIC,
+        "list_pis": Tier.PUBLIC,
+        "most_collaborative_papers": Tier.PUBLIC,
         "search_fulltext": Tier.PUBLIC,
         "search_nomad": Tier.PUBLIC,
         "search_papers": Tier.PUBLIC,
@@ -184,6 +186,30 @@ async def test_pis_are_found_by_topic_and_by_name(registry, ctx):
     )
 
 
+async def test_every_pi_comes_at_once_with_what_the_library_holds_of_them(
+    registry, ctx
+):
+    """'Which groups name X' is a question about all the groups together, and
+    counting them from searches misses some."""
+    everyone = await call(registry, ctx, "list_pis")
+    assert everyone["count"] == len(ctx.indexes.library.pis) == len(everyone["results"])
+    lovelace = next(p for p in everyone["results"] if "Lovelace" in p["name"])
+    assert lovelace["papers_in_library"] == 2
+    assert lovelace["research_focus"]
+    assert "publications" not in lovelace, "the detail is get_pi's job"
+
+
+async def test_papers_are_ranked_by_how_many_pis_they_join(registry, ctx):
+    """'Which paper has the most co-authors from the cluster' has no search
+    that answers it; this ranks the attributed papers directly."""
+    ranked = await call(registry, ctx, "most_collaborative_papers", limit=2)
+    first = ranked["results"][0]
+    assert first["doi"] == "10.1000/beta"
+    assert first["pi_count"] == len(first["pis"]) == 3
+    assert ranked["results"][1]["pi_count"] <= 3
+    assert "abstract" not in first
+
+
 async def test_the_proposal_answers_with_passages(registry, ctx):
     overview = await call(registry, ctx, "get_proposal_fulltext")
     assert overview["paragraph_count"] == 5
@@ -200,9 +226,23 @@ async def test_the_graph_answers_who_works_with_whom(registry, ctx):
     assert collaborators["collaborator_count"] == 2
     joint = await call(registry, ctx, "joint_papers", pi_a="lovelace", pi_b="hopper")
     assert joint["count"] == 2
-    assert (await call(registry, ctx, "collaboration_centrality", limit=1))["results"][
-        0
-    ]["name"] == "Prof. Dr. Grace Hopper"
+    assert [p["doi"] for p in joint["papers"]] == ["10.1000/alpha", "10.1000/beta"]
+    assert joint["papers"][0]["title"], "a title saves a lookup per paper"
+    assert joint["not_in_library"] == []
+    central = await call(registry, ctx, "collaboration_centrality", limit=1)
+    assert central["ranked_by"] == "betweenness"
+    assert central["results"][0]["name"] == "Prof. Dr. Grace Hopper"
+    assert central["results"][0]["collaborators"] == 2
+    assert central["results"][0]["shared_papers"] >= 2
+    by_partners = await call(
+        registry, ctx, "collaboration_centrality", limit=3, by="collaborators"
+    )
+    counts = [row["collaborators"] for row in by_partners["results"]]
+    assert counts == sorted(counts, reverse=True)
+    assert (
+        "not called correctly"
+        in (await call(registry, ctx, "collaboration_centrality", by="fame"))["error"]
+    )
     assert (await call(registry, ctx, "collaboration_communities"))[
         "community_count"
     ] == 1
@@ -362,4 +402,4 @@ def test_find_experts_needs_papers_attributed_to_people(tmp_path, settings):
     (directory / "pis.json").write_text(json.dumps(pis))
     bare = Indexes.build(Library.load(directory, verify=False))
     names = {spec.name for spec in load(settings, bare, ["pis"])}
-    assert names == {"search_pis", "get_pi"}
+    assert names == {"search_pis", "get_pi", "list_pis"}

@@ -261,7 +261,15 @@ def _load_embeddings(path: Path) -> Embeddings | None:
 def _load_graph(raw: dict[str, Any] | None) -> nx.Graph | None:
     if raw is None:
         return None
-    return json_graph.node_link_graph(raw, edges="links")
+    graph = json_graph.node_link_graph(raw, edges="links")
+    # The builder that scraped the shared DOIs left a stray brace on some, so
+    # one paper appears twice on an edge and the weight counts it twice.
+    for _, _, data in graph.edges(data=True):
+        if "shared_dois" in data:
+            unique = tuple(dict.fromkeys(normalise_doi(d) for d in data["shared_dois"]))
+            data["shared_dois"] = list(unique)
+            data["weight"] = len(unique)
+    return graph
 
 
 def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:

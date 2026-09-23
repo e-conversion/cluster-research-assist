@@ -134,8 +134,12 @@ class Progress:
         default_factory=lambda: {"prompt": 0, "completion": 0, "total": 0}
     )
 
-    def answer(self, partial: str = "") -> str:
-        return "\n\n".join(t for t in [*self.texts, partial] if t)
+    def answer(self, final: str = "") -> str:
+        """The answer is what the model says once it stops calling tools. What
+        it said between tool calls is narration ("let me check...") and is
+        used only when nothing else ever came, so a cut-off turn still shows
+        what it had."""
+        return final or "\n\n".join(t for t in self.texts if t)
 
     def ending(self, answer: str, error: str | None) -> dict[str, Any]:
         return {
@@ -256,10 +260,10 @@ async def _rounds(
         if result.cancelled:
             yield progress.ending(progress.answer(result.text), "cancelled")
             return
-        progress.texts.append(result.text)
         if not result.calls:
-            yield progress.ending(progress.answer(), None)
+            yield progress.ending(progress.answer(result.text), None)
             return
+        progress.texts.append(result.text)
 
         wanted = [result.calls[i] for i in sorted(result.calls)]
         for position, call in enumerate(wanted):
@@ -364,8 +368,7 @@ async def _rounds(
     if result.cancelled:
         yield progress.ending(progress.answer(result.text), "cancelled")
         return
-    progress.texts.append(result.text)
-    yield progress.ending(progress.answer() or LIMIT_REACHED, why_final)
+    yield progress.ending(progress.answer(result.text) or LIMIT_REACHED, why_final)
 
 
 async def _one_round(

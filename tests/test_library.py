@@ -59,6 +59,26 @@ def test_pi_dois_are_normalised_against_the_brace_quirk(library_dir):
     assert library.pis[0].publication_dois == ("10.1000/alpha", "10.1000/beta")
 
 
+def test_graph_edges_are_deduplicated_against_the_brace_quirk(library_dir):
+    """The real bundle carries every shared DOI twice on some edges, once with
+    a stray brace, and a weight that counts both."""
+    path = library_dir / "graph.json"
+    raw = json.loads(path.read_text())
+    link = next(link for link in raw["links"] if link["weight"] == 2)
+    link["shared_dois"] = [
+        "10.1000/alpha",
+        "10.1000/alpha}",
+        "10.1000/BETA",
+        "10.1000/beta}",
+    ]
+    link["weight"] = 4
+    path.write_text(json.dumps(raw))
+    library = Library.load(library_dir, verify=False)
+    data = library.graph.edges[link["source"], link["target"]]
+    assert data["shared_dois"] == ["10.1000/alpha", "10.1000/beta"]
+    assert data["weight"] == 2
+
+
 @pytest.mark.parametrize(
     "missing",
     ["abstracts", "fulltexts", "pis", "embeddings", "graph", "proposal", "map"],

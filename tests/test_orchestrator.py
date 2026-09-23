@@ -87,6 +87,30 @@ async def test_a_tool_is_called_and_its_result_goes_back():
     }
 
 
+async def test_what_the_model_says_between_tool_calls_is_not_the_answer():
+    """'Let me check...' before a tool call is narration; the answer is what
+    comes once the model stops calling tools."""
+
+    async def call_tool(name, arguments):
+        return {}
+
+    client = FakeOpenAI(
+        [
+            [
+                text_chunk("Let me check the library."),
+                tool_chunk(0, id="c", name="t", arguments="{}"),
+            ],
+            [text_chunk("There are two papers.")],
+        ]
+    )
+    events = await collect(client, call_tool=call_tool)
+    assert events[-1]["answer"] == "There are two papers."
+    # it still streamed, so the interface could show progress
+    assert "".join(e["text"] for e in events if e["type"] == "text_delta").startswith(
+        "Let me check"
+    )
+
+
 async def test_a_tool_that_answers_with_an_error_is_marked_as_such():
     async def call_tool(name, arguments):
         return {"error": "nope"}
