@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import datetime
 import shutil
 import sys
 from collections.abc import Sequence
@@ -13,6 +14,12 @@ from cra import __version__
 from cra.config.settings import Settings, unknown_keys
 
 EXIT_CONFIG = 2
+
+
+def tokens_default_days() -> int:
+    from cra.app.auth import tokens
+
+    return tokens.DEFAULT_DAYS
 
 
 def load_settings(args: argparse.Namespace) -> Settings:
@@ -43,6 +50,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
 
+    from cra.app.mcpserver.dispatcher import wrap
     from cra.app.web.factory import create_app
     from cra.logsetup import configure_logging
 
@@ -51,7 +59,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
     config = Config()
     config.bind = [f"{settings.host}:{settings.port}"]
     config.accesslog = None
-    asyncio.run(serve(create_app(settings), config))  # type: ignore[arg-type]
+    # one process on one loop: the outward endpoint and the web app share the
+    # library, the registry and the per-session state
+    asyncio.run(serve(wrap(create_app(settings)), config))  # type: ignore[arg-type]
     return 0
 
 
@@ -395,6 +405,40 @@ def cmd_users_set_active(args: argparse.Namespace, active: bool) -> int:
     return asyncio.run(run())
 
 
+def cmd_token_issue(args: argparse.Namespace) -> int:
+    from cra.app.auth import tokens
+
+    settings = load_settings(args)
+    try:
+        token = tokens.issue(
+            settings.mcp_token_secret.get_secret_value(), args.subject, days=args.days
+        )
+    except ValueError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    # the token itself on stdout, so it can be piped; the rest on stderr
+    _out(token)
+    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=args.days)
+    sys.stderr.write(
+        f"for {args.subject}, valid until {expires:%Y-%m-%d}. It cannot be revoked "
+        "on its own: rotating CRA_MCP_TOKEN_SECRET ends every token.\n"
+    )
+    return 0
+
+
+def cmd_token_check(args: argparse.Namespace) -> int:
+    from cra.app.auth import tokens
+
+    settings = load_settings(args)
+    claims = tokens.verify(settings.mcp_token_secret.get_secret_value(), args.token)
+    if claims is None:
+        _out("not a valid token for this deployment")
+        return 1
+    expires = datetime.datetime.fromtimestamp(claims.expires_at, datetime.UTC)
+    _out(f"{claims.subject}, valid until {expires:%Y-%m-%d %H:%M} UTC")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="cra", description="Cluster Research Assistant."
@@ -515,6 +559,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="path to the ONNX file in the repository",
     )
     fetch_parser.set_defaults(func=cmd_encoder_fetch)
+
+    token = sub.add_parser("token", help="bearer tokens for the outward MCP endpoint")
+    token_sub = token.add_subparsers(
+        dest="token_command", metavar="<command>", required=True
+    )
+    issue = token_sub.add_parser("issue", help="mint a token")
+    issue.add_argument("subject", help="who it is for, as it will appear in the log")
+    issue.add_argument(
+        "--days", type=int, default=tokens_default_days(), help="how long it is valid"
+    )
+    issue.set_defaults(func=cmd_token_issue)
+    check = token_sub.add_parser("check", help="say what a token is and when it ends")
+    check.add_argument("token")
+    check.set_defaults(func=cmd_token_check)
 
     policy = sub.add_parser("policy", help="operational settings admins may change")
     policy_sub = policy.add_subparsers(

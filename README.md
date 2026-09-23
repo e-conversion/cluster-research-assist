@@ -108,6 +108,31 @@ cra users promote <user-id>
 cra users deactivate <user-id>
 ```
 
+## The outward MCP endpoint
+
+Other assistants can use the same tools. With `CRA_MCP_SERVER_ENABLED=true` the
+service also answers streamable HTTP MCP at `CRA_MCP_SERVER_PATH` (`/mcp`),
+backed by the very same registry, asked at the public tier: an internal tool is
+neither listed nor reachable by name, and full texts and the proposal never
+leave through it.
+
+```bash
+cra token issue "a colleague"     # prints the token; the details go to stderr
+cra token check <token>           # who it is for and when it ends
+```
+
+Tokens are signed with `CRA_MCP_TOKEN_SECRET` and carry their own expiry, so
+verifying one costs no database lookup. A single token cannot be revoked:
+rotating the secret ends every one of them. With
+`CRA_MCP_SERVER_REQUIRE_TOKEN=false` the endpoint is open, which is a choice for
+a network that is already closed. Either way every call is rate-limited
+(`CRA_MCP_SERVER_RATE_LIMIT` a minute, per token, or per address without one)
+and written to the audit log as one line naming the caller, the tool and how
+long it took -- never the arguments, which are someone else's query.
+
+Point a client at `https://<host><base path>/mcp` with
+`Authorization: Bearer <token>`.
+
 ## Connecting your own eLabFTW or DataTagger
 
 The assistant can also work with the user's *own* data, through the MCP servers

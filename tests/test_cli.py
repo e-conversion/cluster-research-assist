@@ -57,3 +57,23 @@ def test_library_manifest_then_check(tmp_path, capsys):
     assert main(["--env-file", str(env), "library", "manifest"]) == 0
     assert main(["--env-file", str(env), "library", "check", str(directory)]) == 0
     assert "papers       3" in capsys.readouterr().out
+
+
+def test_token_issue_then_check(tmp_path, capsys):
+    env = tmp_path / ".env"
+    env.write_text("CRA_LIBRARY_PATH=/c\nCRA_MCP_TOKEN_SECRET=s3cret\n")
+    assert main(["--env-file", str(env), "token", "issue", "a-colleague"]) == 0
+    printed = capsys.readouterr()
+    token = printed.out.strip()
+    assert "a-colleague" in printed.err
+
+    assert main(["--env-file", str(env), "token", "check", token]) == 0
+    assert "a-colleague" in capsys.readouterr().out
+    assert main(["--env-file", str(env), "token", "check", "nonsense"]) == 1
+
+
+def test_a_token_needs_a_configured_secret(tmp_path, capsys):
+    env = tmp_path / ".env"
+    env.write_text("CRA_LIBRARY_PATH=/c\n")
+    assert main(["--env-file", str(env), "token", "issue", "someone"]) == 1
+    assert "secret" in capsys.readouterr().err
