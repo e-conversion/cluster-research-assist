@@ -60,7 +60,8 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         "figures, no contact details, no data outside the cluster's own papers. When a "
         "question needs something that is not there, say so at once instead of searching "
         "for it. Quote counts and numbers exactly as the tools return them; never estimate "
-        "a number a tool could have given you."
+        "a number a tool could have given you. When a name matches nobody exactly, say so "
+        "first, then offer the closest people the tools return as possibilities."
     )
 
     if {"search_papers", "semantic_search_papers"} <= tool_names:
