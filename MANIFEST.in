@@ -3,6 +3,7 @@ include README.md
 include .env.example
 include tox.ini
 include Dockerfile
+include .dockerignore
 recursive-include src/cra/app/web/static *
 recursive-include src/cra/app/history/migrations *
 recursive-include tests *.py *.txt
@@ -10,3 +11,9 @@ recursive-include tests/data *
 recursive-include developer *
 recursive-include .github *
 prune journal
+
+# the recursive includes above would otherwise sweep in whatever the
+# interpreter left lying about
+global-exclude *.py[cod]
+global-exclude .DS_Store
+prune **/__pycache__
