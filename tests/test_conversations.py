@@ -1,5 +1,7 @@
 """Past conversations: listing, reopening, renaming and deleting."""
 
+import asyncio
+
 import pytest
 from conftest import make_settings
 
@@ -145,6 +147,8 @@ async def test_the_first_turn_names_the_conversation(app, client, monkeypatch):
         name_it=True,
     )
     await turn.store({"answer": "Talk to Helge Stein.", "elapsed": 1.0})
+    # the name is a second model call and runs once the stream has ended
+    await asyncio.gather(*ctx.background)
     assert (await ctx.repo.get_conversation(made.id)).title == "Battery ageing models"
     assert title_.MAX_CHARS
 

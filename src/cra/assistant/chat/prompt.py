@@ -89,8 +89,8 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         "made; if a search returns nothing useful, try one differently worded search, then "
         "say what is missing. For 'list all' or 'how many' questions raise the limit rather "
         "than searching many times, and report the total count the tool returns. Stop "
-        "searching once you can answer, and say what you found rather than what you looked "
-        "for."
+        "searching once you can answer. Do not announce what you are about to search: "
+        "write only the answer, and say what you found rather than what you looked for."
     )
     lines.append("Answer in the language of the question.")
 

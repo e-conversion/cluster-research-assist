@@ -166,7 +166,7 @@ async def chat() -> Any:
             )
             await asyncio.shield(turn.store(final))
 
-    return Response(
+    response = Response(
         stream(),
         content_type="text/event-stream",
         headers={
@@ -176,6 +176,10 @@ async def chat() -> Any:
             "Connection": "keep-alive",
         },
     )
+    # Quart cancels a response after RESPONSE_TIMEOUT (a minute) unless told
+    # otherwise, and an answer with a few tool rounds takes longer than that.
+    response.timeout = None
+    return response
 
 
 @dataclass
@@ -227,7 +231,6 @@ class _Turn:
     async def store(self, final: dict[str, Any] | None) -> None:
         if final is None:
             return
-        await self.name(final.get("answer", ""))
         await self.ctx.repo.add_message(
             self.conversation_id,
             "assistant",
@@ -240,11 +243,14 @@ class _Turn:
                 "error": final.get("error"),
             },
         )
+        # The name is a second model call. It runs after the stream has ended,
+        # so the interface is free as soon as the answer is, and a slow or
+        # failed naming costs nobody anything.
+        answer = final.get("answer", "")
+        if self.name_it and answer.strip():
+            self.ctx.spawn(self.name(answer), "name the conversation")
 
     async def name(self, answer: str) -> None:
-        """Give the conversation a readable name once it has an answer."""
-        if not self.name_it or not answer.strip():
-            return
         suggested = await title_.suggest(
             self.ctx.settings, self.chosen["model"], self.question, answer
         )

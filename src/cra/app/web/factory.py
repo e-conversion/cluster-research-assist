@@ -4,6 +4,7 @@ created once."""
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -72,6 +73,28 @@ class AppContext:
     indexes: Indexes | None = None
     registry: Registry = field(default_factory=Registry)
     system_prompt: str = ""
+    background: set[asyncio.Task[Any]] = field(default_factory=set)
+
+    def spawn(self, work: Coroutine[Any, Any, Any], what: str) -> asyncio.Task[Any]:
+        """Run ``work`` after the request that started it is gone.
+
+        The task is held here so it is neither garbage-collected mid-way nor
+        forgotten at shutdown, and a failure is logged rather than lost.
+        """
+        task = asyncio.create_task(work)
+        self.background.add(task)
+
+        def finished(done: asyncio.Task[Any]) -> None:
+            self.background.discard(done)
+            if not done.cancelled() and done.exception() is not None:
+                log.error(
+                    "background work failed",
+                    extra={"fields": {"what": what}},
+                    exc_info=done.exception(),
+                )
+
+        task.add_done_callback(finished)
+        return task
 
     def tool_context(self, tier: Tier) -> ToolContext:
         if self.indexes is None:
@@ -231,6 +254,10 @@ def _encoder(settings: Settings) -> Any:
 
 
 async def _close(ctx: AppContext) -> None:
+    for task in list(ctx.background):
+        task.cancel()
+    if ctx.background:
+        await asyncio.gather(*ctx.background, return_exceptions=True)
     await ctx.remote.aclose()
     await ctx.http.aclose()
     await ctx.engine.dispose()
