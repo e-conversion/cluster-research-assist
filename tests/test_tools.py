@@ -46,6 +46,7 @@ def test_every_tool_is_registered_with_a_tier(registry):
     assert by_tier == {
         "collaboration_centrality": Tier.PUBLIC,
         "collaboration_communities": Tier.PUBLIC,
+        "count_papers": Tier.PUBLIC,
         "get_collaborators": Tier.PUBLIC,
         "get_paper_by_doi": Tier.PUBLIC,
         "get_paper_fulltext": Tier.INTERNAL,
@@ -92,6 +93,7 @@ def test_a_library_without_extras_registers_fewer_tools(tmp_path, settings):
         "search_papers",
         "get_paper_by_doi",
         "list_papers",
+        "count_papers",
         "get_similar_papers",
         "library_status",
         "search_nomad",
@@ -141,6 +143,20 @@ async def test_list_papers_filters_or_lists_everything(registry, ctx):
     listed = await call(registry, ctx, "list_papers", author="hopper", limit=1)
     assert (listed["count"], listed["returned"]) == (2, 1)
     assert "abstract" not in listed["results"][0], "a listing does not carry abstracts"
+
+
+async def test_many_topics_are_sized_in_one_call(registry, ctx):
+    sized = await call(
+        registry, ctx, "count_papers", topics=["perovskite", "copper", "aardvark", "a"]
+    )
+    assert sized["papers"] == 3
+    assert sized["counts"]["perovskite"]["title_or_abstract"] >= 1
+    assert sized["counts"]["aardvark"] == {"title_or_abstract": 0, "full_text": 0}
+    assert "error" in sized["counts"]["a"]
+    assert (
+        "not called correctly"
+        in (await call(registry, ctx, "count_papers", topics=[]))["error"]
+    )
 
 
 async def test_search_fulltext_returns_passages_within_the_budget(

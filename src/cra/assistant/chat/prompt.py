@@ -79,6 +79,11 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             "list_papers filters by author, year or journal, for exhaustive questions such as "
             "'everything by X' where the top few results of a search are not enough."
         )
+    if "count_papers" in tool_names:
+        lines.append(
+            "count_papers sizes many topics in one call, for 'how well covered is X' and "
+            "'which of these topics have few papers'; search only the ones worth reading."
+        )
     if "search_fulltext" in tool_names:
         lines.append(
             "\nsearch_fulltext looks inside the papers themselves and returns short passages. "
