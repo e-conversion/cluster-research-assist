@@ -85,9 +85,10 @@ one is closed until someone opens it deliberately.
 | accounts, allow-list, settings | no | yes |
 
 The outward MCP endpoint is gated separately by a token that a signed-in user
-mints, and serves the public tier only: metadata, abstracts, profiles, the graph
-and snippet-budgeted full-text search. The full texts and the proposal never
-leave through it.
+mints, and serves the public tier only: metadata, abstracts, profiles and the
+graph. Nothing that reads inside the full texts or the proposal is reachable
+through it, passage search included: passages around a chosen query would
+reconstruct a paper one query at a time.
 
 Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
 `CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header

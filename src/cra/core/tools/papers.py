@@ -154,7 +154,10 @@ def _snippets(text: str, tokens: list[str], size: int, most: int) -> list[str]:
     return found
 
 
-@tool(tier=Tier.PUBLIC)
+# INTERNAL although it returns only passages: an anonymous caller can walk a
+# paper by asking for the words at the end of each passage, so outside the
+# sign-in the budget is a speed limit, not a boundary
+@tool(tier=Tier.INTERNAL)
 def search_fulltext(
     ctx: ToolContext,
     query: Annotated[str, Field(description="Words that must all appear in the text.")],

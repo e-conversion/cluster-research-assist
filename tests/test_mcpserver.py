@@ -94,25 +94,22 @@ async def test_a_public_tool_answers(endpoint):
     assert payload["count"] == len(payload["results"]) > 0
 
 
-async def test_an_internal_tool_is_refused_by_name(endpoint):
-    """Not offered and not reachable: the registry gives the same answer to both."""
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("get_proposal_fulltext", {}),
+        ("get_paper_fulltext", {"doi": "10.1000/x"}),
+        ("search_fulltext", {"query": "electrostatic"}),
+    ],
+)
+async def test_an_internal_tool_is_refused_by_name(endpoint, name, arguments):
+    """Not offered and not reachable: the registry gives the same answer to
+    both. Passage search is in the list because passages around a chosen
+    query reconstruct a paper, one query at a time."""
     async with connect(endpoint) as session:
-        result = await session.call_tool("get_proposal_fulltext", {})
+        result = await session.call_tool(name, arguments)
     assert result.is_error is True
     assert "Unknown tool" in text_of(result)
-
-
-async def test_full_text_search_stays_within_its_snippet_budget(endpoint, tmp_path):
-    """The outward caller gets passages, never a whole paper."""
-    settings = make_settings(tmp_path)
-    async with connect(endpoint) as session:
-        result = await session.call_tool("search_fulltext", {"query": "electrostatic"})
-    payload = json.loads(text_of(result))
-    assert payload["results"]
-    for hit in payload["results"]:
-        assert len(hit["snippets"]) <= settings.fulltext_max_snippets
-        for snippet in hit["snippets"]:
-            assert len(snippet) <= settings.fulltext_snippet_chars
 
 
 async def test_the_web_app_still_answers_every_other_path(endpoint):
