@@ -46,6 +46,7 @@ def test_every_tool_is_registered_with_a_tier(registry):
     assert by_tier == {
         "collaboration_centrality": Tier.PUBLIC,
         "collaboration_communities": Tier.PUBLIC,
+        "count_papers": Tier.PUBLIC,
         "get_collaborators": Tier.PUBLIC,
         "get_paper_by_doi": Tier.PUBLIC,
         "get_paper_fulltext": Tier.INTERNAL,
@@ -56,7 +57,9 @@ def test_every_tool_is_registered_with_a_tier(registry):
         "joint_papers": Tier.PUBLIC,
         "library_status": Tier.PUBLIC,
         "list_papers": Tier.PUBLIC,
-        "search_fulltext": Tier.PUBLIC,
+        "list_pis": Tier.PUBLIC,
+        "most_collaborative_papers": Tier.PUBLIC,
+        "search_fulltext": Tier.INTERNAL,
         "search_nomad": Tier.PUBLIC,
         "search_papers": Tier.PUBLIC,
         "search_pis": Tier.PUBLIC,
@@ -64,12 +67,12 @@ def test_every_tool_is_registered_with_a_tier(registry):
     }
 
 
-def test_the_two_things_that_stay_inside_are_internal(registry):
+def test_everything_that_touches_the_full_texts_is_internal(registry):
     public = {spec.name for spec in registry.specs(Tier.PUBLIC)}
     assert "get_paper_fulltext" not in public
     assert "get_proposal_fulltext" not in public
-    assert "search_fulltext" in public, (
-        "searching inside the text is public, reading it is not"
+    assert "search_fulltext" not in public, (
+        "passages around a query reconstruct the text, one query at a time"
     )
 
 
@@ -90,6 +93,7 @@ def test_a_library_without_extras_registers_fewer_tools(tmp_path, settings):
         "search_papers",
         "get_paper_by_doi",
         "list_papers",
+        "count_papers",
         "get_similar_papers",
         "library_status",
         "search_nomad",
@@ -128,14 +132,31 @@ async def test_get_paper_by_doi_reports_whether_a_full_text_is_there(registry, c
     )
 
 
-async def test_list_papers_filters_and_needs_a_filter(registry, ctx):
+async def test_list_papers_filters_or_lists_everything(registry, ctx):
     assert (await call(registry, ctx, "list_papers", author="hopper"))["count"] == 2
     assert (await call(registry, ctx, "list_papers", year="2022"))["count"] == 1
     assert (await call(registry, ctx, "list_papers", journal="nature"))["count"] == 1
-    assert "at least one" in (await call(registry, ctx, "list_papers"))["error"]
+    everything = await call(registry, ctx, "list_papers", limit=2)
+    assert (everything["count"], everything["returned"]) == (3, 2)
+    years = [p["year"] for p in everything["results"]]
+    assert years == sorted(years, reverse=True)
     listed = await call(registry, ctx, "list_papers", author="hopper", limit=1)
     assert (listed["count"], listed["returned"]) == (2, 1)
     assert "abstract" not in listed["results"][0], "a listing does not carry abstracts"
+
+
+async def test_many_topics_are_sized_in_one_call(registry, ctx):
+    sized = await call(
+        registry, ctx, "count_papers", topics=["perovskite", "copper", "aardvark", "a"]
+    )
+    assert sized["papers"] == 3
+    assert sized["counts"]["perovskite"]["title_or_abstract"] >= 1
+    assert sized["counts"]["aardvark"] == {"title_or_abstract": 0, "full_text": 0}
+    assert "error" in sized["counts"]["a"]
+    assert (
+        "not called correctly"
+        in (await call(registry, ctx, "count_papers", topics=[]))["error"]
+    )
 
 
 async def test_search_fulltext_returns_passages_within_the_budget(
@@ -184,6 +205,35 @@ async def test_pis_are_found_by_topic_and_by_name(registry, ctx):
     )
 
 
+async def test_every_pi_comes_at_once_with_what_the_library_holds_of_them(
+    registry, ctx
+):
+    """'Which groups name X' is a question about all the groups together, and
+    counting them from searches misses some."""
+    everyone = await call(registry, ctx, "list_pis")
+    assert everyone["count"] == len(ctx.indexes.library.pis) == len(everyone["results"])
+    lovelace = next(p for p in everyone["results"] if "Lovelace" in p["name"])
+    assert lovelace["papers_in_library"] == 2
+    assert lovelace["research_focus"]
+    assert "publications" not in lovelace, "the detail is get_pi's job"
+
+
+async def test_papers_are_ranked_by_how_many_pis_they_join(registry, ctx):
+    """'Which paper has the most co-authors from the cluster' has no search
+    that answers it; this ranks the attributed papers directly."""
+    ranked = await call(registry, ctx, "most_collaborative_papers", limit=2)
+    first = ranked["results"][0]
+    assert first["doi"] == "10.1000/beta"
+    assert first["pi_count"] == len(first["pis"]) == 3
+    assert ranked["results"][1]["pi_count"] <= 3
+    assert "abstract" not in first
+    assert (
+        sum(y["papers"] for y in ranked["by_year"].values())
+        == ranked["papers_with_a_pi"]
+    )
+    assert sum(y["shared_by_several"] for y in ranked["by_year"].values()) == 2
+
+
 async def test_the_proposal_answers_with_passages(registry, ctx):
     overview = await call(registry, ctx, "get_proposal_fulltext")
     assert overview["paragraph_count"] == 5
@@ -200,9 +250,23 @@ async def test_the_graph_answers_who_works_with_whom(registry, ctx):
     assert collaborators["collaborator_count"] == 2
     joint = await call(registry, ctx, "joint_papers", pi_a="lovelace", pi_b="hopper")
     assert joint["count"] == 2
-    assert (await call(registry, ctx, "collaboration_centrality", limit=1))["results"][
-        0
-    ]["name"] == "Prof. Dr. Grace Hopper"
+    assert [p["doi"] for p in joint["papers"]] == ["10.1000/alpha", "10.1000/beta"]
+    assert joint["papers"][0]["title"], "a title saves a lookup per paper"
+    assert joint["not_in_library"] == []
+    central = await call(registry, ctx, "collaboration_centrality", limit=1)
+    assert central["ranked_by"] == "betweenness"
+    assert central["results"][0]["name"] == "Prof. Dr. Grace Hopper"
+    assert central["results"][0]["collaborators"] == 2
+    assert central["results"][0]["shared_papers"] >= 2
+    by_partners = await call(
+        registry, ctx, "collaboration_centrality", limit=3, by="collaborators"
+    )
+    counts = [row["collaborators"] for row in by_partners["results"]]
+    assert counts == sorted(counts, reverse=True)
+    assert (
+        "not called correctly"
+        in (await call(registry, ctx, "collaboration_centrality", by="fame"))["error"]
+    )
     assert (await call(registry, ctx, "collaboration_communities"))[
         "community_count"
     ] == 1
@@ -362,4 +426,4 @@ def test_find_experts_needs_papers_attributed_to_people(tmp_path, settings):
     (directory / "pis.json").write_text(json.dumps(pis))
     bare = Indexes.build(Library.load(directory, verify=False))
     names = {spec.name for spec in load(settings, bare, ["pis"])}
-    assert names == {"search_pis", "get_pi"}
+    assert names == {"search_pis", "get_pi", "list_pis"}

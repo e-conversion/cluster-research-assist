@@ -158,7 +158,54 @@ async def test_a_tool_that_raises_becomes_an_error_not_a_crash(ctx):
         "error": "that is not a thing"
     }
     assert "RuntimeError" in (await registry.call("boom", {"mode": "x"}, ctx))["error"]
-    assert "Bad arguments" in (await registry.call("boom", {"wrong": 1}, ctx))["error"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ({}, "'query' is required (What to look for.)"),
+        ({"query": "x", "wrong": 1}, "'wrong' is not an argument of example"),
+        ({"query": "x", "limit": 99}, "'limit': Input should be less than or equal"),
+        ({"query": "x", "limit": "many"}, "'limit': Input should be a valid integer"),
+    ],
+    ids=["missing", "unknown", "out of range", "wrong type"],
+)
+async def test_a_wrong_call_is_told_what_is_wrong(ctx, arguments, expected):
+    """A model that is told which argument is missing fixes it in one round;
+    one that is told 'bad arguments' tries the same call again."""
+
+    @tool(tier=Tier.PUBLIC)
+    def example(
+        ctx: ToolContext,
+        query: Annotated[str, Field(description="What to look for.")],
+        limit: Annotated[int, Field(le=50)] = 5,
+    ) -> dict:
+        """A description."""
+        return {"query": query, "limit": limit}
+
+    registry = Registry()
+    registry.register(example)
+    result = await registry.call("example", arguments, ctx)
+    assert expected in result["error"]
+    assert result["error"].endswith("Call it again with the arguments fixed.")
+
+
+async def test_arguments_are_coerced_and_defaults_come_from_the_function(ctx):
+    @tool(tier=Tier.PUBLIC)
+    def example(ctx: ToolContext, query: str, limit: int = 5) -> dict:
+        """A description."""
+        return {"query": query, "limit": limit}
+
+    registry = Registry()
+    registry.register(example)
+    assert await registry.call("example", {"query": "x", "limit": "7"}, ctx) == {
+        "query": "x",
+        "limit": 7,
+    }
+    assert await registry.call("example", {"query": "x"}, ctx) == {
+        "query": "x",
+        "limit": 5,
+    }
 
 
 def test_an_unknown_module_is_a_startup_error(indexes, tmp_path):
@@ -175,3 +222,51 @@ def test_the_configured_modules_decide_what_is_loaded(indexes, tmp_path):
     settings = make_settings(tmp_path)
     assert [s.name for s in load(settings, indexes, ["status"])] == ["library_status"]
     assert len(load(settings, indexes, [])) == 0
+
+
+@pytest.fixture
+def bounded():
+    from typing import Annotated
+
+    from pydantic import Field
+
+    @tool(tier=Tier.PUBLIC, name="listing")
+    def listing(
+        ctx: ToolContext, limit: Annotated[int, Field(ge=1, le=50)] = 5
+    ) -> dict:
+        """Lists things."""
+        return {"limit": limit}
+
+    registry = Registry()
+    registry.register(listing)
+    return registry
+
+
+@pytest.mark.parametrize(
+    ("arguments", "problem"),
+    [
+        ({"limit": 10**9}, "less than or equal to 50"),
+        ({"limit": 0}, "greater than or equal to 1"),
+        ({"limit": "many"}, "integer"),
+        ({"limit": 5, "offset": 3}, "offset"),
+    ],
+    ids=["above bound", "below bound", "wrong type", "unknown argument"],
+)
+async def test_arguments_outside_the_schema_are_refused(
+    bounded, ctx, arguments, problem
+):
+    """The bound in the schema is a bound the tool can rely on, not advice."""
+    result = await bounded.call("listing", arguments, ctx)
+    assert result["error"].startswith("listing was not called correctly")
+    assert problem in result["error"]
+
+
+async def test_arguments_inside_the_schema_arrive_typed(bounded, ctx):
+    assert await bounded.call("listing", {"limit": "7"}, ctx) == {"limit": 7}
+    assert await bounded.call("listing", {}, ctx) == {"limit": 5}
+
+
+def test_the_schema_does_not_switch_endpoints_into_strict_mode(bounded):
+    spec = next(iter(bounded))
+    assert "additionalProperties" not in spec.parameters
+    assert spec.parameters["properties"]["limit"]["maximum"] == 50

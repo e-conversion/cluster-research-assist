@@ -13,9 +13,13 @@ if (purify) {
   });
 }
 
+// No images: a model that has been steered by something it read could
+// otherwise carry the conversation off in the URL of one.
+const SANITIZE = { USE_PROFILES: { html: true }, FORBID_TAGS: ["img", "picture", "source"] };
+
 export function render(text) {
   const raw = md ? md.parse(text || "") : escapeHtml(text || "").replace(/\n/g, "<br>");
-  return purify ? purify.sanitize(raw, { USE_PROFILES: { html: true } }) : escapeHtml(text || "");
+  return purify ? purify.sanitize(raw, SANITIZE) : escapeHtml(text || "");
 }
 
 export function escapeHtml(s) {

@@ -296,7 +296,10 @@ async function loadLibrary() {
 async function uploadLibrary(file) {
   const form = new FormData();
   form.append("bundle", file);
-  const res = await fetch("api/admin/library", { method: "POST", body: form });
+  // the one multipart request; the header marks it as ours, not a form's
+  const res = await fetch("api/admin/library", {
+    method: "POST", body: form, headers: { "x-requested-with": "cra" },
+  });
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error((data && data.error) || res.statusText);
   return data;

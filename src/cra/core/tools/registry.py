@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any
 
-from pydantic import create_model
+from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 
 from cra.config.settings import Settings
 from cra.core.retrieval.indexes import Indexes
@@ -59,6 +59,7 @@ class ToolSpec:
     description: str
     parameters: dict[str, Any]
     function: Callable[..., Any]
+    arguments: type[BaseModel]
 
     @property
     def schema(self) -> dict[str, Any]:
@@ -73,11 +74,13 @@ class ToolSpec:
         }
 
 
-def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
-    """A JSON schema from the signature, skipping the context argument.
+def arguments_model(function: Callable[..., Any]) -> type[BaseModel]:
+    """The arguments as a model, from the signature minus the context argument.
 
     Annotated types carry the per-argument descriptions, so the model is told
-    what each one means without a second place to keep in sync.
+    what each one means without a second place to keep in sync. The same model
+    checks a call before it runs, so a missing or misspelt argument is answered
+    with what is wrong rather than with a traceback.
     """
     signature = inspect.signature(function)
     hints = getattr(function, "__annotations__", {})
@@ -89,13 +92,45 @@ def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
             ... if parameter.default is inspect.Parameter.empty else parameter.default
         )
         fields[name] = (hints[name], default)
-    model = create_model(f"{function.__name__}_arguments", **fields)  # type: ignore[call-overload]
+    return create_model(  # type: ignore[call-overload,no-any-return]
+        f"{function.__name__}_arguments",
+        __config__=ConfigDict(extra="forbid"),
+        **fields,
+    )
+
+
+def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
+    """The JSON schema the model reads, derived from the signature."""
+    return _schema_of(arguments_model(function))
+
+
+def _schema_of(model: type[BaseModel]) -> dict[str, Any]:
     schema = model.model_json_schema()
     schema.pop("title", None)
+    schema.pop("additionalProperties", None)
     for entry in schema.get("properties", {}).values():
         entry.pop("title", None)
     schema.setdefault("properties", {})
     return schema
+
+
+def argument_problem(spec: "ToolSpec", exc: ValidationError) -> str:
+    """One sentence per thing wrong, in words a model can act on."""
+    problems = []
+    for error in exc.errors():
+        where = ".".join(str(part) for part in error["loc"]) or "arguments"
+        if error["type"] == "missing":
+            hint = spec.parameters["properties"].get(where, {}).get("description", "")
+            problems.append(f"{where!r} is required" + (f" ({hint})" if hint else ""))
+        elif error["type"] == "extra_forbidden":
+            problems.append(f"{where!r} is not an argument of {spec.name}")
+        else:
+            problems.append(f"{where!r}: {error['msg']}")
+    return (
+        f"{spec.name} was not called correctly: "
+        + "; ".join(problems)
+        + ". Call it again with the arguments fixed."
+    )
 
 
 def tool(
@@ -108,12 +143,14 @@ def tool(
         text = description or inspect.cleandoc(function.__doc__ or "")
         if not text:
             raise RegistryError(f"{function.__name__}: a tool needs a description")
+        arguments = arguments_model(function)
         spec = ToolSpec(
             name=name or function.__name__,
             tier=tier,
             description=text,
-            parameters=derive_parameters(function),
+            parameters=_schema_of(arguments),
             function=function,
+            arguments=arguments,
         )
         setattr(function, SPEC_ATTR, spec)
         return function
@@ -168,10 +205,16 @@ class Registry:
         if spec is None:
             return {"error": f"Unknown tool: {name}"}
         try:
+            checked = spec.arguments.model_validate(arguments)
+        except ValidationError as exc:
+            return {"error": argument_problem(spec, exc)}
+        # only what was given: the function's own defaults cover the rest
+        given = {key: getattr(checked, key) for key in checked.model_fields_set}
+        try:
             if inspect.iscoroutinefunction(spec.function):
-                return await spec.function(ctx, **arguments)
+                return await spec.function(ctx, **given)
             # the lexical and dense searches hold the loop otherwise
-            return await asyncio.to_thread(spec.function, ctx, **arguments)
+            return await asyncio.to_thread(spec.function, ctx, **given)
         except ToolError as exc:
             return {"error": str(exc)}
         except TypeError as exc:

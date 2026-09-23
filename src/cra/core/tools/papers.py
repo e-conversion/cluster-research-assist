@@ -111,9 +111,8 @@ def list_papers(
 ) -> dict[str, Any]:
     """Exhaustive listing by metadata, newest first. Use it for "every paper
     by X" or "what was published in 2022", where a ranked search would stop
-    at the most relevant few."""
-    if not any((author, year, journal)):
-        raise ToolError("Give at least one of author, year or journal.")
+    at the most relevant few. Without a filter it lists the whole library,
+    newest first, up to the limit; the count is always the full number."""
     from cra.core.library.text import fold
 
     wanted_author, wanted_journal = fold(author), fold(journal)
@@ -130,6 +129,44 @@ def list_papers(
         "returned": min(len(matches), limit),
         "results": [paper_view(p, abstract=0) for p in matches[:limit]],
     }
+
+
+@tool(tier=Tier.PUBLIC)
+def count_papers(
+    ctx: ToolContext,
+    topics: Annotated[
+        list[str],
+        Field(
+            description="Topics to size, each a few words that must all appear.",
+            min_length=1,
+            max_length=30,
+        ),
+    ],
+) -> dict[str, Any]:
+    """How many papers mention each topic, in title or abstract and anywhere
+    in the full text, without returning the papers. One call sizes many
+    topics at once, for which are well covered and which barely appear; a
+    search per topic would cost a round each."""
+    library = ctx.indexes.library
+    from cra.core.library.text import fold
+
+    folded = {doi: fold(f"{p.title} {p.abstract}") for doi, p in library.papers.items()}
+    lowered = {doi: e.text.lower() for doi, e in library.fulltexts.items()}
+    counts: dict[str, Any] = {}
+    for topic in topics:
+        tokens = query_tokens(topic, min_len=2)
+        if not tokens:
+            counts[topic] = {"error": "Give a word of two letters or more."}
+            continue
+        counts[topic] = {
+            "title_or_abstract": sum(
+                1 for text in folded.values() if all(t in text for t in tokens)
+            ),
+            "full_text": sum(
+                1 for text in lowered.values() if all(t in text for t in tokens)
+            ),
+        }
+    return {"papers": len(library.papers), "counts": counts}
 
 
 def _snippets(text: str, tokens: list[str], size: int, most: int) -> list[str]:
@@ -154,7 +191,10 @@ def _snippets(text: str, tokens: list[str], size: int, most: int) -> list[str]:
     return found
 
 
-@tool(tier=Tier.PUBLIC)
+# INTERNAL although it returns only passages: an anonymous caller can walk a
+# paper by asking for the words at the end of each passage, so outside the
+# sign-in the budget is a speed limit, not a boundary
+@tool(tier=Tier.INTERNAL)
 def search_fulltext(
     ctx: ToolContext,
     query: Annotated[str, Field(description="Words that must all appear in the text.")],
@@ -232,6 +272,7 @@ def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
     registry.register(search_papers)
     registry.register(get_paper_by_doi)
     registry.register(list_papers)
+    registry.register(count_papers)
     if indexes.dense is not None:
         registry.register(get_similar_papers)
     if indexes.semantic_ready:

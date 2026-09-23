@@ -57,6 +57,66 @@ def search_pis(
     return {"count": len(found), "results": [pi_view(pi) for _, pi in found]}
 
 
+@tool(tier=Tier.PUBLIC)
+def list_pis(ctx: ToolContext) -> dict[str, Any]:
+    """Every principal investigator at once: name, group, institution, research
+    focus, application fields and how many of their papers the library holds.
+    One call answers questions about all the groups together: which groups
+    name a topic, what the group descriptions cover, how the cluster is
+    composed. Counting groups from searches instead misses some."""
+    library = ctx.indexes.library
+    people = [
+        {
+            **pi_view(pi),
+            "papers_in_library": sum(
+                1 for doi in pi.publication_dois if doi in library.papers
+            ),
+        }
+        for pi in library.pis
+    ]
+    return {"count": len(people), "results": people}
+
+
+@tool(tier=Tier.PUBLIC)
+def most_collaborative_papers(
+    ctx: ToolContext,
+    limit: Annotated[
+        int, Field(description="How many papers to return.", ge=1, le=50)
+    ] = 10,
+) -> dict[str, Any]:
+    """The papers with the most principal investigators of the cluster among
+    their authors, most first, each with the names of those investigators.
+    This is the direct answer to "which paper joins the most groups"; no search
+    can rank papers this way. by_year counts, per year, the papers attributed
+    to at least one investigator and those shared by two or more, which is
+    how collaboration within the cluster over time is measured."""
+    library = ctx.indexes.library
+    holders: dict[str, list[str]] = {}
+    for pi in library.pis:
+        for doi in pi.publication_dois:
+            if doi in library.papers:
+                holders.setdefault(doi, []).append(pi.name)
+    ranked = sorted(holders.items(), key=lambda item: (-len(item[1]), item[0]))
+    by_year: dict[str, dict[str, int]] = {}
+    for doi, names in holders.items():
+        year = library.papers[doi].year or "unknown"
+        entry = by_year.setdefault(year, {"papers": 0, "shared_by_several": 0})
+        entry["papers"] += 1
+        entry["shared_by_several"] += len(names) > 1
+    return {
+        "papers_with_a_pi": len(holders),
+        "by_year": dict(sorted(by_year.items())),
+        "results": [
+            {
+                **paper_view(library.papers[doi], abstract=0),
+                "pi_count": len(names),
+                "pis": names,
+            }
+            for doi, names in ranked[:limit]
+        ],
+    }
+
+
 def _resolve(pis: tuple[PI, ...], name: str) -> PI | list[PI]:
     """Exact surname, then substring, then word overlap. Several equally good
     matches come back as a list so the caller can ask again."""
@@ -113,8 +173,10 @@ def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
         return
     registry.register(search_pis)
     registry.register(get_pi)
+    registry.register(list_pis)
     if any(pi.publication_dois for pi in indexes.library.pis):
         registry.register(find_experts)
+        registry.register(most_collaborative_papers)
 
 
 @tool(tier=Tier.PUBLIC)

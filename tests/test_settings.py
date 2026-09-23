@@ -117,3 +117,14 @@ def test_unknown_keys_flags_typos_but_ignores_other_prefixes(tmp_path, monkeypat
     env.write_text("CRA_LLM_MODLE=x\nMCP_JWT_SECRET=y\n")
     monkeypatch.setenv("CRA_PORTT", "1")
     assert unknown_keys(env) == ["CRA_LLM_MODLE", "CRA_PORTT"]
+
+
+def test_dev_auth_off_loopback_needs_an_explicit_opt_in(monkeypatch):
+    """The dev provider signs anyone in: a container that binds 0.0.0.0 with
+    it is an open door unless the operator said so."""
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    monkeypatch.setenv("CRA_HOST", "0.0.0.0")
+    with pytest.raises(ValidationError, match="CRA_AUTH_DEV_INSECURE"):
+        Settings.load(None)
+    monkeypatch.setenv("CRA_AUTH_DEV_INSECURE", "true")
+    assert Settings.load(None).auth_dev_insecure is True

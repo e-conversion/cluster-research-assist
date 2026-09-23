@@ -1,6 +1,7 @@
 """Asking a question, and watching the answer arrive."""
 
 import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -20,6 +21,9 @@ log = logging.getLogger(__name__)
 bp = Blueprint("chat", __name__)
 
 MAX_PROMPT_CHARS = 20_000
+# A proxy that sees no bytes for a minute closes the connection, and a model
+# endpoint can take longer than that to send its first token.
+KEEPALIVE_S = 15.0
 
 
 def _ctx():
@@ -27,14 +31,52 @@ def _ctx():
 
 
 def _frame(event: dict[str, Any]) -> str:
+    if event["type"] == "keepalive":
+        return ": keepalive\n\n"
     return f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
+async def paced(
+    events: AsyncIterator[dict[str, Any]], interval: float
+) -> AsyncIterator[dict[str, Any]]:
+    """The events as they come, and a keepalive whenever none came for a while.
+
+    The next event is awaited in a task so that waiting for it can time out
+    without cancelling it; the source keeps running across keepalives.
+    """
+    source = events.__aiter__()
+    pending: asyncio.Task[dict[str, Any]] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.ensure_future(source.__anext__())
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield {"type": "keepalive"}
+                continue
+            task, pending = pending, None
+            try:
+                yield task.result()
+            except StopAsyncIteration:
+                return
+    finally:
+        if pending is not None:
+            pending.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pending
+
+
 async def _conversation(ctx: Any, session: Any, principal: Any) -> str:
-    """The conversation this session is in, started on first use."""
+    """The conversation this session is in, started on first use.
+
+    The session is trusted for the id only, never for who may continue it:
+    the conversation has to belong to the principal, or a fresh one starts.
+    """
     known = session.data.get("conversation")
-    if known and await ctx.repo.get_conversation(known):
-        return str(known)
+    if known:
+        found = await ctx.repo.get_conversation(str(known))
+        if found is not None and found.user_id == principal.user_id:
+            return str(known)
     created = await ctx.repo.create_conversation(principal.user_id)
     session.data = {**session.data, "conversation": created.id}
     await ctx.sessions.save(session)
@@ -102,9 +144,11 @@ async def chat() -> Any:
         sent = 0
         reason = "complete"
         try:
-            async for event in turn.run():
-                sent += 1
+            async for event in paced(turn.run(), KEEPALIVE_S):
                 yield _frame(event)
+                if event["type"] == "keepalive":
+                    continue
+                sent += 1
                 if event["type"] in ("done", "error"):
                     final = event
         except BaseException as exc:
@@ -128,7 +172,7 @@ async def chat() -> Any:
             )
             await asyncio.shield(turn.store(final))
 
-    return Response(
+    response = Response(
         stream(),
         content_type="text/event-stream",
         headers={
@@ -138,6 +182,10 @@ async def chat() -> Any:
             "Connection": "keep-alive",
         },
     )
+    # Quart cancels a response after RESPONSE_TIMEOUT (a minute) unless told
+    # otherwise, and an answer with a few tool rounds takes longer than that.
+    response.timeout = None
+    return response
 
 
 @dataclass
@@ -189,7 +237,6 @@ class _Turn:
     async def store(self, final: dict[str, Any] | None) -> None:
         if final is None:
             return
-        await self.name(final.get("answer", ""))
         await self.ctx.repo.add_message(
             self.conversation_id,
             "assistant",
@@ -202,11 +249,14 @@ class _Turn:
                 "error": final.get("error"),
             },
         )
+        # The name is a second model call. It runs after the stream has ended,
+        # so the interface is free as soon as the answer is, and a slow or
+        # failed naming costs nobody anything.
+        answer = final.get("answer", "")
+        if self.name_it and answer.strip():
+            self.ctx.spawn(self.name(answer), "name the conversation")
 
     async def name(self, answer: str) -> None:
-        """Give the conversation a readable name once it has an answer."""
-        if not self.name_it or not answer.strip():
-            return
         suggested = await title_.suggest(
             self.ctx.settings, self.chosen["model"], self.question, answer
         )

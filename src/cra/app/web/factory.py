@@ -4,6 +4,7 @@ created once."""
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ from typing import Any
 
 import httpx
 from quart import Quart, Response, g, jsonify, redirect, request, send_from_directory
+from quart.wrappers import Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cra.app.auth.dev import DevProvider
@@ -54,6 +56,63 @@ log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
+# Every route but the library upload takes a small JSON body; the upload
+# limit is settings.library_max_upload_mb and applies to that route alone.
+JSON_BODY_LIMIT = 1024 * 1024
+UPLOAD_ENDPOINT = "admin.upload_library"
+STATE_CHANGING = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# what an HTML form can send without a CORS preflight: an API that only ever
+# takes JSON has no reason to accept these, and refusing them is what keeps a
+# form on another site from acting as a signed-in user
+FORM_TYPES = frozenset(
+    {"application/x-www-form-urlencoded", "multipart/form-data", "text/plain"}
+)
+FETCH_HEADER = "X-Requested-With"
+FETCH_VALUE = "cra"
+
+# Scripts come from this package and the pinned CDN builds; nothing inline, so
+# text a model produces cannot become code, and images stay on this origin so
+# a rendered answer cannot carry the conversation off in an image URL.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self' https://cdn.jsdelivr.net; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src 'self' https://fonts.gstatic.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "worker-src 'self' blob:; "
+    "frame-src 'self'; "
+    "frame-ancestors 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+SECURITY_HEADERS = {
+    "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+HSTS = "max-age=31536000"
+
+
+class LimitedRequest(Request):
+    """The body limit is fixed when the request is built, before routing, so
+    the one route that takes a bundle is told apart by its path here."""
+
+    upload_path = ""
+    upload_limit = JSON_BODY_LIMIT
+
+    def __init__(
+        self, method: str, scheme: str, path: str, *args: Any, **kwargs: Any
+    ) -> None:
+        is_upload = method == "POST" and path == self.upload_path
+        kwargs["max_content_length"] = (
+            self.upload_limit if is_upload else JSON_BODY_LIMIT
+        )
+        super().__init__(method, scheme, path, *args, **kwargs)
+
 
 @dataclass
 class AppContext:
@@ -72,6 +131,28 @@ class AppContext:
     indexes: Indexes | None = None
     registry: Registry = field(default_factory=Registry)
     system_prompt: str = ""
+    background: set[asyncio.Task[Any]] = field(default_factory=set)
+
+    def spawn(self, work: Coroutine[Any, Any, Any], what: str) -> asyncio.Task[Any]:
+        """Run ``work`` after the request that started it is gone.
+
+        The task is held here so it is neither garbage-collected mid-way nor
+        forgotten at shutdown, and a failure is logged rather than lost.
+        """
+        task = asyncio.create_task(work)
+        self.background.add(task)
+
+        def finished(done: asyncio.Task[Any]) -> None:
+            self.background.discard(done)
+            if not done.cancelled() and done.exception() is not None:
+                log.error(
+                    "background work failed",
+                    extra={"fields": {"what": what}},
+                    exc_info=done.exception(),
+                )
+
+        task.add_done_callback(finished)
+        return task
 
     def tool_context(self, tier: Tier) -> ToolContext:
         if self.indexes is None:
@@ -96,7 +177,14 @@ def make_provider(
 def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     base = settings.base_path
     app = Quart("cra", static_folder=str(STATIC_DIR), static_url_path=f"{base}/static")
-    app.config["MAX_CONTENT_LENGTH"] = settings.library_max_upload_mb * 1024 * 1024
+    app.request_class = type(
+        "Request",
+        (LimitedRequest,),
+        {
+            "upload_path": f"{base}/api/admin/library",
+            "upload_limit": settings.library_max_upload_mb * 1024 * 1024,
+        },
+    )
     engine = engine or make_engine(settings.history_url)
     repo = Repository(make_session_factory(engine))
     http = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
@@ -104,13 +192,19 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         settings=settings,
         engine=engine,
         repo=repo,
-        sessions=SessionStore(repo, timedelta(hours=settings.session_max_age_hours)),
+        sessions=SessionStore(
+            repo,
+            timedelta(hours=settings.session_max_age_hours),
+            timedelta(hours=settings.session_absolute_hours),
+        ),
         provider=make_provider(settings, repo, http),
         http=http,
         policy=Policy(settings),
         catalogue=ModelCatalogue(settings),
         remote=RemoteHost(
-            configured_sources(settings), RemotePool(settings.mcp_pool_idle_s)
+            configured_sources(settings),
+            RemotePool(settings.mcp_pool_idle_s),
+            allow_write=settings.remote_write_tools,
         ),
     )
     app.extensions["cra"] = ctx
@@ -179,18 +273,71 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
             response.headers["Cache-Control"] = "no-cache"
         return response
 
+    @app.after_request
+    async def harden(response: Response) -> Response:
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        if settings.cookie_secure:
+            response.headers.setdefault("Strict-Transport-Security", HSTS)
+        return response
+
     @app.before_request
     async def guard() -> Response | None:
         g.session = await ctx.sessions.load(request.cookies.get(COOKIE_NAME))
         g.principal = await _principal(ctx)
         if request.endpoint == "static":
             return None
+        if (refused := _refuse_cross_site()) is not None:
+            return refused
+        if (
+            request.endpoint != UPLOAD_ENDPOINT
+            and (request.content_length or 0) > JSON_BODY_LIMIT
+        ):
+            return _json_error("The request body is too large.", 413)
         required = required_role(app.view_functions.get(request.endpoint or ""))
         if satisfies(g.principal, required):
             return None
         return _refuse(ctx, required)
 
     return app
+
+
+def _refuse_cross_site() -> Response | None:
+    """A state-changing request has to come from this site's own scripts.
+
+    ``SameSite=Lax`` on the cookie is the first line; this is the second, for
+    the cases Lax leaves open. Three tells, any one of which is enough: the
+    browser says the request is cross-site, the Origin names another host, or
+    the body is something a plain HTML form could have sent.
+    """
+    if request.method not in STATE_CHANGING:
+        return None
+    if request.headers.get("Sec-Fetch-Site", "").lower() == "cross-site":
+        return _json_error("Cross-site requests are not accepted.", 403)
+    origin = request.headers.get("Origin", "")
+    if (
+        origin
+        and origin.lower() != "null"
+        and _host_of(origin) != _host_of(request.host_url)
+    ):
+        return _json_error("Cross-site requests are not accepted.", 403)
+    if request.mimetype in FORM_TYPES and not (
+        request.endpoint == UPLOAD_ENDPOINT
+        and request.headers.get(FETCH_HEADER) == FETCH_VALUE
+    ):
+        return _json_error("Send JSON, not a form.", 403)
+    return None
+
+
+def _host_of(url: str) -> str:
+    host = url.split("//", 1)[-1].split("/", 1)[0].lower()
+    return host.removesuffix(":443").removesuffix(":80")
+
+
+def _json_error(message: str, status: int) -> Response:
+    response = jsonify(error=message)
+    response.status_code = status
+    return response
 
 
 async def _page(name: str) -> Response:
@@ -231,6 +378,10 @@ def _encoder(settings: Settings) -> Any:
 
 
 async def _close(ctx: AppContext) -> None:
+    for task in list(ctx.background):
+        task.cancel()
+    if ctx.background:
+        await asyncio.gather(*ctx.background, return_exceptions=True)
     await ctx.remote.aclose()
     await ctx.http.aclose()
     await ctx.engine.dispose()

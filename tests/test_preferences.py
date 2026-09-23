@@ -136,11 +136,27 @@ def test_openrouter_always_gets_the_privacy_routing(tmp_path):
         "zdr": True,
         "data_collection": "deny",
         "max_price": {"prompt": 1.0, "completion": 1.0},
+        "quantizations": ["fp8", "fp16", "bf16", "fp32", "unknown"],
     }
     assert fields["reasoning"] == {"effort": "low"}
     body, rest = params_.split(fields)
     assert set(body) == {"provider", "reasoning"}
     assert set(rest) == {"max_tokens"}
+
+
+def test_openrouter_routing_can_be_narrowed_or_opened(tmp_path):
+    narrowed = make_settings(
+        tmp_path, llm_provider="openrouter", openrouter_ignore_providers="Sail Research"
+    )
+    provider = params_.request_fields(narrowed)["provider"]
+    assert provider["ignore"] == ["Sail Research"]
+
+    opened = make_settings(
+        tmp_path, llm_provider="openrouter", openrouter_quantizations=""
+    )
+    provider = params_.request_fields(opened)["provider"]
+    assert "quantizations" not in provider
+    assert "ignore" not in provider
 
 
 @respx.mock

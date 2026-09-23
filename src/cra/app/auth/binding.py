@@ -1,10 +1,21 @@
 """First login binds an identity to a pre-registered email; afterwards only
-``(issuer, sub)`` counts. This is the decision table from the SSO handover."""
+``(issuer, sub)`` counts. This is the decision table from the SSO handover.
 
+The email claim is asserted by the home identity provider and verified by
+nobody else, and ``sub`` is pairwise, so nothing in the token ties an address
+to the institution that issued it. An invitation therefore also names the home
+organisation it may be claimed from, either on its own or through the
+deployment-wide list, and a matching address from anywhere else is refused.
+"""
+
+import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from cra.app.auth.principal import LoginDenied, LoginOutcome
 from cra.app.history.repository import Repository, normalise_email
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -22,7 +33,23 @@ class Claims:
         return name or self.email or self.sub
 
 
-async def resolve_login(repo: Repository, claims: Claims) -> LoginOutcome:
+def organization_allowed(
+    claimed: str, invitation: str, deployment: Iterable[str]
+) -> bool:
+    """Whether an identity from ``claimed`` may take an invitation.
+
+    The invitation's own organisation wins; without one the deployment list
+    applies; without either, any organisation in the federation may claim it.
+    """
+    expected = [invitation] if invitation else list(deployment)
+    if not expected:
+        return True
+    return claimed.strip().lower() in {e.strip().lower() for e in expected if e}
+
+
+async def resolve_login(
+    repo: Repository, claims: Claims, allowed_organizations: Iterable[str] = ()
+) -> LoginOutcome:
     email = normalise_email(claims.email)
     outcome = LoginOutcome(email=email, organization=claims.home_organization)
 
@@ -42,6 +69,22 @@ async def resolve_login(repo: Repository, claims: Claims) -> LoginOutcome:
     if registered is None:
         outcome.denied = LoginDenied.NOT_REGISTERED
         return outcome
+    if not organization_allowed(
+        claims.home_organization, registered.home_organization, allowed_organizations
+    ):
+        log.warning(
+            "invitation claimed from another organisation",
+            extra={
+                "fields": {
+                    "issuer": claims.issuer,
+                    "organization": claims.home_organization,
+                    "expected": registered.home_organization
+                    or ",".join(allowed_organizations),
+                }
+            },
+        )
+        outcome.denied = LoginDenied.ORGANIZATION
+        return outcome
 
     if registered.user_id is None:
         # an invitation may name the role the new account starts with
@@ -56,5 +99,16 @@ async def resolve_login(repo: Repository, claims: Claims) -> LoginOutcome:
     await repo.add_identity(
         claims.issuer, claims.sub, user.id, claims.home_organization
     )
+    log.info(
+        "identity bound",
+        extra={
+            "fields": {
+                "user": user.id,
+                "issuer": claims.issuer,
+                "organization": claims.home_organization,
+            }
+        },
+    )
     outcome.user_id = user.id
+    outcome.bound = True
     return outcome

@@ -71,3 +71,61 @@ async def test_inactive_user_is_denied(repo, known_identity):
     await repo.set_user_active(first.user_id, False)
     outcome = await resolve_login(repo, claims(sub="s1" if known_identity else "s2"))
     assert outcome.denied is LoginDenied.INACTIVE
+
+
+async def test_the_first_login_reports_that_it_bound(repo):
+    await repo.add_registered_email("ada@example.org", "cli")
+    first = await resolve_login(repo, claims(sub="s1"))
+    again = await resolve_login(repo, claims(sub="s1"))
+    assert (first.bound, again.bound) == (True, False)
+
+
+@pytest.mark.parametrize(
+    ("invitation_org", "deployment", "claimed", "ok"),
+    [
+        ("", [], "anywhere.edu", True),
+        ("", ["tum.de", "lmu.de"], "LMU.de", True),
+        ("", ["tum.de", "lmu.de"], "evil.example", False),
+        ("tum.de", ["lmu.de"], "tum.de", True),
+        ("tum.de", ["lmu.de"], "lmu.de", False),
+        ("tum.de", [], "", False),
+    ],
+    ids=[
+        "nothing required",
+        "deployment list, case-insensitive",
+        "deployment list, elsewhere",
+        "invitation overrides the list",
+        "invitation refuses what the list allows",
+        "no organisation claimed",
+    ],
+)
+async def test_an_invitation_is_claimed_only_from_its_organisation(
+    repo, invitation_org, deployment, claimed, ok
+):
+    """Any identity provider in the federation can assert any email; the
+    home organisation is the one claim that says where the assertion is from."""
+    await repo.add_registered_email(
+        "ada@example.org", "cli", home_organization=invitation_org
+    )
+    outcome = await resolve_login(
+        repo, claims(home_organization=claimed), allowed_organizations=deployment
+    )
+    if ok:
+        assert outcome.denied is None
+        assert outcome.bound is True
+    else:
+        assert outcome.denied is LoginDenied.ORGANIZATION
+        assert await repo.list_users() == []
+        assert await repo.get_identity(ISS, "s1") is None
+
+
+async def test_a_bound_identity_is_not_asked_for_its_organisation_again(repo):
+    """The check protects the binding; afterwards (issuer, sub) is the identity."""
+    await repo.add_registered_email(
+        "ada@example.org", "cli", home_organization="tum.de"
+    )
+    first = await resolve_login(repo, claims(home_organization="tum.de"))
+    later = await resolve_login(
+        repo, claims(email="", home_organization="other.de"), ["lmu.de"]
+    )
+    assert later.user_id == first.user_id

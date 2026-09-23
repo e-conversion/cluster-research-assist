@@ -193,6 +193,10 @@ def request_fields(
             "completion": settings.openrouter_max_price_per_mtok,
         },
     }
+    if settings.openrouter_quantizations:
+        fields["provider"]["quantizations"] = list(settings.openrouter_quantizations)
+    if settings.openrouter_ignore_providers:
+        fields["provider"]["ignore"] = list(settings.openrouter_ignore_providers)
     if values["reasoning_effort"]:
         fields["reasoning"] = {"effort": values["reasoning_effort"]}
     return fields

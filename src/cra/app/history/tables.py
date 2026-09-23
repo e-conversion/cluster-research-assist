@@ -39,6 +39,9 @@ class RegisteredEmail(Base):
     )
     # the role the account gets when this address first signs in
     role: Mapped[str] = mapped_column(String(20), default="user")
+    # the schacHomeOrganization the claiming identity must come from; empty
+    # defers to CRA_AUTH_HOME_ORGANIZATIONS
+    home_organization: Mapped[str] = mapped_column(String(200), default="")
     created_by: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime]
 

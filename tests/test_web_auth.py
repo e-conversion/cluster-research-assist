@@ -225,10 +225,10 @@ async def test_the_session_reports_the_tools_the_caller_may_use(client):
     body = await (await client.get("/api/session")).get_json()
     # every tool but semantic search, which needs an encoder this test has not
     # configured; the library's vectors alone still answer "papers like this one"
-    assert body["tools"]["local"] == 16
-    assert body["tools"]["total"] == 16
+    assert body["tools"]["local"] == 19
+    assert body["tools"]["total"] == 19
     health = await (await client.get("/api/health")).get_json()
-    assert health["tools"] == 16
+    assert health["tools"] == 19
 
 
 async def test_the_session_hands_back_the_conversation_it_is_in(client, app):
@@ -258,3 +258,124 @@ async def test_the_session_hands_back_the_conversation_it_is_in(client, app):
     assert body["turns"] == 1
     assert [m["role"] for m in body["messages"]] == ["user", "assistant"]
     assert body["messages"][1]["meta"]["model"] == "m"
+
+
+async def two_people(tmp_path):
+    """An app where the proxy header decides who is signing in."""
+    return create_app(
+        make_settings(tmp_path, auth_dev_user="", auth_user_header="X-Forwarded-User")
+    )
+
+
+async def test_signing_in_as_someone_else_does_not_continue_their_conversation(
+    tmp_path,
+):
+    """Shared lab machine: A walks away signed in, B signs in on top."""
+    app = await two_people(tmp_path)
+    async with app.test_app():
+        ctx = app.extensions["cra"]
+        client = app.test_client()
+        await client.get("/auth/login", headers={"X-Forwarded-User": "ada"})
+        ada = (await ctx.repo.list_users())[0]
+        conversation = await ctx.repo.create_conversation(ada.id, "Ada's")
+        await ctx.repo.add_message(conversation.id, "user", "my secret question")
+        await client.post(f"/api/conversations/{conversation.id}/open")
+        assert (await (await client.get("/api/session")).get_json())["turns"] == 1
+
+        await client.get("/auth/login", headers={"X-Forwarded-User": "bob"})
+        session = await (await client.get("/api/session")).get_json()
+        assert session["user"] == "bob"
+        assert (session["conversation"], session["messages"]) == (None, [])
+
+
+async def test_a_session_naming_someone_elses_conversation_shows_nothing(app, client):
+    ctx = app.extensions["cra"]
+    await client.get("/auth/login")
+    bob = await ctx.repo.create_user("bob")
+    theirs = await ctx.repo.create_conversation(bob.id, "Private")
+    await ctx.repo.add_message(theirs.id, "user", "secret")
+    cookie = next(c for c in client.cookie_jar if c.name == COOKIE_NAME)
+    state = await ctx.sessions.load(cookie.value)
+    state.data = {"conversation": theirs.id}
+    await ctx.sessions.save(state)
+
+    body = await (await client.get("/api/session")).get_json()
+    assert (body["conversation"], body["messages"]) == (None, [])
+    # and a question would start a fresh one rather than append to theirs
+    from cra.app.web import route_chat
+
+    principal = type("P", (), {"user_id": (await ctx.repo.list_users())[0].id})()
+    started = await route_chat._conversation(ctx, state, principal)
+    assert started != theirs.id
+
+
+async def test_every_response_carries_the_security_headers(client):
+    response = await client.get("/")
+    csp = response.headers["Content-Security-Policy"]
+    script_src = next(d for d in csp.split(";") if d.strip().startswith("script-src"))
+    assert "'unsafe-inline'" not in script_src
+    assert "https://cdn.jsdelivr.net" in script_src
+    assert "img-src 'self' data:" in csp
+    assert "frame-ancestors 'self'" in csp
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert "Referrer-Policy" in response.headers
+    # plain-http local run: no HSTS, or the browser would refuse http next time
+    assert "Strict-Transport-Security" not in response.headers
+    api = await client.get("/api/health")
+    assert "Content-Security-Policy" in api.headers
+
+
+async def test_hsts_is_sent_when_cookies_are_secure(tmp_path):
+    app = create_app(make_settings(tmp_path, cookie_secure=True))
+    async with app.test_app():
+        response = await app.test_client().get("/api/health")
+        assert response.headers["Strict-Transport-Security"].startswith("max-age=")
+
+
+@pytest.mark.parametrize(
+    ("headers", "data"),
+    [
+        ({"Origin": "https://evil.example", "Content-Type": "application/json"}, "{}"),
+        ({"Sec-Fetch-Site": "cross-site", "Content-Type": "application/json"}, "{}"),
+        ({"Content-Type": "application/x-www-form-urlencoded"}, "prompt=hi"),
+        ({"Content-Type": "text/plain"}, "{}"),
+    ],
+    ids=["foreign origin", "browser says cross-site", "urlencoded form", "text form"],
+)
+async def test_requests_a_foreign_page_could_make_are_refused(client, headers, data):
+    await client.get("/auth/login")
+    response = await client.post("/api/chat/reset", headers=headers, data=data)
+    assert response.status_code == 403
+    same_site = await client.post(
+        "/api/chat/reset",
+        headers={"Origin": "http://localhost", "Content-Type": "application/json"},
+        data="{}",
+    )
+    assert same_site.status_code == 200
+
+
+async def test_a_large_body_is_refused_before_it_is_read(client):
+    await client.get("/auth/login")
+    response = await client.post(
+        "/api/chat",
+        headers={"Content-Type": "application/json"},
+        data=b'{"prompt": "' + b"x" * (1024 * 1024 + 1) + b'"}',
+    )
+    assert response.status_code == 413
+
+
+async def test_a_session_ends_after_its_absolute_lifetime_however_busy(repo):
+    from datetime import timedelta
+
+    from cra.app.history.repository import utcnow
+    from cra.app.web.sessions import SessionStore
+
+    store = SessionStore(repo, timedelta(hours=12), timedelta(hours=1))
+    user = await repo.create_user("ada")
+    cookie, state = await store.create(user.id)
+    row = await repo.get_session(state.id)
+    assert row.expires_at <= row.created_at + timedelta(hours=1)
+    await repo.update_session(state.id, created_at=utcnow() - timedelta(hours=2))
+    assert await store.load(cookie) is None
+    assert await repo.get_session(state.id) is None

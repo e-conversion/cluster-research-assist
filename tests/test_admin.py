@@ -151,7 +151,7 @@ async def test_settings_show_their_value_and_where_it_comes_from(admin):
     by_key = {s["key"]: s for s in body["settings"]}
     assert by_key.keys() == KEYS.keys()
     assert by_key["user_chat_daily_limit"]["source"] == "configuration"
-    assert by_key["user_chat_daily_limit"]["value"] == 0
+    assert by_key["user_chat_daily_limit"]["value"] == 200
 
 
 async def test_changing_a_setting_takes_effect_and_survives_a_restart(admin, admin_app):
@@ -168,8 +168,8 @@ async def test_changing_a_setting_takes_effect_and_survives_a_restart(admin, adm
     assert (await Policy.load(ctx.settings, ctx.repo))["user_chat_daily_limit"] == 5
 
     await admin.put("/api/admin/policy/user_chat_daily_limit", json={"reset": True})
-    assert ctx.policy["user_chat_daily_limit"] == 0
-    assert (await Policy.load(ctx.settings, ctx.repo))["user_chat_daily_limit"] == 0
+    assert ctx.policy["user_chat_daily_limit"] == 200
+    assert (await Policy.load(ctx.settings, ctx.repo))["user_chat_daily_limit"] == 200
 
 
 async def test_a_setting_reaches_the_landing_page_without_signing_in(admin, admin_app):
@@ -249,7 +249,12 @@ async def upload(client, path):
 
     with path.open("rb") as handle:
         storage = FileStorage(handle, filename="bundle.tar.gz")
-        return await client.post("/api/admin/library", files={"bundle": storage})
+        # multipart is what a cross-site form sends too; the header says it is ours
+        return await client.post(
+            "/api/admin/library",
+            files={"bundle": storage},
+            headers={"X-Requested-With": "cra"},
+        )
 
 
 async def test_a_fixed_bundle_reports_that_it_cannot_be_updated(admin):
@@ -354,3 +359,29 @@ async def test_uploading_to_a_fixed_bundle_is_refused(admin, tmp_path):
     )
     assert response.status_code == 409
     assert "init-root" in (await json_of(response))["error"]
+
+
+async def test_an_invitation_names_where_it_may_be_claimed_from(admin):
+    response = await admin.post(
+        "/api/admin/emails",
+        json={"email": "ada@tum.de", "home_organization": " TUM.de "},
+    )
+    assert (await json_of(response))["home_organization"] == "TUM.de"
+    people = (await json_of(await admin.get("/api/admin/people")))["people"]
+    invitation = next(p for p in people if p["kind"] == "invitation")
+    assert invitation["home_organization"] == "tum.de"
+
+
+async def test_admin_actions_are_logged_with_the_actor(admin, admin_app, caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="cra.app.web.route_admin")
+    await admin.post("/api/admin/emails", json={"email": "ada@tum.de"})
+    actions = [
+        r.fields["action"] for r in caplog.records if r.getMessage() == "admin action"
+    ]
+    assert actions == ["invite"]
+    actor = next(
+        r.fields["by"] for r in caplog.records if r.getMessage() == "admin action"
+    )
+    assert actor == (await admin_app.extensions["cra"].repo.list_users())[0].id

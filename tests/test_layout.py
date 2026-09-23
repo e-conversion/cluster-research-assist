@@ -64,3 +64,19 @@ def test_import_layering(package, forbidden):
         if (bad := {m for m in _imports(path) if m.startswith(forbidden)})
     }
     assert not violations, violations
+
+
+STATIC = SRC / "app" / "web" / "static"
+
+
+def test_no_inline_scripts_in_the_frontend():
+    """The Content-Security-Policy refuses inline scripts, so one would
+    silently not run; every script is a file, and CDN files are pinned by hash."""
+    import re
+
+    for page in STATIC.glob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        assert not re.search(r"<script(?![^>]*\bsrc=)[^>]*>", text), page.name
+        assert not re.search(r"\son[a-z]+=", text), page.name
+        for tag in re.findall(r"<script[^>]*src=\"https://[^>]*>", text):
+            assert 'integrity="sha384-' in tag, (page.name, tag)
