@@ -158,7 +158,54 @@ async def test_a_tool_that_raises_becomes_an_error_not_a_crash(ctx):
         "error": "that is not a thing"
     }
     assert "RuntimeError" in (await registry.call("boom", {"mode": "x"}, ctx))["error"]
-    assert "Bad arguments" in (await registry.call("boom", {"wrong": 1}, ctx))["error"]
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected"),
+    [
+        ({}, "'query' is required (What to look for.)"),
+        ({"query": "x", "wrong": 1}, "'wrong' is not an argument of example"),
+        ({"query": "x", "limit": 99}, "'limit': Input should be less than or equal"),
+        ({"query": "x", "limit": "many"}, "'limit': Input should be a valid integer"),
+    ],
+    ids=["missing", "unknown", "out of range", "wrong type"],
+)
+async def test_a_wrong_call_is_told_what_is_wrong(ctx, arguments, expected):
+    """A model that is told which argument is missing fixes it in one round;
+    one that is told 'bad arguments' tries the same call again."""
+
+    @tool(tier=Tier.PUBLIC)
+    def example(
+        ctx: ToolContext,
+        query: Annotated[str, Field(description="What to look for.")],
+        limit: Annotated[int, Field(le=50)] = 5,
+    ) -> dict:
+        """A description."""
+        return {"query": query, "limit": limit}
+
+    registry = Registry()
+    registry.register(example)
+    result = await registry.call("example", arguments, ctx)
+    assert expected in result["error"]
+    assert result["error"].endswith("Call it again with the arguments fixed.")
+
+
+async def test_arguments_are_coerced_and_defaults_come_from_the_function(ctx):
+    @tool(tier=Tier.PUBLIC)
+    def example(ctx: ToolContext, query: str, limit: int = 5) -> dict:
+        """A description."""
+        return {"query": query, "limit": limit}
+
+    registry = Registry()
+    registry.register(example)
+    assert await registry.call("example", {"query": "x", "limit": "7"}, ctx) == {
+        "query": "x",
+        "limit": 7,
+    }
+    assert await registry.call("example", {"query": "x"}, ctx) == {
+        "query": "x",
+        "limit": 5,
+    }
 
 
 def test_an_unknown_module_is_a_startup_error(indexes, tmp_path):

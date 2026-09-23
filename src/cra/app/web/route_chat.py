@@ -1,6 +1,7 @@
 """Asking a question, and watching the answer arrive."""
 
 import asyncio
+import contextlib
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -20,6 +21,9 @@ log = logging.getLogger(__name__)
 bp = Blueprint("chat", __name__)
 
 MAX_PROMPT_CHARS = 20_000
+# A proxy that sees no bytes for a minute closes the connection, and a model
+# endpoint can take longer than that to send its first token.
+KEEPALIVE_S = 15.0
 
 
 def _ctx():
@@ -27,7 +31,39 @@ def _ctx():
 
 
 def _frame(event: dict[str, Any]) -> str:
+    if event["type"] == "keepalive":
+        return ": keepalive\n\n"
     return f"event: {event['type']}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+async def paced(
+    events: AsyncIterator[dict[str, Any]], interval: float
+) -> AsyncIterator[dict[str, Any]]:
+    """The events as they come, and a keepalive whenever none came for a while.
+
+    The next event is awaited in a task so that waiting for it can time out
+    without cancelling it; the source keeps running across keepalives.
+    """
+    source = events.__aiter__()
+    pending: asyncio.Task[dict[str, Any]] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.ensure_future(source.__anext__())
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield {"type": "keepalive"}
+                continue
+            task, pending = pending, None
+            try:
+                yield task.result()
+            except StopAsyncIteration:
+                return
+    finally:
+        if pending is not None:
+            pending.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await pending
 
 
 async def _conversation(ctx: Any, session: Any, principal: Any) -> str:
@@ -102,9 +138,11 @@ async def chat() -> Any:
         sent = 0
         reason = "complete"
         try:
-            async for event in turn.run():
-                sent += 1
+            async for event in paced(turn.run(), KEEPALIVE_S):
                 yield _frame(event)
+                if event["type"] == "keepalive":
+                    continue
+                sent += 1
                 if event["type"] in ("done", "error"):
                     final = event
         except BaseException as exc:

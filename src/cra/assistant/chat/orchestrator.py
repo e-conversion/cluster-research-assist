@@ -4,6 +4,11 @@ An async generator of plain dicts, so the transport can be server-sent events,
 a test, or anything else, and the loop itself knows nothing about HTTP. Exactly
 one ``done`` or ``error`` ends it, and both carry the rounds and tool calls that
 already happened, so a failure halfway is still accounted for.
+
+The tool budget is a budget for searching, not for answering: when it is spent,
+or when two rounds in a row produced nothing new, the model is asked once more,
+without tools, to answer from what it has. A person then gets an answer built
+on the evidence already gathered rather than a note saying the limit was hit.
 """
 
 import asyncio
@@ -28,6 +33,19 @@ REPEATED = (
     "You already made this exact call earlier in this answer and have its result. "
     "Use it, search for something different, or answer with what you have."
 )
+FAILED_AGAIN = (
+    "This exact call already failed earlier in this answer with the same error. "
+    "Change the arguments or use a different tool."
+)
+ANSWER_NOW = (
+    "You have used the tool calls available for this answer. Do not call any more "
+    "tools. Answer the question now from the results you already have, cite what "
+    "you found, and say plainly what you could not find out."
+)
+# rounds in a row in which every call failed or repeated an earlier one
+FRUITLESS_ROUNDS = 2
+LIMIT_REACHED_ERROR = "tool_call_limit_reached"
+FRUITLESS_ERROR = "tool_calls_fruitless"
 
 THINK_OPEN, THINK_CLOSE = "<think>", "</think>"
 
@@ -132,6 +150,15 @@ class Progress:
         }
 
 
+@dataclass
+class RoundResult:
+    """What one model call produced, filled in while its events stream out."""
+
+    text: str = ""
+    calls: dict[int, dict[str, str]] = field(default_factory=dict)
+    cancelled: bool = False
+
+
 def _count_usage(totals: dict[str, int], usage: Any) -> None:
     if usage is None:
         return
@@ -201,10 +228,17 @@ async def _rounds(
 ) -> AsyncIterator[dict[str, Any]]:
     conversation = [{"role": "system", "content": system_prompt}, *messages]
     stopped = lambda: cancel is not None and cancel.is_set()  # noqa: E731
-    # A model that repeats a call it already made will keep doing it until the
-    # round limit. Answering the repeat rather than running it again breaks the
-    # loop and costs one short message instead of a whole result.
-    already_called: set[tuple[str, str]] = set()
+    # A model that repeats a call it already made would keep doing it until the
+    # round limit. A repeat is answered rather than run: a successful call with
+    # a note that its result is already there, a failed one with its error
+    # again, so the model is never told it has a result it does not have.
+    outcomes: dict[tuple[str, str], str | None] = {}
+    # Some endpoints number their calls from zero in every round. The ids pair
+    # each result with its call, in the conversation and in the interface, so
+    # they have to be unique for the whole turn.
+    used_ids: set[str] = set()
+    fruitless = 0
+    why_final: str | None = None
 
     for number in range(max_rounds):
         progress.rounds = number + 1
@@ -213,77 +247,29 @@ async def _rounds(
             return
         yield {"type": "round", "round": progress.rounds, "max": max_rounds}
 
-        pieces: list[str] = []
-        calls: dict[int, dict[str, str]] = {}
-        splitter = ThinkSplitter()
-        started = time.perf_counter()
-        stream = await open_stream(
-            client,
-            model=model,
-            messages=conversation,
-            base_url=base_url,
-            tools=tools,
-            extra_body=extra_body,
-            **fields,
-        )
-        try:
-            async for chunk in stream:
-                if stopped():
-                    yield progress.ending(progress.answer("".join(pieces)), "cancelled")
-                    return
-                _count_usage(progress.usage, getattr(chunk, "usage", None))
-                if not getattr(chunk, "choices", None):
-                    continue
-                delta = chunk.choices[0].delta
-                if delta is None:
-                    continue
-                reasoning = getattr(delta, "reasoning_content", None) or getattr(
-                    delta, "reasoning", None
-                )
-                if reasoning:
-                    yield {"type": "reasoning_delta", "text": reasoning}
-                if content := getattr(delta, "content", None):
-                    for channel, piece in splitter.feed(content):
-                        if channel == "text":
-                            pieces.append(piece)
-                        yield {"type": f"{channel}_delta", "text": piece}
-                for fragment in getattr(delta, "tool_calls", None) or []:
-                    accumulate(calls, fragment)
-            for channel, piece in splitter.flush():
-                if channel == "text":
-                    pieces.append(piece)
-                yield {"type": f"{channel}_delta", "text": piece}
-        finally:
-            if close := getattr(stream, "close", None):
-                result = close()
-                if inspect.isawaitable(result):
-                    await result
-
-        text = "".join(pieces)
-        progress.texts.append(text)
-        log.info(
-            "model round",
-            extra={
-                "fields": {
-                    "model": model,
-                    "round": progress.rounds,
-                    "duration_s": round(time.perf_counter() - started, 3),
-                    "tool_calls": len(calls),
-                }
-            },
-        )
-        if not calls:
+        result = RoundResult()
+        async for event in _one_round(
+            client, model, conversation, base_url, tools, extra_body, fields,
+            progress, stopped, result,
+        ):  # fmt: skip
+            yield event
+        if result.cancelled:
+            yield progress.ending(progress.answer(result.text), "cancelled")
+            return
+        progress.texts.append(result.text)
+        if not result.calls:
             yield progress.ending(progress.answer(), None)
             return
 
-        wanted = [calls[i] for i in sorted(calls)]
+        wanted = [result.calls[i] for i in sorted(result.calls)]
         for position, call in enumerate(wanted):
-            if not call["id"]:
+            if not call["id"] or call["id"] in used_ids:
                 call["id"] = f"call_{progress.rounds}_{position}"
+            used_ids.add(call["id"])
         conversation.append(
             {
                 "role": "assistant",
-                "content": text or None,
+                "content": result.text or None,
                 "tool_calls": [
                     {
                         "id": c["id"],
@@ -295,16 +281,12 @@ async def _rounds(
             }
         )
 
+        useful = 0
         for call in wanted:
             if stopped():
                 yield progress.ending(progress.answer(), "cancelled")
                 return
-            try:
-                arguments = json.loads(call["arguments"] or "{}")
-                if not isinstance(arguments, dict):
-                    arguments = {}
-            except json.JSONDecodeError:
-                arguments = {}
+            arguments = _arguments(call["arguments"])
             yield {
                 "type": "tool_call_start",
                 "id": call["id"],
@@ -314,15 +296,24 @@ async def _rounds(
             }
             at = time.perf_counter()
             signature = (call["name"], json.dumps(arguments, sort_keys=True))
-            if signature in already_called:
-                result = json.dumps({"repeated": True, "note": REPEATED})
+            if signature in outcomes:
+                earlier = outcomes[signature]
+                result_text = json.dumps(
+                    {"repeated": True, "note": REPEATED}
+                    if earlier is None
+                    else {"repeated": True, "error": earlier, "note": FAILED_AGAIN}
+                )
+                succeeded = False
             else:
-                already_called.add(signature)
-                result = await call_tool(call["name"], arguments)
-                if not isinstance(result, str):
-                    result = json.dumps(result, ensure_ascii=False, default=str)
+                result_text = await call_tool(call["name"], arguments)
+                if not isinstance(result_text, str):
+                    result_text = json.dumps(
+                        result_text, ensure_ascii=False, default=str
+                    )
+                succeeded = not result_text.lstrip().startswith('{"error"')
+                outcomes[signature] = None if succeeded else _error_of(result_text)
+                useful += succeeded
             took = (time.perf_counter() - at) * 1000
-            succeeded = not result.lstrip().startswith('{"error"')
             progress.tools.append(
                 {"name": call["name"], "ms": round(took), "ok": succeeded}
             )
@@ -335,10 +326,131 @@ async def _rounds(
                 "name": call["name"],
                 "ok": succeeded,
                 "ms": round(took),
-                "preview": result[:RESULT_PREVIEW_CHARS],
+                "preview": result_text[:RESULT_PREVIEW_CHARS],
             }
             conversation.append(
-                {"role": "tool", "tool_call_id": call["id"], "content": result}
+                {"role": "tool", "tool_call_id": call["id"], "content": result_text}
             )
 
-    yield progress.ending(progress.answer(LIMIT_REACHED), "tool_call_limit_reached")
+        fruitless = 0 if useful else fruitless + 1
+        if fruitless >= FRUITLESS_ROUNDS:
+            why_final = FRUITLESS_ERROR
+            break
+    else:
+        why_final = LIMIT_REACHED_ERROR
+
+    log.info(
+        "answering without tools",
+        extra={
+            "fields": {"model": model, "reason": why_final, "rounds": progress.rounds}
+        },
+    )
+    if stopped():
+        yield progress.ending(progress.answer(), "cancelled")
+        return
+    yield {
+        "type": "round",
+        "round": progress.rounds + 1,
+        "max": max_rounds,
+        "final": True,
+    }
+    conversation.append({"role": "user", "content": ANSWER_NOW})
+    result = RoundResult()
+    async for event in _one_round(
+        client, model, conversation, base_url, tools, extra_body,
+        {**fields, "tool_choice": "none"}, progress, stopped, result,
+    ):  # fmt: skip
+        yield event
+    if result.cancelled:
+        yield progress.ending(progress.answer(result.text), "cancelled")
+        return
+    progress.texts.append(result.text)
+    yield progress.ending(progress.answer() or LIMIT_REACHED, why_final)
+
+
+async def _one_round(
+    client: Any,
+    model: str,
+    conversation: list[dict[str, Any]],
+    base_url: str,
+    tools: list[dict[str, Any]],
+    extra_body: dict[str, Any] | None,
+    fields: dict[str, Any],
+    progress: Progress,
+    stopped: Callable[[], bool],
+    out: RoundResult,
+) -> AsyncIterator[dict[str, Any]]:
+    """One model call, streamed. Text deltas go out as they arrive; the text
+    and the tool calls it asked for are left in ``out``."""
+    pieces: list[str] = []
+    splitter = ThinkSplitter()
+    started = time.perf_counter()
+    stream = await open_stream(
+        client,
+        model=model,
+        messages=conversation,
+        base_url=base_url,
+        tools=tools,
+        extra_body=extra_body,
+        **fields,
+    )
+    try:
+        async for chunk in stream:
+            if stopped():
+                out.text = "".join(pieces)
+                out.cancelled = True
+                return
+            _count_usage(progress.usage, getattr(chunk, "usage", None))
+            if not getattr(chunk, "choices", None):
+                continue
+            delta = chunk.choices[0].delta
+            if delta is None:
+                continue
+            reasoning = getattr(delta, "reasoning_content", None) or getattr(
+                delta, "reasoning", None
+            )
+            if reasoning:
+                yield {"type": "reasoning_delta", "text": reasoning}
+            if content := getattr(delta, "content", None):
+                for channel, piece in splitter.feed(content):
+                    if channel == "text":
+                        pieces.append(piece)
+                    yield {"type": f"{channel}_delta", "text": piece}
+            for fragment in getattr(delta, "tool_calls", None) or []:
+                accumulate(out.calls, fragment)
+        for channel, piece in splitter.flush():
+            if channel == "text":
+                pieces.append(piece)
+            yield {"type": f"{channel}_delta", "text": piece}
+    finally:
+        if close := getattr(stream, "close", None):
+            closing = close()
+            if inspect.isawaitable(closing):
+                await closing
+    out.text = "".join(pieces)
+    log.info(
+        "model round",
+        extra={
+            "fields": {
+                "model": model,
+                "round": progress.rounds,
+                "duration_s": round(time.perf_counter() - started, 3),
+                "tool_calls": len(out.calls),
+            }
+        },
+    )
+
+
+def _arguments(raw: str) -> dict[str, Any]:
+    try:
+        arguments = json.loads(raw or "{}")
+    except json.JSONDecodeError:
+        return {}
+    return arguments if isinstance(arguments, dict) else {}
+
+
+def _error_of(result: str) -> str:
+    try:
+        return str(json.loads(result).get("error", result))[:300]
+    except (json.JSONDecodeError, AttributeError):
+        return result[:300]

@@ -71,6 +71,11 @@ class Settings(BaseSettings):
     llm_max_context_tokens: int = Field(default=64000, ge=1)
     openrouter_max_price_per_mtok: float = Field(default=1.0, ge=0)
     openrouter_min_agentic_index: float = Field(default=35.0, ge=0)
+    # The cheapest upstream of a model is not always a working one: an fp4
+    # endpoint was seen returning tool calls with their arguments dropped, which
+    # sends the model in circles. Empty means any quantization.
+    openrouter_quantizations: CommaList = ["fp8", "fp16", "bf16", "fp32", "unknown"]
+    openrouter_ignore_providers: CommaList = []
 
     # auth
     auth_provider: Literal["dev", "oidc"] = "dev"

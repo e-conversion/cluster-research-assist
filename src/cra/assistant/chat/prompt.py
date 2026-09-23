@@ -84,9 +84,13 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             "never present an entry as the data behind a cluster paper: there is no such link."
         )
     lines.append(
-        "\nA broad question needs more than one search, but each one must ask something "
-        "different: never repeat a call you have already made, and stop searching once you "
-        "can answer. Say what you found rather than what you looked for."
+        "\nMost questions take one to three tool calls. Fill in every required argument: "
+        "a call without them fails and costs a round. Never repeat a call you have already "
+        "made; if a search returns nothing useful, try one differently worded search, then "
+        "say what is missing. For 'list all' or 'how many' questions raise the limit rather "
+        "than searching many times, and report the total count the tool returns. Stop "
+        "searching once you can answer, and say what you found rather than what you looked "
+        "for."
     )
     lines.append("Answer in the language of the question.")
 
