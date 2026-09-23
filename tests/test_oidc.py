@@ -180,3 +180,81 @@ def test_login_denied_enum_covers_every_message():
     from cra.app.web.route_auth import MESSAGES
 
     assert set(MESSAGES) == set(LoginDenied)
+
+
+async def make_oidc_app(tmp_path, **overrides):
+    settings = make_settings(
+        tmp_path,
+        auth_provider="oidc",
+        oidc_issuer=ISSUER,
+        oidc_client_id=CLIENT_ID,
+        oidc_client_secret=CLIENT_SECRET,
+        oidc_redirect_uri="https://cra.test/auth/callback",
+        auth_admin_contact="admin@cra.test",
+        **overrides,
+    )
+    return create_app(settings)
+
+
+async def sign_in(client, idp):
+    query = await start_login(client, idp)
+    return await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
+
+
+async def test_admin_from_configuration_is_granted_once_at_binding(tmp_path, idp):
+    """An email claim is the home IdP's word, so it hands out admin only on
+    the login that binds the identity; a later demotion sticks."""
+    app = await make_oidc_app(tmp_path, auth_admins=["ada@example.org"])
+    async with app.test_app():
+        repo = app.extensions["cra"].repo
+        await repo.add_registered_email("ada@example.org", "cli")
+        client = app.test_client()
+        await sign_in(client, idp)
+        session = await (await client.get("/api/session")).get_json()
+        assert session["is_admin"] is True
+
+        user_id = (await repo.get_identity(ISSUER, "pairwise-1")).user_id
+        await repo.set_user_role(user_id, "user")
+        await client.post("/auth/logout")
+        await sign_in(client, idp)
+        session = await (await client.get("/api/session")).get_json()
+        assert session["is_admin"] is False
+
+
+async def test_an_invitation_from_another_organisation_is_refused(tmp_path, idp):
+    app = await make_oidc_app(tmp_path, auth_home_organizations=["lmu.de"])
+    async with app.test_app():
+        repo = app.extensions["cra"].repo
+        await repo.add_registered_email("ada@example.org", "cli")
+        client = app.test_client()
+        response = await sign_in(client, idp)
+        body = (await response.get_data()).decode()
+        assert response.status_code == 403
+        assert "not for accounts at tum.de" in body
+        assert await repo.list_users() == []
+        assert await session_user(client) is None
+
+
+async def test_forged_tokens_do_not_refetch_the_keys_each_time(
+    tmp_path, idp, respx_mock
+):
+    idp.install(respx_mock, aud="someone-else")
+    app = await make_oidc_app(tmp_path)
+    async with app.test_app():
+        client = app.test_client()
+        for _ in range(3):
+            assert (await sign_in(client, idp)).status_code == 400
+    fetched = sum(1 for c in respx_mock.calls if str(c.request.url).endswith("/jwks"))
+    assert fetched == 1
+
+
+async def test_the_callback_is_rate_limited_per_address(oidc_app, idp):
+    from cra.app.web.route_auth import CALLBACKS_PER_MINUTE
+
+    client = oidc_app.test_client()
+    statuses = [
+        (await client.get("/auth/callback?code=c&state=forged")).status_code
+        for _ in range(CALLBACKS_PER_MINUTE + 1)
+    ]
+    assert statuses[:-1] == [400] * CALLBACKS_PER_MINUTE
+    assert statuses[-1] == 429

@@ -44,6 +44,8 @@ ANONYMOUS = Principal()
 class LoginDenied(Enum):
     NOT_REGISTERED = "not_registered"
     NO_EMAIL = "no_email"
+    # the address is invited, but not from this identity's home organisation
+    ORGANIZATION = "organization"
     INACTIVE = "inactive"
     FAILED = "failed"
 
@@ -54,7 +56,10 @@ class LoginOutcome:
     denied: LoginDenied | None = None
     email: str = ""
     organization: str = ""
-    # the address this login came in on is listed in CRA_AUTH_ADMINS
+    # this login bound a new identity to the account
+    bound: bool = False
+    # promote the account: only ever set on the login that bound the identity,
+    # so an email claim on a later login cannot hand out admin
     grants_admin: bool = False
 
 

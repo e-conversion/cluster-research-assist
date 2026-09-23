@@ -27,16 +27,19 @@ class DevProvider:
         name = name.strip()
         if not name:
             return LoginOutcome(denied=LoginDenied.FAILED)
-        grants_admin = name.lower() in self._admins
         identity = await self._repo.get_identity(ISSUER, name)
         if identity is None:
             user = await self._repo.create_user(name)
             await self._repo.add_identity(ISSUER, name, user.id)
-            return LoginOutcome(user_id=user.id, grants_admin=grants_admin)
+            return LoginOutcome(
+                user_id=user.id,
+                bound=True,
+                grants_admin=name.lower() in self._admins,
+            )
         existing = await self._repo.get_user(identity.user_id)
         if existing is None or not existing.is_active:
             return LoginOutcome(denied=LoginDenied.INACTIVE)
-        return LoginOutcome(user_id=existing.id, grants_admin=grants_admin)
+        return LoginOutcome(user_id=existing.id)
 
     async def callback(
         self, session: SessionState, args: dict[str, str]

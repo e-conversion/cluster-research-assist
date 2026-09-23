@@ -1,6 +1,7 @@
 """The only place that talks to the database. Everything above it works with
 the ORM rows as plain objects and never imports SQLAlchemy."""
 
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -26,6 +27,18 @@ def utcnow() -> datetime:
 
 def normalise_email(email: str) -> str:
     return email.strip().lower()
+
+
+# one local part, one ASCII domain with a dot; no comments, quotes or unicode,
+# which is all an invitation could ever be matched against anyway
+_EMAIL = re.compile(r"^[a-z0-9!#$%&'*+/=?^_`{|}~.-]+@[a-z0-9-]+(\.[a-z0-9-]+)+$")
+
+
+def valid_email(email: str) -> bool:
+    address = normalise_email(email)
+    return (
+        len(address) <= 320 and bool(_EMAIL.fullmatch(address)) and ".." not in address
+    )
 
 
 class Repository:
@@ -85,12 +98,17 @@ class Repository:
     # registered emails (the allow-list)
 
     async def add_registered_email(
-        self, email: str, created_by: str, role: str = "user"
+        self,
+        email: str,
+        created_by: str,
+        role: str = "user",
+        home_organization: str = "",
     ) -> RegisteredEmail:
         row = RegisteredEmail(
             email=normalise_email(email),
             created_by=created_by,
             role=role,
+            home_organization=home_organization.strip().lower(),
             created_at=utcnow(),
         )
         async with self._sessions() as s, s.begin():
@@ -366,6 +384,13 @@ class Repository:
             await s.execute(
                 update(WebSession).where(WebSession.id == session_id).values(**values)
             )
+
+    async def sessions_of(self, user_id: str) -> list[WebSession]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(WebSession).where(WebSession.user_id == user_id)
+            )
+            return list(rows)
 
     async def delete_session(self, session_id: str) -> None:
         async with self._sessions() as s, s.begin():

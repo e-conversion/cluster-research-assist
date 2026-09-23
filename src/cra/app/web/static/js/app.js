@@ -54,13 +54,24 @@ function renderSignIn(view, config) {
   for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
 
+// the message may echo whatever the server (or a proxy) sent: text, never markup
+function renderUnreachable(view, error) {
+  const page = document.createElement("div");
+  page.className = "page";
+  const note = document.createElement("p");
+  note.className = "note";
+  note.textContent = `Could not reach the server: ${error.message}`;
+  page.append(note);
+  view.replaceChildren(page);
+}
+
 async function boot() {
   const view = document.getElementById("view");
   let config;
   try {
     config = await getJSON("api/config");
   } catch (e) {
-    view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
+    renderUnreachable(view, e);
     return;
   }
   document.title = config.title;
@@ -75,7 +86,7 @@ async function boot() {
     session = await getJSON("api/session");
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) { renderSignIn(view, config); return; }
-    view.innerHTML = `<div class="page"><p class="note">Could not reach the server: ${e.message}</p></div>`;
+    renderUnreachable(view, e);
     return;
   }
   store.update({ config, session });

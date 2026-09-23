@@ -30,10 +30,17 @@ MESSAGES = {
         "Your university did not transmit an email address. Please ask your IT "
         "department to release attributes to the identity provider, or contact {contact}."
     ),
+    LoginDenied.ORGANIZATION: (
+        "The address {email} is registered, but not for accounts at {organization}. "
+        "Sign in with the institution that issued it, or contact {contact}."
+    ),
     LoginDenied.INACTIVE: "Access to this account is disabled.",
     LoginDenied.FAILED: "Sign-in failed. Please try again or contact {contact}.",
 }
 STATUS = {LoginDenied.FAILED: 400}
+# callbacks per address per minute: a forged token costs a signature check
+# and possibly a JWKS fetch, and nobody signs in that often
+CALLBACKS_PER_MINUTE = 30
 
 ERROR_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -46,6 +53,20 @@ ERROR_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 
 def _ctx():
     return current_app.extensions["cra"]
+
+
+def client_address() -> str:
+    """The nearest hop's idea of who is calling.
+
+    A proxy that sets ``X-Forwarded-For`` to the real client puts it last;
+    the first entry is whatever the client itself claimed. Without a proxy the
+    socket address is all there is.
+    """
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    if last := forwarded.rpartition(",")[2].strip():
+        return last
+    client = request.scope.get("client")
+    return str(client[0]) if client else "unknown"
 
 
 def _set_cookie(response: Response, cookie: str) -> Response:
@@ -122,6 +143,13 @@ async def login() -> Response:
 @public
 async def callback() -> Response:
     ctx = _ctx()
+    allowance = ctx.limiter.check(
+        f"auth:{client_address()}", CALLBACKS_PER_MINUTE, window_s=60
+    )
+    if not allowance.allowed:
+        response = Response("Too many sign-in attempts.", status=429)
+        response.headers["Retry-After"] = str(allowance.retry_after)
+        return response
     if g.session is None:
         return await _finish(
             SessionState(id="", user_id=None), LoginOutcome(denied=LoginDenied.FAILED)

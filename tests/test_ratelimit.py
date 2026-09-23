@@ -51,3 +51,13 @@ def test_old_windows_are_forgotten(clock):
         clock.now = window * 100
         limiter.check(f"key{window}", limit=2, window_s=100)
     assert len(limiter._counts) == 1
+
+
+def test_windows_of_different_lengths_do_not_forget_each_other(clock):
+    """A per-minute counter ticking over must leave the per-day counters alone:
+    the MCP limiter and the chat limiter share one instance."""
+    limiter = RateLimiter(clock)
+    assert limiter.check("chat:u", limit=1, window_s=86_400).allowed is True
+    clock.now = 61
+    limiter.check("mcp:x", limit=10, window_s=60)
+    assert limiter.check("chat:u", limit=1, window_s=86_400).allowed is False

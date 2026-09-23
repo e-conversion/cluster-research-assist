@@ -25,7 +25,9 @@ class Allowance:
 
 class RateLimiter:
     def __init__(self, clock=time.monotonic) -> None:
-        self._counts: dict[tuple[str, int], int] = {}
+        # (key, window length, window number): windows of different lengths
+        # are numbered on different scales and must never be compared
+        self._counts: dict[tuple[str, int, int], int] = {}
         self._clock = clock
 
     def _window(self, window_s: int) -> int:
@@ -36,17 +38,17 @@ class RateLimiter:
         if limit <= 0:
             return Allowance(True, -1, 0)
         window = self._window(window_s)
-        self._forget_older_windows(window)
-        used = self._counts.get((key, window), 0)
+        self._forget_older_windows(window_s, window)
+        used = self._counts.get((key, window_s, window), 0)
         if used >= limit:
             elapsed = self._clock() % window_s
             return Allowance(False, 0, int(window_s - elapsed))
-        self._counts[(key, window)] = used + 1
+        self._counts[(key, window_s, window)] = used + 1
         return Allowance(
             True, limit - used - 1, int(window_s - (self._clock() % window_s))
         )
 
-    def _forget_older_windows(self, current: int) -> None:
-        stale = [k for k in self._counts if k[1] < current]
+    def _forget_older_windows(self, window_s: int, current: int) -> None:
+        stale = [k for k in self._counts if k[1] == window_s and k[2] < current]
         for key in stale:
             del self._counts[key]

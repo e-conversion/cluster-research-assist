@@ -91,10 +91,21 @@ leave through it.
 
 Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
 `CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header
-`CRA_AUTH_USER_HEADER`). With `CRA_AUTH_PROVIDER=oidc` users log in at the
-configured OpenID Connect issuer, and only pre-registered addresses may sign in.
-`CRA_AUTH_ADMINS` lists the addresses that become admin on sign-in, so a fresh
-deployment has an administrator without shell access.
+`CRA_AUTH_USER_HEADER`). Because that signs *anyone* in, the server refuses to
+start with it on any address but loopback unless `CRA_AUTH_DEV_INSECURE=true`.
+With `CRA_AUTH_PROVIDER=oidc` users log in at the configured OpenID Connect
+issuer, and only pre-registered addresses may sign in. `CRA_AUTH_ADMINS` lists
+the addresses that become admin the first time they bind an identity, so a
+fresh deployment has an administrator without shell access; the claim is not
+consulted again afterwards, so the role is changed in the console, not by
+editing the list.
+
+An email claim is asserted by the user's home identity provider and verified
+by nobody else, so an invitation also says where it may be claimed from:
+`CRA_AUTH_HOME_ORGANIZATIONS` names the `schacHomeOrganization` values (for
+example `tum.de,lmu.de`) accepted by default, and `--org` on an invitation
+overrides that for one address. Leave both empty only if any institution in
+the federation should be able to claim any invited address.
 
 The console lists everyone who can sign in on one page: accounts, addresses
 invited but not yet used, and the addresses named in `CRA_AUTH_ADMINS`. An
@@ -102,11 +113,18 @@ invitation carries the role its account will start with. The same from the
 command line:
 
 ```bash
-cra users add-email someone@university.de
+cra users add-email someone@university.de --org university.de
 cra users list
 cra users promote <user-id>
 cra users deactivate <user-id>
 ```
+
+Sessions end after `CRA_SESSION_MAX_AGE_HOURS` unused and in any case after
+`CRA_SESSION_ABSOLUTE_HOURS`. Every response carries a Content-Security-Policy
+that allows scripts only from the package and the pinned CDN builds, and no
+images from anywhere else; state-changing requests are refused when they look
+like a cross-site form. Tools a connected eLN offers are listed to the model
+only when they are read-only, unless `CRA_REMOTE_WRITE_TOOLS=true`.
 
 ## The outward MCP endpoint
 

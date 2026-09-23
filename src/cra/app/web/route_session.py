@@ -70,11 +70,19 @@ def _tool_counts(ctx, tier, session) -> dict[str, int]:
     return {"local": local, **remote, "total": local + sum(remote.values())}
 
 
-async def _conversation_view(ctx, session) -> dict[str, Any]:
-    """The conversation this session is in, as the interface renders it."""
+async def _conversation_view(ctx, session, principal) -> dict[str, Any]:
+    """The conversation this session is in, as the interface renders it.
+
+    Shown only when it belongs to the principal: the session may still name a
+    conversation from whoever was signed in before.
+    """
     conversation_id = session.data.get("conversation") if session else None
+    empty: dict[str, Any] = {"conversation": None, "messages": [], "turns": 0}
     if not conversation_id:
-        return {"conversation": None, "messages": [], "turns": 0}
+        return empty
+    conversation = await ctx.repo.get_conversation(str(conversation_id))
+    if conversation is None or conversation.user_id != principal.user_id:
+        return empty
     stored = await ctx.repo.messages(str(conversation_id))
     return {
         "conversation": conversation_id,
@@ -101,5 +109,5 @@ async def session() -> dict[str, Any]:
         "connected": ctx.remote.status(g.session.id),
         "tools": _tool_counts(ctx, principal.tier, g.session),
         "busy": ctx.turns.of(g.session.id).busy,
-        **await _conversation_view(ctx, g.session),
+        **await _conversation_view(ctx, g.session, principal),
     }

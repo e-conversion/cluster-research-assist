@@ -292,7 +292,8 @@ def cmd_users_list(args: argparse.Namespace) -> int:
     async def run() -> None:
         for email in await repo.list_registered_emails():
             _out(
-                f"email  {email.email:40} user={email.user_id or '-'}  by {email.created_by}"
+                f"email  {email.email:40} user={email.user_id or '-'}  "
+                f"org={email.home_organization or '*'}  by {email.created_by}"
             )
         for user in await repo.list_users():
             state = "active" if user.is_active else "disabled"
@@ -310,10 +311,15 @@ def cmd_users_add_email(args: argparse.Namespace) -> int:
     engine, repo = _repo(load_settings(args))
 
     async def run() -> int:
+        from cra.app.history.repository import valid_email
+
+        if not valid_email(args.email):
+            sys.stderr.write("that is not an email address\n")
+            return 1
         if await repo.get_registered_email(args.email) is not None:
             sys.stderr.write("already registered\n")
             return 1
-        await repo.add_registered_email(args.email, args.by)
+        await repo.add_registered_email(args.email, args.by, home_organization=args.org)
         await engine.dispose()
         return 0
 
@@ -525,6 +531,12 @@ def build_parser() -> argparse.ArgumentParser:
     add = users_sub.add_parser("add-email", help="allow an email address to sign in")
     add.add_argument("email")
     add.add_argument("--by", default="cli", help="who registered it (for the record)")
+    add.add_argument(
+        "--org",
+        default="",
+        help="home organisation (schacHomeOrganization, e.g. tum.de) the address "
+        "may be claimed from; default: CRA_AUTH_HOME_ORGANIZATIONS",
+    )
     add.set_defaults(func=cmd_users_add_email)
     rm = users_sub.add_parser(
         "remove-email", help="remove an address from the allow-list"

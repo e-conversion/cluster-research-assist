@@ -11,6 +11,7 @@ import base64
 import hashlib
 import logging
 import secrets
+import time
 from typing import Any
 from urllib.parse import urlencode
 
@@ -29,6 +30,7 @@ log = logging.getLogger(__name__)
 
 # ID tokens carry second precision and clocks drift a little
 CLOCK_LEEWAY_S = 60
+JWKS_MIN_REFRESH_S = 60
 SIGNING_ALGORITHMS = ["RS256", "PS256", "ES256"]
 
 
@@ -50,10 +52,12 @@ class OidcProvider:
         self._redirect_uri = settings.oidc_redirect_uri
         self._scopes = settings.oidc_scopes
         self._admins = {a.strip().lower() for a in settings.auth_admins}
+        self._organizations = list(settings.auth_home_organizations)
         self._repo = repo
         self._http = http
         self._discovery: dict[str, Any] = {}
         self._jwks: KeySet | None = None
+        self._jwks_fetched_at = 0.0
 
     async def start(self) -> None:
         response = await self._http.get(
@@ -113,8 +117,8 @@ class OidcProvider:
         except (httpx.HTTPError, JoseError, KeyError, ValueError):
             log.exception("oidc token exchange or validation failed")
             return LoginOutcome(denied=LoginDenied.FAILED)
-        outcome = await resolve_login(self._repo, claims)
-        outcome.grants_admin = bool(outcome.email) and outcome.email in self._admins
+        outcome = await resolve_login(self._repo, claims, self._organizations)
+        outcome.grants_admin = outcome.bound and outcome.email in self._admins
         return outcome
 
     def logout_url(self, post_logout_uri: str) -> str | None:
@@ -143,7 +147,10 @@ class OidcProvider:
         try:
             payload = self._decode(id_token, nonce)
         except JoseError:
-            # the provider may have rotated its keys since we fetched them
+            # the provider may have rotated its keys since we fetched them; a
+            # stream of forged tokens must not turn into a stream of fetches
+            if time.monotonic() - self._jwks_fetched_at < JWKS_MIN_REFRESH_S:
+                raise
             await self._load_jwks()
             payload = self._decode(id_token, nonce)
         return Claims(
@@ -159,6 +166,7 @@ class OidcProvider:
         response = await self._http.get(self._discovery["jwks_uri"])
         response.raise_for_status()
         self._jwks = KeySet.import_key_set(response.json())
+        self._jwks_fetched_at = time.monotonic()
 
     def _decode(self, id_token: str, nonce: str) -> dict[str, Any]:
         if self._jwks is None:

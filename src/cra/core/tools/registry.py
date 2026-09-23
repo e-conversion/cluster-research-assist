@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any
 
-from pydantic import create_model
+from pydantic import BaseModel, ConfigDict, ValidationError, create_model
 
 from cra.config.settings import Settings
 from cra.core.retrieval.indexes import Indexes
@@ -59,6 +59,9 @@ class ToolSpec:
     description: str
     parameters: dict[str, Any]
     function: Callable[..., Any]
+    # the model the parameters were derived from; every call is checked
+    # against it, so a bound in the schema is a bound the tool can rely on
+    arguments: type[BaseModel]
 
     @property
     def schema(self) -> dict[str, Any]:
@@ -73,11 +76,12 @@ class ToolSpec:
         }
 
 
-def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
-    """A JSON schema from the signature, skipping the context argument.
+def derive_model(function: Callable[..., Any]) -> type[BaseModel]:
+    """The argument model from the signature, skipping the context argument.
 
     Annotated types carry the per-argument descriptions, so the model is told
-    what each one means without a second place to keep in sync.
+    what each one means without a second place to keep in sync. Unknown
+    arguments are refused: a call the signature cannot take is a bad call.
     """
     signature = inspect.signature(function)
     hints = getattr(function, "__annotations__", {})
@@ -89,13 +93,37 @@ def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
             ... if parameter.default is inspect.Parameter.empty else parameter.default
         )
         fields[name] = (hints[name], default)
-    model = create_model(f"{function.__name__}_arguments", **fields)  # type: ignore[call-overload]
+    return create_model(  # type: ignore[call-overload,no-any-return]
+        f"{function.__name__}_arguments",
+        __config__=ConfigDict(extra="forbid"),
+        **fields,
+    )
+
+
+def derive_parameters(function: Callable[..., Any]) -> dict[str, Any]:
+    """A JSON schema from the signature, as the model-facing description."""
+    return schema_of(derive_model(function))
+
+
+def schema_of(model: type[BaseModel]) -> dict[str, Any]:
     schema = model.model_json_schema()
     schema.pop("title", None)
+    # the model refuses extras at call time; saying so in the schema would
+    # only push some endpoints into strict mode
+    schema.pop("additionalProperties", None)
     for entry in schema.get("properties", {}).values():
         entry.pop("title", None)
     schema.setdefault("properties", {})
     return schema
+
+
+def bad_arguments(exc: ValidationError) -> str:
+    """One line per problem, in the words the schema uses."""
+    problems = []
+    for error in exc.errors():
+        where = ".".join(str(p) for p in error["loc"]) or "arguments"
+        problems.append(f"{where}: {error['msg']}")
+    return "; ".join(problems)
 
 
 def tool(
@@ -108,12 +136,14 @@ def tool(
         text = description or inspect.cleandoc(function.__doc__ or "")
         if not text:
             raise RegistryError(f"{function.__name__}: a tool needs a description")
+        arguments = derive_model(function)
         spec = ToolSpec(
             name=name or function.__name__,
             tier=tier,
             description=text,
-            parameters=derive_parameters(function),
+            parameters=schema_of(arguments),
             function=function,
+            arguments=arguments,
         )
         setattr(function, SPEC_ATTR, spec)
         return function
@@ -168,14 +198,19 @@ class Registry:
         if spec is None:
             return {"error": f"Unknown tool: {name}"}
         try:
+            checked = spec.arguments.model_validate(arguments)
+        except ValidationError as exc:
+            return {"error": f"Bad arguments for {name}: {bad_arguments(exc)}"}
+        values = {
+            field: getattr(checked, field) for field in type(checked).model_fields
+        }
+        try:
             if inspect.iscoroutinefunction(spec.function):
-                return await spec.function(ctx, **arguments)
+                return await spec.function(ctx, **values)
             # the lexical and dense searches hold the loop otherwise
-            return await asyncio.to_thread(spec.function, ctx, **arguments)
+            return await asyncio.to_thread(spec.function, ctx, **values)
         except ToolError as exc:
             return {"error": str(exc)}
-        except TypeError as exc:
-            return {"error": f"Bad arguments for {name}: {exc}"}
         except Exception as exc:
             log.exception("tool failed", extra={"fields": {"tool": name}})
             return {"error": f"{name} failed: {type(exc).__name__}: {exc}"}
