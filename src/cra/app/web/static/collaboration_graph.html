@@ -139,12 +139,19 @@ node.call(d3.drag()
   .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })
   .on("end", (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; svg.node().classList.remove("grab"); }));
 
+// PIs without a recorded co-authorship would otherwise be flung to the rim by
+// the same repulsion that spreads the network, and the whole picture would
+// have to shrink to keep them on screen. They repel little and gather in a
+// loose group in one corner instead, out of the way of the components.
+const alone = d => !d.deg;
+const pen = () => [W * 0.84, H * 0.8];
 const sim = d3.forceSimulation(NODES)
   .force("link", d3.forceLink(LINKS).id(d => d.id).distance(d => 46 + 26 / Math.sqrt(d.weight)).strength(.28))
-  .force("charge", d3.forceManyBody().strength(-360))
-  .force("collide", d3.forceCollide().radius(d => rOf(d) + 8).strength(.9))
+  .force("charge", d3.forceManyBody().strength(d => alone(d) ? -50 : -360))
+  .force("collide", d3.forceCollide().radius(d => rOf(d) + (alone(d) ? 20 : 8)).strength(.9))
   .force("center", d3.forceCenter(W / 2, H / 2))
-  .force("x", d3.forceX(W / 2).strength(.035)).force("y", d3.forceY(H / 2).strength(.05))
+  .force("x", d3.forceX(d => alone(d) ? pen()[0] : W / 2).strength(d => alone(d) ? .2 : .035))
+  .force("y", d3.forceY(d => alone(d) ? pen()[1] : H / 2).strength(d => alone(d) ? .2 : .05))
   .on("tick", ticked);
 function ticked() {
   link.attr("d", d => {
@@ -153,7 +160,19 @@ function ticked() {
   });
   node.attr("transform", d => `translate(${d.x},${d.y})`);
 }
-svg.call(d3.zoom().scaleExtent([.4, 4]).on("zoom", e => root.attr("transform", e.transform))).on("dblclick.zoom", null);
+const zoom = d3.zoom().scaleExtent([.3, 4]).on("zoom", e => root.attr("transform", e.transform));
+svg.call(zoom).on("dblclick.zoom", null);
+// The default view frames every node, labels included; it never magnifies a
+// small graph, only shrinks one that has spread past the frame.
+function fitAll(animate) {
+  const pad = 30;
+  const xs = NODES.map(n => n.x), ys = NODES.map(n => n.y);
+  const x0 = Math.min(...xs) - pad, x1 = Math.max(...xs) + pad;
+  const y0 = Math.min(...ys) - pad - 12, y1 = Math.max(...ys) + pad;
+  const k = Math.min(1, W / (x1 - x0), H / (y1 - y0));
+  const t = d3.zoomIdentity.translate(W / 2 - k * (x0 + x1) / 2, H / 2 - k * (y0 + y1) / 2).scale(k);
+  (animate ? svg.transition().duration(450) : svg).call(zoom.transform, t);
+}
 
 const card = document.getElementById("card"), resetBtn = document.getElementById("reset");
 let pin = null;
@@ -187,6 +206,11 @@ function showCard(id) {
 // settle the layout before first paint so it opens at rest, not mid-jitter
 for (let i = 0; i < 260; i++) sim.tick();
 ticked();
-addEventListener("resize", () => { W = frame.clientWidth; H = frame.clientHeight; svg.attr("viewBox", [0, 0, W, H]); sim.force("center", d3.forceCenter(W / 2, H / 2)).alpha(.2).restart(); });
+fitAll(false);
+addEventListener("resize", () => {
+  W = frame.clientWidth; H = frame.clientHeight; svg.attr("viewBox", [0, 0, W, H]);
+  sim.force("center", d3.forceCenter(W / 2, H / 2)).alpha(.2).restart();
+  fitAll(true);
+});
 }).catch((err) => { document.getElementById("hint").textContent = err.message || "Collaboration graph not built. Run: python build.py graph"; });
 </script>

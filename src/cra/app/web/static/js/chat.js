@@ -98,20 +98,17 @@ class AssistantMessage {
     return a;
   }
 
-  // Live steps live inside the collapsible "Researching…" dropdown; open it as
-  // soon as there's something to show, so the user watches progress without
-  // the page filling up with permanently-visible cards -- unless they've
-  // already clicked it themselves, in which case that choice sticks.
+  // Live steps live inside the "Researching…" dropdown, which stays collapsed:
+  // the summary line reports progress, and the thinking and tool cards are one
+  // click on the chevron away. Only the chevron is switched on here.
   openHead() {
     this.head.classList.remove("empty");
-    if (!this.userToggled) this.head.open = true;
   }
 
   ensureThink() {
     if (this.think) return this.think;
     this.openHead();
     const d = el("details", "step think running");
-    d.open = true;
     const s = el("summary");
     s.append(el("span", "st-ico", "◌"), el("span", "st-name", "Thinking…"));
     const body = el("div", "st-body");
@@ -131,7 +128,6 @@ class AssistantMessage {
   closeThink() {
     if (!this.think || !this.think.root.classList.contains("running")) return;
     this.think.root.classList.remove("running");
-    this.think.root.open = false;
     this.think.summary.querySelector(".st-name").textContent = "Thought process";
     this.think.summary.querySelector(".st-ico").textContent = "✓";
   }
