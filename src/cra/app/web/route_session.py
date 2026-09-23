@@ -49,7 +49,7 @@ async def config() -> dict[str, Any]:
         "library": counts,
         "placeholder": _placeholder(counts),
         "examples": examples.some(),
-        "sources": {},
+        "sources": {kind: s.public() for kind, s in ctx.remote.sources.items()},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
         "version": {"version": __version__},
     }
@@ -64,9 +64,10 @@ def _placeholder(counts: dict[str, int]) -> str:
     )
 
 
-def _tool_counts(ctx, tier) -> dict[str, int]:
+def _tool_counts(ctx, tier, session) -> dict[str, int]:
     local = len(ctx.registry.specs(tier))
-    return {"local": local, "elab": 0, "dt": 0, "total": local}
+    remote = ctx.remote.counts(session.id) if session else {}
+    return {"local": local, **remote, "total": local + sum(remote.values())}
 
 
 async def _conversation_view(ctx, session) -> dict[str, Any]:
@@ -97,8 +98,8 @@ async def session() -> dict[str, Any]:
         "is_admin": principal.is_admin,
         "daily_limit": ctx.policy["user_chat_daily_limit"],
         **await selection(ctx, g.session),
-        "connected": {},
-        "tools": _tool_counts(ctx, principal.tier),
+        "connected": ctx.remote.status(g.session.id),
+        "tools": _tool_counts(ctx, principal.tier, g.session),
         "busy": ctx.turns.of(g.session.id).busy,
         **await _conversation_view(ctx, g.session),
     }

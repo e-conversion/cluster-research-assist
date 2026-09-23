@@ -86,6 +86,7 @@ async def chat() -> Any:
     # still there: the generator below outlives it.
     turn = _Turn(
         ctx=ctx,
+        session_id=g.session.id,
         conversation_id=conversation_id,
         chosen=chosen,
         history=history,
@@ -144,6 +145,7 @@ class _Turn:
     """One answer, detached from the request that asked for it."""
 
     ctx: Any
+    session_id: str
     conversation_id: str
     chosen: dict[str, Any]
     history: list[dict[str, Any]]
@@ -155,6 +157,12 @@ class _Turn:
     async def run(self) -> AsyncIterator[dict[str, Any]]:
         ctx = self.ctx
         tool_ctx = ctx.tool_context(self.tier)
+        # a source the user connected adds its tools to this turn's list; one
+        # that stopped answering adds a single entry saying so
+        tools = [
+            *ctx.registry.schemas(self.tier),
+            *await ctx.remote.schemas(self.session_id),
+        ]
         fields = params_.request_fields(ctx.settings, self.chosen["params"])
         extra_body, plain = params_.split(fields)
         async for event in run_turn(
@@ -162,10 +170,8 @@ class _Turn:
             model=self.chosen["model"],
             messages=[*self.history, {"role": "user", "content": self.question}],
             system_prompt=ctx.system_prompt,
-            tools=ctx.registry.schemas(self.tier),
-            call_tool=lambda name, arguments: ctx.registry.call(
-                name, arguments, tool_ctx
-            ),
+            tools=tools,
+            call_tool=lambda name, arguments: self.call(name, arguments, tool_ctx),
             base_url=ctx.settings.llm_base_url,
             max_rounds=int(self.chosen["params"]["max_tool_rounds"] or 10),
             cancel=self.cancel,
@@ -173,6 +179,12 @@ class _Turn:
             fields=plain,
         ):
             yield event
+
+    async def call(self, name: str, arguments: dict[str, Any], tool_ctx: Any) -> Any:
+        ctx = self.ctx
+        if ctx.remote.kind_of(name) is not None:
+            return await ctx.remote.call(self.session_id, name, arguments)
+        return await ctx.registry.call(name, arguments, tool_ctx)
 
     async def store(self, final: dict[str, Any] | None) -> None:
         if final is None:

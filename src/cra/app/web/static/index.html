@@ -91,25 +91,40 @@
 </aside>
 <main id="view" class="view"></main>
 
-<dialog id="dlg-connect" class="dlg wide">
+<dialog id="dlg-connect" class="dlg">
   <form method="dialog" class="dlg-body">
     <header class="dlg-head">
       <h2 id="connect-title">Connect</h2>
       <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
     </header>
-    <p class="muted" id="connect-hint">Register below — you stay inside the app. Then paste the token.</p>
-    <div class="iframe-wrap"><iframe id="connect-frame" title="Registration" referrerpolicy="no-referrer"
-    sandbox="allow-forms allow-scripts"></iframe></div>
-    <p class="muted small">If the form does not load here, <a id="connect-link" href="#" target="_blank" rel="noopener">open it in a new tab</a>.</p>
+    <p class="muted" id="connect-hint">Register your account once; the tools it unlocks are then available in the chat.</p>
     <label class="field">
-      <span id="connect-label">Token</span>
-      <input type="password" id="connect-token" autocomplete="off" placeholder="Paste the token from the form above">
+      <span>Address of your instance</span>
+      <input type="url" id="connect-base" autocomplete="off" placeholder="https://…">
     </label>
+    <label class="field">
+      <span id="connect-label">API key</span>
+      <input type="password" id="connect-key" autocomplete="off" placeholder="Paste your API key">
+    </label>
+    <label class="field" id="connect-profile-field" hidden>
+      <span>Access</span>
+      <select id="connect-profile"></select>
+    </label>
+    <p class="muted small">Your key is passed to the registration service to mint a personal token.
+      Neither is written to the database; the token lives in this session only.</p>
+    <details id="connect-paste">
+      <summary class="muted small">I already have a token</summary>
+      <label class="field">
+        <span>Token</span>
+        <input type="password" id="connect-token" autocomplete="off" placeholder="Paste the token">
+      </label>
+      <button type="button" class="btn" id="connect-token-submit">Use this token</button>
+    </details>
     <p class="error" id="connect-error" hidden></p>
     <footer class="dlg-foot">
       <button type="button" class="btn danger ghost" id="connect-disconnect">Disconnect</button>
       <span class="spacer"></span>
-      <button type="button" class="btn primary" id="connect-submit">Connect</button>
+      <button type="button" class="btn primary" id="connect-submit">Register &amp; connect</button>
     </footer>
   </form>
 </dialog>

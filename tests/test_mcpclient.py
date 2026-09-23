@@ -1,0 +1,259 @@
+"""The pooled client for the external MCP servers.
+
+A toy server on memory streams stands in for the proxies: it speaks the real
+protocol through the real ``ClientSession``, so these tests exercise the same
+code paths as a deployment without needing a socket.
+"""
+
+import asyncio
+import contextlib
+import json
+
+import pytest
+from conftest import make_settings
+from mcp.server.mcpserver import MCPServer
+from mcp.shared.memory import create_client_server_memory_streams
+
+from cra.app.web import route_chat
+from cra.app.web.factory import create_app
+from cra.assistant.mcpclient.host import RemoteHost
+from cra.assistant.mcpclient.pool import RemotePool
+from cra.core.connectors.sources import Source
+from cra.core.tools.tiers import Tier
+
+SESSION = "session-1"
+ELAB = Source(
+    kind="elab",
+    label="eLabFTW",
+    key_label="eLabFTW API key",
+    url="https://proxy.invalid/el/mcp",
+    register_url="https://proxy.invalid/el/register",
+    default_base_url="https://eln.invalid",
+)
+
+
+class Toy:
+    """An MCP server behind a transport that checks the token in the URL."""
+
+    def __init__(self, token: str = "good") -> None:
+        self.token = token
+        self.down = False
+        self.connections = 0
+        self.server = MCPServer("toy")
+
+        @self.server.tool()
+        def echo(text: str) -> str:
+            """Say it back."""
+            return f"echo: {text}"
+
+        @self.server.tool()
+        def count_items() -> int:
+            """How many items there are."""
+            return 7
+
+    @contextlib.asynccontextmanager
+    async def transport(self, url: str):
+        self.connections += 1
+        if self.down:
+            raise ConnectionError("connection refused")
+        if url.partition("token=")[2] != self.token:
+            raise RuntimeError("HTTP 401 Unauthorized")
+        async with create_client_server_memory_streams() as (client, server):
+            low = self.server._lowlevel_server
+            task = asyncio.create_task(
+                low.run(server[0], server[1], low.create_initialization_options())
+            )
+            try:
+                yield client
+            finally:
+                task.cancel()
+                with contextlib.suppress(BaseException):
+                    await task
+
+
+@pytest.fixture
+def toy():
+    return Toy()
+
+
+def make_host(toy: Toy, idle_s: float = 600.0) -> RemoteHost:
+    return RemoteHost({"elab": ELAB}, RemotePool(idle_s, toy.transport))
+
+
+@pytest.fixture
+async def host(toy):
+    host = make_host(toy)
+    yield host
+    await host.aclose()
+
+
+async def test_a_connected_source_offers_its_tools(host, toy):
+    assert await host.connect(SESSION, "elab", "good") == {
+        "kind": "elab",
+        "active": True,
+        "tools": 2,
+        "error": None,
+    }
+    assert host.status(SESSION)["elab"] == {"active": True, "tools": 2}
+    names = [s["function"]["name"] for s in await host.schemas(SESSION)]
+    assert names == ["elab_echo", "elab_count_items"]
+
+
+async def test_a_tool_call_reaches_the_source(host):
+    await host.connect(SESSION, "elab", "good")
+    result = await host.call(SESSION, "elab_echo", {"text": "hi"})
+    assert "echo: hi" in result
+
+
+async def test_one_session_serves_every_call(host, toy):
+    await host.connect(SESSION, "elab", "good")
+    for _ in range(3):
+        await host.call(SESSION, "elab_echo", {"text": "hi"})
+    assert toy.connections == 1
+
+
+async def test_two_browser_sessions_do_not_share_a_connection(host, toy):
+    await host.connect(SESSION, "elab", "good")
+    await host.connect("session-2", "elab", "good")
+    assert toy.connections == 2
+    assert host.status("session-2")["elab"]["active"] is True
+
+
+async def test_a_refused_token_is_not_kept(host):
+    result = await host.connect(SESSION, "elab", "wrong")
+    assert result["active"] is False
+    assert "401" in result["error"]
+    assert host.status(SESSION)["elab"] == {"active": False, "tools": 0}
+    unknown = await host.call(SESSION, "elab_echo", {"text": "hi"})
+    assert json.loads(unknown)["error"].startswith("Unknown tool")
+
+
+async def test_a_source_that_stops_answering_becomes_one_entry(toy):
+    # idle 0: the next use closes the pooled session, so the failure is a
+    # reconnect against a server that is now down
+    host = make_host(toy, idle_s=0.0)
+    await host.connect(SESSION, "elab", "good")
+    toy.down = True
+    schemas = await host.schemas(SESSION)
+    assert [s["function"]["name"] for s in schemas] == ["elab___unavailable__"]
+    assert host.status(SESSION)["elab"] == {"active": True, "tools": 0}
+    failed = await host.call(SESSION, "elab_echo", {"text": "hi"})
+    assert "eLabFTW" in json.loads(failed)["error"]
+    await host.aclose()
+
+
+async def test_an_unused_session_is_closed(toy):
+    host = make_host(toy, idle_s=0.0)
+    await host.connect(SESSION, "elab", "good")
+    await host.schemas(SESSION)
+    assert toy.connections == 2
+    assert len(host._pool) == 1
+    await host.aclose()
+
+
+async def test_disconnect_and_forget_close_the_session(host, toy):
+    await host.connect(SESSION, "elab", "good")
+    await host.disconnect(SESSION, "elab")
+    assert len(host._pool) == 0
+    assert host.status(SESSION)["elab"] == {"active": False, "tools": 0}
+
+    await host.connect(SESSION, "elab", "good")
+    await host.forget(SESSION)
+    assert len(host._pool) == 0
+    assert await host.schemas(SESSION) == []
+
+
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [
+        ("elab_echo", "elab"),
+        ("elab___unavailable__", "elab"),
+        ("search_papers", None),
+        ("elab", None),
+        ("dt_upload", None),
+    ],
+)
+def test_a_tool_name_says_where_it_runs(host, name, expected):
+    assert host.kind_of(name) == expected
+
+
+@pytest.fixture
+async def connected_app(tmp_path, toy):
+    """An app whose one source is the toy server."""
+    settings = make_settings(
+        tmp_path,
+        mcp_elab_url=ELAB.url,
+        mcp_elab_register_url=ELAB.register_url,
+        mcp_elab_base_url=ELAB.default_base_url,
+    )
+    app = create_app(settings)
+    async with app.test_app():
+        app.extensions["cra"].remote = make_host(toy)
+        yield app
+        await app.extensions["cra"].remote.aclose()
+
+
+@pytest.fixture
+async def client(connected_app):
+    client = connected_app.test_client()
+    await client.get("/auth/login")
+    return client
+
+
+async def test_the_session_reports_what_is_connected(connected_app, client):
+    config = await (await client.get("/api/config")).get_json()
+    assert config["sources"]["elab"]["label"] == "eLabFTW"
+    assert config["sources"]["elab"]["base_url"] == ELAB.default_base_url
+
+    before = await (await client.get("/api/session")).get_json()
+    assert before["connected"] == {"elab": {"active": False, "tools": 0}}
+
+    connected = await client.post("/api/session/connect/elab", json={"token": "good"})
+    assert (await connected.get_json())["tools"] == 2
+
+    after = await (await client.get("/api/session")).get_json()
+    assert after["connected"] == {"elab": {"active": True, "tools": 2}}
+    assert after["tools"]["elab"] == 2
+    assert after["tools"]["total"] == after["tools"]["local"] + 2
+
+    await client.delete("/api/session/connect/elab")
+    gone = await (await client.get("/api/session")).get_json()
+    assert gone["connected"] == {"elab": {"active": False, "tools": 0}}
+
+
+async def test_a_bad_token_is_answered_with_a_message(client):
+    response = await client.post("/api/session/connect/elab", json={"token": "wrong"})
+    assert response.status_code == 400
+    assert "401" in (await response.get_json())["error"]
+
+
+async def test_an_unknown_source_is_not_found(client):
+    response = await client.post("/api/session/connect/nope", json={"token": "x"})
+    assert response.status_code == 404
+
+
+async def test_signing_out_takes_the_tokens(connected_app, client):
+    await client.post("/api/session/connect/elab", json={"token": "good"})
+    remote = connected_app.extensions["cra"].remote
+    await client.post("/auth/logout")
+    assert len(remote._pool) == 0
+
+
+async def test_a_turn_offers_both_tool_sets_and_routes_by_name(connected_app):
+    """The model sees one list; the name decides which side runs the call."""
+    ctx = connected_app.extensions["cra"]
+    await ctx.remote.connect(SESSION, "elab", "good")
+    turn = route_chat._Turn(
+        ctx=ctx,
+        session_id=SESSION,
+        conversation_id="c1",
+        chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
+        history=[],
+        question="q",
+        tier=Tier.INTERNAL,
+        cancel=None,
+    )
+    tool_ctx = ctx.tool_context(Tier.INTERNAL)
+    assert "echo: hi" in await turn.call("elab_echo", {"text": "hi"}, tool_ctx)
+    local = await turn.call("library_status", {}, tool_ctx)
+    assert local["counts"]["papers"] == 19

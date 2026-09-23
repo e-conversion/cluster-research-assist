@@ -1,0 +1,183 @@
+"""The connected sources of one browser session.
+
+Tokens are bearer credentials for somebody else's account on somebody else's
+server, so they live in memory and nowhere else: a restart asks the user to
+connect again, which is the trade we want over writing them to the database.
+
+Remote tools are namespaced (``elab_*``, ``dt_*``) before the model ever sees
+them, both so they cannot collide with the library's own tools and so a call
+can be routed back to the server it came from by name alone.
+"""
+
+import json
+import logging
+from typing import Any
+
+from cra.assistant.mcpclient.degraded import (
+    friendly_error,
+    unavailable_name,
+    unavailable_schema,
+)
+from cra.assistant.mcpclient.pool import RemotePool
+from cra.core.connectors.sources import Source
+
+log = logging.getLogger(__name__)
+
+
+class RemoteHost:
+    def __init__(self, sources: dict[str, Source], pool: RemotePool) -> None:
+        self.sources = sources
+        self._pool = pool
+        self._tokens: dict[str, dict[str, str]] = {}
+        self._counts: dict[str, dict[str, int]] = {}
+
+    def kind_of(self, tool_name: str) -> str | None:
+        """Which source a tool name belongs to, or None for a local tool."""
+        kind, _, rest = tool_name.partition("_")
+        return kind if rest and kind in self.sources else None
+
+    def status(self, session_id: str) -> dict[str, dict[str, Any]]:
+        tokens = self._tokens.get(session_id, {})
+        counts = self._counts.get(session_id, {})
+        return {
+            kind: {"active": kind in tokens, "tools": counts.get(kind, 0)}
+            for kind in self.sources
+        }
+
+    def counts(self, session_id: str) -> dict[str, int]:
+        return dict(self._counts.get(session_id, {}))
+
+    async def connect(self, session_id: str, kind: str, token: str) -> dict[str, Any]:
+        """Hold a token for this session, after proving it actually works."""
+        source = self.sources[kind]
+        token = token.strip()
+        if not token:
+            cleared = await self.disconnect(session_id, kind)
+            return cleared | {"error": "Paste a token first."}
+        self._tokens.setdefault(session_id, {})[kind] = token
+        try:
+            connection = await self._pool.acquire(
+                (session_id, kind), source.authorised(token)
+            )
+        except Exception as exc:  # noqa: BLE001 -- a remote may fail any way
+            log.info(
+                "connect refused",
+                extra={"fields": {"source": kind, "error": type(exc).__name__}},
+            )
+            await self.disconnect(session_id, kind)
+            return {"kind": kind, "active": False, "tools": 0, "error": _refused(exc)}
+        found = len(connection.tools)
+        self._counts.setdefault(session_id, {})[kind] = found
+        if not found:
+            # a token the proxy accepts but that unlocks nothing is not a
+            # connection worth keeping: the model would see an empty source
+            await self.disconnect(session_id, kind)
+            return {
+                "kind": kind,
+                "active": False,
+                "tools": 0,
+                "error": "That token unlocks no tools — register a new one.",
+            }
+        return {"kind": kind, "active": True, "tools": found, "error": None}
+
+    async def disconnect(self, session_id: str, kind: str) -> dict[str, Any]:
+        self._tokens.get(session_id, {}).pop(kind, None)
+        self._counts.get(session_id, {}).pop(kind, None)
+        await self._pool.release((session_id, kind))
+        return {"kind": kind, "active": False, "tools": 0, "error": None}
+
+    async def forget(self, session_id: str) -> None:
+        """Signing out takes the tokens with it."""
+        for kind in list(self._tokens.get(session_id, {})):
+            await self.disconnect(session_id, kind)
+        self._tokens.pop(session_id, None)
+        self._counts.pop(session_id, None)
+
+    async def schemas(self, session_id: str) -> list[dict[str, Any]]:
+        """Every connected source's tools, as the model-facing schemas."""
+        out: list[dict[str, Any]] = []
+        for kind, token in list(self._tokens.get(session_id, {}).items()):
+            source = self.sources[kind]
+            try:
+                connection = await self._pool.acquire(
+                    (session_id, kind), source.authorised(token)
+                )
+            except Exception as exc:
+                log.warning(
+                    "source unavailable",
+                    extra={"fields": {"source": kind, "error": type(exc).__name__}},
+                    exc_info=True,
+                )
+                self._counts.setdefault(session_id, {})[kind] = 0
+                out.append(
+                    unavailable_schema(source.prefix, source.label, friendly_error(exc))
+                )
+                continue
+            self._counts.setdefault(session_id, {})[kind] = len(connection.tools)
+            out.extend(_schema(source.prefix, tool) for tool in connection.tools)
+        return out
+
+    async def call(
+        self, session_id: str, tool_name: str, arguments: dict[str, Any]
+    ) -> str:
+        kind = self.kind_of(tool_name)
+        token = self._tokens.get(session_id, {}).get(kind or "")
+        if kind is None or not token:
+            return _error(f"Unknown tool: {tool_name}")
+        source = self.sources[kind]
+        if tool_name == unavailable_name(source.prefix):
+            return _error(f"{source.label} is not answering right now.")
+        name = tool_name[len(source.prefix) :]
+        try:
+            connection = await self._pool.acquire(
+                (session_id, kind), source.authorised(token)
+            )
+            result = await connection.call(name, arguments)
+        except Exception as exc:
+            log.warning(
+                "remote tool failed",
+                extra={"fields": {"source": kind, "tool": name}},
+                exc_info=True,
+            )
+            return _error(f"{source.label}: {friendly_error(exc)}")
+        return _content(result)
+
+    async def aclose(self) -> None:
+        await self._pool.aclose()
+
+
+def _schema(prefix: str, tool: Any) -> dict[str, Any]:
+    parameters = dict(getattr(tool, "input_schema", None) or {})
+    parameters.setdefault("type", "object")
+    parameters.setdefault("properties", {})
+    return {
+        "type": "function",
+        "function": {
+            "name": f"{prefix}{tool.name}",
+            "description": tool.description or tool.name,
+            "parameters": parameters,
+        },
+    }
+
+
+def _content(result: Any) -> str:
+    """One MCP result as the single string a tool message carries."""
+    parts = [
+        str(text)
+        for block in getattr(result, "content", None) or []
+        if (text := getattr(block, "text", None)) is not None
+    ]
+    structured = getattr(result, "structured_content", None)
+    if structured:
+        parts.append(json.dumps(structured, ensure_ascii=False, default=str))
+    if getattr(result, "is_error", False):
+        return _error("\n".join(parts) or "the tool reported an error")
+    return "\n".join(parts) or json.dumps({"ok": True})
+
+
+def _error(message: str) -> str:
+    return json.dumps({"error": message})
+
+
+def _refused(exc: Exception) -> str:
+    return f"Could not connect: {friendly_error(exc)}"

@@ -108,6 +108,25 @@ cra users promote <user-id>
 cra users deactivate <user-id>
 ```
 
+## Connecting your own eLabFTW or DataTagger
+
+The assistant can also work with the user's *own* data, through the MCP servers
+that already sit in front of eLabFTW and DataTagger. A user registers once from
+the chat: the dialog asks for the address of their instance and their API key,
+the key is passed to the registration service, and the personal token it mints
+is what the assistant uses. The key is never stored and the token lives in the
+process, tied to that browser session -- signing out or a restart ends it, and
+neither ever reaches the database.
+
+Whatever that token unlocks upstream is exactly what the model is offered:
+the tools are namespaced (`elab_*`, `dt_*`) so they cannot collide with the
+library's own, and the session is pooled, so a whole conversation costs one
+handshake instead of one per tool call. A source that stops answering is
+replaced by a single entry saying so rather than taking the chat down.
+
+Both are opt-in per deployment: without `CRA_MCP_ELAB_URL` or
+`CRA_MCP_DATATAGGER_URL` the connector interface does not appear at all.
+
 ## Configuration and settings
 
 Endpoints, keys and paths are configuration: they live in `.env`, and changing
@@ -126,7 +145,7 @@ cra policy set notice --reset            # back to the configured default
 Everything runs through tox:
 
 ```bash
-tox -e lint        # ruff, mypy, import-linter
+tox -e lint        # ruff and mypy
 tox -e tests       # fast suite: no LLM, no PostgreSQL, no downloads
 tox -e build       # sdist and wheel integrity
 tox -e format      # apply formatting

@@ -25,6 +25,7 @@ from cra.app.web import (
     route_admin,
     route_auth,
     route_chat,
+    route_connect,
     route_conversation,
     route_feedback,
     route_health,
@@ -37,7 +38,10 @@ from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.app.web.turns import TurnSlots
 from cra.assistant.chat import prompt as prompt_
 from cra.assistant.llm.selection import ModelCatalogue
+from cra.assistant.mcpclient.host import RemoteHost
+from cra.assistant.mcpclient.pool import RemotePool
 from cra.config.settings import Settings
+from cra.core.connectors.sources import configured as configured_sources
 from cra.core.library.library import Library
 from cra.core.retrieval.encoder import OnnxEncoder
 from cra.core.retrieval.indexes import Indexes
@@ -61,6 +65,7 @@ class AppContext:
     http: httpx.AsyncClient
     policy: Policy
     catalogue: ModelCatalogue
+    remote: RemoteHost
     limiter: RateLimiter = field(default_factory=RateLimiter)
     turns: TurnSlots = field(default_factory=TurnSlots)
     library: Library | None = None
@@ -104,6 +109,9 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         http=http,
         policy=Policy(settings),
         catalogue=ModelCatalogue(settings),
+        remote=RemoteHost(
+            configured_sources(settings), RemotePool(settings.mcp_pool_idle_s)
+        ),
     )
     app.extensions["cra"] = ctx
 
@@ -114,6 +122,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_feedback.bp,
         route_preferences.bp,
         route_chat.bp,
+        route_connect.bp,
         route_conversation.bp,
         route_views.bp,
         route_admin.bp,
@@ -222,6 +231,7 @@ def _encoder(settings: Settings) -> Any:
 
 
 async def _close(ctx: AppContext) -> None:
+    await ctx.remote.aclose()
     await ctx.http.aclose()
     await ctx.engine.dispose()
 

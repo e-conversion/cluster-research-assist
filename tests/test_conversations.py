@@ -135,6 +135,7 @@ async def test_the_first_turn_names_the_conversation(app, client, monkeypatch):
     made = await ctx.repo.create_conversation((await ctx.repo.list_users())[0].id, "q?")
     turn = route_chat._Turn(
         ctx=ctx,
+        session_id="s1",
         conversation_id=made.id,
         chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
         history=[],
@@ -164,6 +165,7 @@ async def test_a_later_turn_leaves_the_name_alone(app, client, monkeypatch):
     )
     turn = route_chat._Turn(
         ctx=ctx,
+        session_id="s1",
         conversation_id=made.id,
         chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
         history=[{"role": "user", "content": "earlier"}],

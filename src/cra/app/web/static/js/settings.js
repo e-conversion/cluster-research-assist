@@ -17,42 +17,87 @@ export function toast(message, kind = "") {
 // ---------- connect dialog ----------
 let connectKind = null;
 
+const el = (id) => document.getElementById(id);
+
 function openConnect(kind) {
   connectKind = kind;
   const src = store.config.sources[kind];
-  const conn = store.session.connected[kind];
-  document.getElementById("connect-title").textContent = `Connect ${src.label}`;
-  document.getElementById("connect-label").textContent = `${src.label} token`;
-  // Mirrored through the app: the upstream page refuses to be framed cross-origin.
-  document.getElementById("connect-frame").src = `api/register/${kind}`;
-  document.getElementById("connect-link").href = src.register_url;
-  document.getElementById("connect-token").value = "";
-  document.getElementById("connect-error").hidden = true;
-  document.getElementById("connect-disconnect").hidden = !conn.active;
-  document.getElementById("connect-hint").textContent = conn.active
-    ? `Connected — ${conn.tools} tools available. Paste a new token to replace it.`
-    : "Register below — you stay inside the app. Then paste the token.";
-  document.getElementById("dlg-connect").showModal();
+  const conn = store.session.connected[kind] || { active: false, tools: 0 };
+  el("connect-title").textContent = `Connect ${src.label}`;
+  el("connect-label").textContent = src.key_label;
+  el("connect-base").value = src.base_url || "";
+  el("connect-key").value = "";
+  el("connect-token").value = "";
+  el("connect-error").hidden = true;
+  el("connect-paste").open = false;
+  el("connect-disconnect").hidden = !conn.active;
+  el("connect-hint").textContent = conn.active
+    ? `Connected — ${conn.tools} tools available. Registering again replaces the token.`
+    : "Register your account once; the tools it unlocks are then available in the chat.";
+  const field = el("connect-profile-field");
+  const select = el("connect-profile");
+  field.hidden = !(src.profiles || []).length;
+  select.replaceChildren();
+  for (const p of src.profiles || []) {
+    const o = document.createElement("option");
+    o.value = p.value;
+    o.textContent = p.label;
+    select.append(o);
+  }
+  el("dlg-connect").showModal();
 }
 
-async function submitConnect() {
-  const token = document.getElementById("connect-token").value.trim();
-  const err = document.getElementById("connect-error");
-  const btn = document.getElementById("connect-submit");
-  if (!token) { err.textContent = "Paste the token first."; err.hidden = false; return; }
-  btn.disabled = true; btn.textContent = "Connecting…";
+/** Run one connect attempt, keeping the dialog open on a refusal. */
+async function attempt(button, label, call) {
+  const err = el("connect-error");
+  const was = button.textContent;
+  button.disabled = true;
+  button.textContent = label;
   try {
-    const r = await postJSON(`api/session/connect/${connectKind}`, { token });
+    const r = await call();
     await refreshSession();
     if (r.active) {
       toast(`${store.config.sources[connectKind].label}: connected (${r.tools} tools)`);
-      document.getElementById("dlg-connect").close();
+      el("dlg-connect").close();
     } else {
-      err.textContent = r.error || "Token invalid or expired — register a new one above.";
+      err.textContent = r.error || "That did not work — check the address and the key.";
       err.hidden = false;
     }
-  } catch (e) { err.textContent = e.message; err.hidden = false; }
-  finally { btn.disabled = false; btn.textContent = "Connect"; }
+  } catch (e) {
+    err.textContent = e.message;
+    err.hidden = false;
+  } finally {
+    button.disabled = false;
+    button.textContent = was;
+  }
+}
+
+function submitRegister() {
+  const base_url = el("connect-base").value.trim();
+  const api_key = el("connect-key").value.trim();
+  const err = el("connect-error");
+  if (!base_url || !api_key) {
+    err.textContent = "The address and the API key are both required.";
+    err.hidden = false;
+    return;
+  }
+  const profile = el("connect-profile-field").hidden ? "" : el("connect-profile").value;
+  return attempt(el("connect-submit"), "Registering…", () =>
+    postJSON(`api/session/register/${connectKind}`, { base_url, api_key, profile }),
+  );
+}
+
+function submitToken() {
+  const token = el("connect-token").value.trim();
+  const err = el("connect-error");
+  if (!token) {
+    err.textContent = "Paste the token first.";
+    err.hidden = false;
+    return;
+  }
+  return attempt(el("connect-token-submit"), "Connecting…", () =>
+    postJSON(`api/session/connect/${connectKind}`, { token }),
+  );
 }
 
 async function disconnect() {
@@ -60,7 +105,7 @@ async function disconnect() {
     await del(`api/session/connect/${connectKind}`);
     await refreshSession();
     toast(`${store.config.sources[connectKind].label} disconnected`);
-    document.getElementById("dlg-connect").close();
+    el("dlg-connect").close();
   } catch (e) { toast(e.message, "bad"); }
 }
 
@@ -264,13 +309,14 @@ export function initDialogs(s) {
     const f = document.getElementById("pipeline-frame");
     if (box.open && !f.src) { f.src = f.dataset.src; f.addEventListener("load", () => propagateTheme(f), { once: true }); }
   });
-  document.getElementById("connect-submit").addEventListener("click", submitConnect);
+  document.getElementById("connect-submit").addEventListener("click", submitRegister);
+  document.getElementById("connect-token-submit").addEventListener("click", submitToken);
   document.getElementById("connect-disconnect").addEventListener("click", disconnect);
-  document.getElementById("connect-token").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitConnect(); } });
+  document.getElementById("connect-key").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitRegister(); } });
+  document.getElementById("connect-token").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitToken(); } });
   document.getElementById("feedback-submit").addEventListener("click", submitFeedback);
   document.getElementById("params-apply").addEventListener("click", applyParams);
   document.getElementById("params-reset").addEventListener("click", resetParams);
-  document.getElementById("dlg-connect").addEventListener("close", () => { document.getElementById("connect-frame").src = "about:blank"; });
 }
 
 // ---------- settings row ----------

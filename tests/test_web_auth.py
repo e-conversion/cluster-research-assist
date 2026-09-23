@@ -54,6 +54,8 @@ USER_ROUTES = {
     "/api/chat",
     "/api/chat/stop",
     "/api/chat/reset",
+    "/api/session/connect/<kind>",
+    "/api/session/register/<kind>",
     "/api/conversations",
     "/api/conversations/<conversation_id>",
     "/api/conversations/<conversation_id>/open",

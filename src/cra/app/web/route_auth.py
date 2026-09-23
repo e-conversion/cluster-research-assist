@@ -136,6 +136,7 @@ async def callback() -> Response:
 async def logout() -> Response:
     ctx = _ctx()
     if g.session is not None:
+        await ctx.remote.forget(g.session.id)
         await ctx.sessions.delete(g.session)
     home = request.host_url.rstrip("/") + ctx.home
     response = current_app.response_class(

@@ -103,8 +103,10 @@ class Settings(BaseSettings):
     # external MCP servers this instance consumes
     mcp_elab_url: str = ""
     mcp_elab_register_url: str = ""
+    mcp_elab_base_url: str = ""
     mcp_datatagger_url: str = ""
     mcp_datatagger_register_url: str = ""
+    mcp_datatagger_base_url: str = ""
     mcp_pool_idle_s: float = Field(default=600, gt=0)
 
     # connectors
