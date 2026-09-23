@@ -111,9 +111,8 @@ def list_papers(
 ) -> dict[str, Any]:
     """Exhaustive listing by metadata, newest first. Use it for "every paper
     by X" or "what was published in 2022", where a ranked search would stop
-    at the most relevant few."""
-    if not any((author, year, journal)):
-        raise ToolError("Give at least one of author, year or journal.")
+    at the most relevant few. Without a filter it lists the whole library,
+    newest first, up to the limit; the count is always the full number."""
     from cra.core.library.text import fold
 
     wanted_author, wanted_journal = fold(author), fold(journal)

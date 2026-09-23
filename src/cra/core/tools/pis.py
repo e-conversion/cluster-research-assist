@@ -87,7 +87,9 @@ def most_collaborative_papers(
     """The papers with the most principal investigators of the cluster among
     their authors, most first, each with the names of those investigators.
     This is the direct answer to "which paper joins the most groups"; no search
-    can rank papers this way."""
+    can rank papers this way. by_year counts, per year, the papers attributed
+    to at least one investigator and those shared by two or more, which is
+    how collaboration within the cluster over time is measured."""
     library = ctx.indexes.library
     holders: dict[str, list[str]] = {}
     for pi in library.pis:
@@ -95,8 +97,15 @@ def most_collaborative_papers(
             if doi in library.papers:
                 holders.setdefault(doi, []).append(pi.name)
     ranked = sorted(holders.items(), key=lambda item: (-len(item[1]), item[0]))
+    by_year: dict[str, dict[str, int]] = {}
+    for doi, names in holders.items():
+        year = library.papers[doi].year or "unknown"
+        entry = by_year.setdefault(year, {"papers": 0, "shared_by_several": 0})
+        entry["papers"] += 1
+        entry["shared_by_several"] += len(names) > 1
     return {
         "papers_with_a_pi": len(holders),
+        "by_year": dict(sorted(by_year.items())),
         "results": [
             {
                 **paper_view(library.papers[doi], abstract=0),

@@ -35,8 +35,9 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             if counts["pis"]
             else ""
         )
-        + ". Use the tools before answering, and cite papers by title and DOI. "
-        "If something is not in the library, say so rather than guessing."
+        + ". Use the tools before answering, and cite papers by title and DOI, copied "
+        "from a tool result: a DOI you cannot see in a result does not exist. If "
+        "something is not in the library, say so rather than guessing."
     )
     holdings = [
         "each paper's title, authors, year, journal, abstract and citation count"
@@ -97,7 +98,8 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
     if "most_collaborative_papers" in tool_names:
         lines.append(
             "most_collaborative_papers ranks papers by how many of the cluster's principal "
-            "investigators are among the authors, for 'which paper joins the most groups'."
+            "investigators are among the authors, for 'which paper joins the most groups', "
+            "and its by_year counts are the measure of collaboration over time."
         )
     if "list_pis" in tool_names:
         lines.append(

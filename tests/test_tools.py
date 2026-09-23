@@ -130,11 +130,14 @@ async def test_get_paper_by_doi_reports_whether_a_full_text_is_there(registry, c
     )
 
 
-async def test_list_papers_filters_and_needs_a_filter(registry, ctx):
+async def test_list_papers_filters_or_lists_everything(registry, ctx):
     assert (await call(registry, ctx, "list_papers", author="hopper"))["count"] == 2
     assert (await call(registry, ctx, "list_papers", year="2022"))["count"] == 1
     assert (await call(registry, ctx, "list_papers", journal="nature"))["count"] == 1
-    assert "at least one" in (await call(registry, ctx, "list_papers"))["error"]
+    everything = await call(registry, ctx, "list_papers", limit=2)
+    assert (everything["count"], everything["returned"]) == (3, 2)
+    years = [p["year"] for p in everything["results"]]
+    assert years == sorted(years, reverse=True)
     listed = await call(registry, ctx, "list_papers", author="hopper", limit=1)
     assert (listed["count"], listed["returned"]) == (2, 1)
     assert "abstract" not in listed["results"][0], "a listing does not carry abstracts"
@@ -208,6 +211,11 @@ async def test_papers_are_ranked_by_how_many_pis_they_join(registry, ctx):
     assert first["pi_count"] == len(first["pis"]) == 3
     assert ranked["results"][1]["pi_count"] <= 3
     assert "abstract" not in first
+    assert (
+        sum(y["papers"] for y in ranked["by_year"].values())
+        == ranked["papers_with_a_pi"]
+    )
+    assert sum(y["shared_by_several"] for y in ranked["by_year"].values()) == 2
 
 
 async def test_the_proposal_answers_with_passages(registry, ctx):
