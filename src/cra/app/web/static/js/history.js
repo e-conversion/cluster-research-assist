@@ -101,6 +101,7 @@ export function initHistory(store, { onOpen, toast }) {
     if (!panel.hidden && !panel.contains(e.target) && !$("history-btn").contains(e.target)) close();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+  addEventListener("routechange", (e) => { if (e.detail.name !== "chat") close(); });
 
   return { refresh };
 }

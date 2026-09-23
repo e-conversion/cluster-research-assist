@@ -28,9 +28,6 @@ export async function refreshSession() {
 /** Header state follows the session: anonymous visitors see "Sign in". */
 function renderIdentity() {
   const s = store.session || {};
-  const label = document.getElementById("user-label");
-  label.textContent = s.user || "";
-  label.hidden = !s.user;
   document.getElementById("sign-out").hidden = !s.signed_in;
   document.getElementById("admin-link").hidden = !s.is_admin;
 }

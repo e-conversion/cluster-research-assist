@@ -18,6 +18,9 @@ export function createRouter(routes, { container, nav, defaultRoute = "chat" }) 
     current = name;
     unmount = routes[name].mount(container) || null;
     for (const a of nav.querySelectorAll("[data-route]")) a.classList.toggle("active", a.dataset.route === name);
+    // The header shows the chat controls only on the chat view; CSS keys off this.
+    document.body.dataset.route = name;
+    dispatchEvent(new CustomEvent("routechange", { detail: { name } }));
     window.scrollTo(0, 0);
   }
 
