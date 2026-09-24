@@ -2,15 +2,21 @@
 ``tests/test_migrations.py`` checks that."""
 
 import secrets
+import string
 from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlalchemy import JSON, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+# Letters and digits only: token_urlsafe starts one id in 64 with "-", which the
+# CLI then reads as an option. 16 characters of 62 are about 95 bits.
+ID_ALPHABET = string.ascii_letters + string.digits
+ID_LENGTH = 16
+
 
 def new_id() -> str:
-    return secrets.token_urlsafe(12)
+    return "".join(secrets.choice(ID_ALPHABET) for _ in range(ID_LENGTH))
 
 
 class Base(DeclarativeBase):
