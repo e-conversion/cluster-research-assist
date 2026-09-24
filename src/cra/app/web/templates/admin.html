@@ -1,19 +1,18 @@
+{% import "_brand.html" as b with context -%}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-brand-version="{{ brand.version }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Admin console</title>
-<link rel="icon" type="image/svg+xml" href="static/logo.svg">
+<title>Admin console · {{ title }}</title>
+{{ b.head() }}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<script src="static/js/theme-boot.js"></script>
-<link rel="stylesheet" href="static/css/app.css">
 </head>
 <body>
 <header class="top">
-  <a class="brand" href="./" title="Back to the assistant"><span class="brand-name">Admin console</span></a>
+  <a class="brand" href="./" title="Back to the assistant">{{ b.logo("square") }}<span class="brand-name">Admin console</span></a>
   <div class="top-actions">
     <span class="user" id="user-label"></span>
     <a class="btn ghost" href="./">Back to the assistant</a>

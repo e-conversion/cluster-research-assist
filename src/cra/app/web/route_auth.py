@@ -9,7 +9,7 @@ from quart import (
     current_app,
     g,
     redirect,
-    render_template_string,
+    render_template,
     request,
 )
 
@@ -41,15 +41,6 @@ STATUS = {LoginDenied.FAILED: 400}
 # callbacks per address per minute: a forged token costs a signature check
 # and possibly a JWKS fetch, and nobody signs in that often
 CALLBACKS_PER_MINUTE = 30
-
-ERROR_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{ title }}</title>
-<script src="{{ home }}static/js/theme-boot.js"></script>
-<link rel="stylesheet" href="{{ home }}static/css/app.css"></head>
-<body><main class="view"><div class="signin"><h1>Sign-in not possible</h1>
-<p class="lede">{{ message }}</p><a class="btn block" href="{{ home }}">Back</a>
-</div></main></body></html>"""
 
 
 def _ctx():
@@ -99,10 +90,9 @@ async def _finish(state: SessionState, outcome: LoginOutcome) -> Response:
                 "fields": {"reason": denied.value, "organization": outcome.organization}
             },
         )
-        page = await render_template_string(
-            ERROR_PAGE,
-            title=ctx.settings.cluster_display_name,
-            home=ctx.home,
+        page = await render_template(
+            "signin_error.html",
+            **ctx.page_context(),
             message=MESSAGES[denied].format(
                 organization=outcome.organization or "your institution",
                 contact=ctx.settings.auth_admin_contact or "the administrators",

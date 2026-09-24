@@ -1,0 +1,18 @@
+{#- What every page shell takes from the deployment's brand. Imported with
+    context, so `home` (the app's root URL) and `brand` come from the page. -#}
+{% macro head() -%}
+<link rel="icon" type="image/svg+xml" href="{{ home }}brand/favicon.svg?v={{ brand.version }}">
+<script src="{{ home }}static/js/theme-boot.js"></script>
+<link rel="stylesheet" href="{{ home }}static/css/tokens.css">
+<link rel="stylesheet" href="{{ home }}static/css/app.css">
+{#- last, so the brand's tokens win #}
+<link rel="stylesheet" href="{{ home }}brand/theme.css?v={{ brand.version }}">
+{%- endmacro %}
+
+{% macro logo(shape="square") -%}
+<span class="logo{{ ' wide' if shape == 'wide' }}" aria-hidden="true">
+  {%- for tone in ("light", "dark") -%}
+  <img class="on-{{ tone }}" alt="" src="{{ home }}brand/logo-{{ shape }}-{{ tone }}.svg?v={{ brand.version }}">
+  {%- endfor -%}
+</span>
+{%- endmacro %}

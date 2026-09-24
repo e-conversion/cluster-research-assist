@@ -11,7 +11,16 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from quart import Quart, Response, g, jsonify, redirect, request, send_from_directory
+from quart import (
+    Quart,
+    Response,
+    g,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+)
 from quart.wrappers import Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -38,7 +47,8 @@ from cra.app.web import (
     route_tokens,
     route_views,
 )
-from cra.app.web.access import required_role, satisfies
+from cra.app.web.access import public, required_role, satisfies
+from cra.app.web.brand import MANIFEST, Brand
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
 from cra.app.web.turns import TurnSlots
 from cra.assistant.chat import prompt as prompt_
@@ -58,6 +68,7 @@ from cra.core.tools.tiers import Tier
 log = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 HTTP_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 # Every route but the library upload takes a small JSON body; the upload
@@ -129,6 +140,7 @@ class AppContext:
     policy: Policy
     catalogue: ModelCatalogue
     remote: RemoteHost
+    brand: Brand
     limiter: RateLimiter = field(default_factory=RateLimiter)
     # Owned here rather than by the connector module so it cannot outlive the
     # app that created it, leak between tests, or survive a reload.
@@ -176,6 +188,14 @@ class AppContext:
     def home(self) -> str:
         return self.settings.base_path + "/"
 
+    def page_context(self) -> dict[str, Any]:
+        """What every server-rendered page shell is given."""
+        return {
+            "title": self.settings.cluster_display_name,
+            "home": self.home,
+            "brand": self.brand,
+        }
+
 
 def make_provider(
     settings: Settings, repo: Repository, http: httpx.AsyncClient
@@ -187,7 +207,12 @@ def make_provider(
 
 def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     base = settings.base_path
-    app = Quart("cra", static_folder=str(STATIC_DIR), static_url_path=f"{base}/static")
+    app = Quart(
+        "cra",
+        static_folder=str(STATIC_DIR),
+        static_url_path=f"{base}/static",
+        template_folder=str(TEMPLATE_DIR),
+    )
     app.request_class = type(
         "Request",
         (LimitedRequest,),
@@ -217,6 +242,8 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
             RemotePool(settings.mcp_pool_idle_s),
             allow_write=settings.remote_write_tools,
         ),
+        # read now, so a broken brand stops the server instead of the page
+        brand=Brand.load(settings.brand_dir),
     )
     app.extensions["cra"] = ctx
 
@@ -239,17 +266,30 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
 
     @app.get(f"{base}/")
     async def index() -> Response:
-        return await _page("index.html")
+        return await _page(ctx, "index.html")
 
     # the landing page renders for anyone: it is where signing in starts
     index._cra_requires = Role.ANONYMOUS  # type: ignore[attr-defined]
 
     @app.get(f"{base}/admin")
     async def admin_console() -> Response:
-        return await _page("admin.html")
+        return await _page(ctx, "admin.html")
 
     # the page itself is a shell; every call it makes is checked on its own
     admin_console._cra_requires = Role.ADMIN  # type: ignore[attr-defined]
+
+    # public: the sign-in page shows the logo before anyone has signed in
+    @app.get(f"{base}/brand/<name>")
+    @public
+    async def brand_file(name: str) -> Response:
+        if name == MANIFEST:
+            response = jsonify(ctx.brand.public())
+        elif (path := ctx.brand.files.get(name)) is not None:
+            response = await send_file(path, conditional=True)
+        else:
+            return _json_error("No such brand file.", 404)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     @app.before_serving
     async def start() -> None:
@@ -354,8 +394,8 @@ def _json_error(message: str, status: int) -> Response:
     return response
 
 
-async def _page(name: str) -> Response:
-    response = await send_from_directory(STATIC_DIR, name)
+async def _page(ctx: AppContext, name: str) -> Response:
+    response = Response(await render_template(name, **ctx.page_context()))
     response.headers["Cache-Control"] = "no-cache"
     return response
 

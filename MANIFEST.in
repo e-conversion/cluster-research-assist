@@ -5,6 +5,8 @@ include tox.ini
 include Dockerfile
 include .dockerignore
 recursive-include src/cra/app/web/static *
+recursive-include src/cra/app/web/templates *
+recursive-include src/cra/app/web/brand *
 recursive-include src/cra/app/history/migrations *
 recursive-include tests *.py *.txt
 recursive-include tests/data *

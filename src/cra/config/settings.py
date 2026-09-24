@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     cluster_website: str = ""
     cluster_funding_body: str = ""
     cluster_host_institutions: CommaList = []
+    # logos, theme and example content that replace the package's own; see
+    # cra.app.web.brand for what the directory may hold
+    brand_dir: Path | None = None
 
     # server
     host: str = "127.0.0.1"
@@ -157,6 +160,13 @@ class Settings(BaseSettings):
         value = value.strip().rstrip("/")
         if value and not value.startswith("/"):
             raise ValueError("must start with '/'")
+        return value
+
+    @field_validator("brand_dir")
+    @classmethod
+    def _brand_dir_exists(cls, value: Path | None) -> Path | None:
+        if value is not None and not value.is_dir():
+            raise ValueError(f"{value} is not a directory")
         return value
 
     @model_validator(mode="after")

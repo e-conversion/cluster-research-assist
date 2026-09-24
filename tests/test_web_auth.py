@@ -40,6 +40,7 @@ async def test_static_files_must_be_revalidated(client):
 # listed, which is what keeps "public by default" from becoming an oversight.
 PUBLIC_ROUTES = {
     "/",
+    "/brand/<name>",
     "/api/health",
     "/api/config",
     "/auth/login",

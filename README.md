@@ -3,7 +3,7 @@
 LLM research assistant over a research cluster's publications, principal
 investigators, proposal and live data sources. One pip-installable package reads
 a `.env` file, serves a web assistant and an outward MCP endpoint, and talks to
-the external MCP servers a cluster has. e-verse, the e-conversion deployment,
+the external MCP servers a cluster has. Atlas, the e-conversion deployment,
 is one configuration of it.
 
 ## Install
@@ -201,6 +201,33 @@ cra policy set user_chat_daily_limit 50
 cra policy set notice "Pilot running until Friday"
 cra policy set notice --reset            # back to the configured default
 ```
+
+## Branding
+
+A deployment changes how the interface looks, and the few things it says that
+are particular to one cluster, without touching the package. It points
+`CRA_BRAND_DIR` at a directory holding any of these files. Each one missing
+from it comes from the package's own brand in `src/cra/app/web/brand/`:
+
+| File | What it is |
+|---|---|
+| `logo-square-light.svg`, `logo-square-dark.svg` | The mark, on the sign-in card, the empty chat and beside the name in the header. A missing dark one falls back to the brand's light one. |
+| `logo-wide-light.svg`, `logo-wide-dark.svg` | A logo that includes the name. When present it replaces mark and name in the header. |
+| `favicon.svg` | The tab icon. Defaults to the square light logo. |
+| `theme.css` | Overrides of the design tokens, loaded after the package's stylesheets. It MAY `@import` fonts from Google Fonts, the only font source the Content-Security-Policy admits. |
+| `brand.json` | `examples`: the questions offered on an empty chat. `institutions`: `{key, label, name}` for each institution the collaboration graph tells apart, `key` matching the institution recorded for a PI. `pipeline`: `{intro, stages, nodes, edges}` for the pipeline map under "Stats for nerds", which is hidden without one. |
+
+The tokens are the custom properties in `src/cra/app/web/static/css/tokens.css`:
+colours (`--ground`, `--panel`, `--ink`, `--accent`, `--accent-2`,
+`--heading-ink`, `--viz-1`…`--viz-8` and the rest), fonts (`--display`, `--body`,
+`--mono`), `--heading-weight` and `--radius-scale`. They are the stable
+interface. The selectors in `app.css` are not, and a theme SHOULD NOT style
+them. Light values go under `:root`, dark ones under `:root[data-theme="dark"]`.
+The page always sets `data-theme` to the theme in effect, including when it
+follows the system.
+
+The brand is read at startup: an invalid `brand.json` stops the server with
+the reason.
 
 ## Develop
 

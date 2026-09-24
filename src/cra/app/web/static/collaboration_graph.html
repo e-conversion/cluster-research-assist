@@ -1,32 +1,14 @@
-<title>e-conversion Co-Authorship</title>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Co-authorship</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="js/theme-boot.js"></script>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="../brand/theme.css">
 <style>
-  :root {
-    --ground: #F4F6F8; --panel: #FFFFFF; --ink: #171B21; --ink-2: #454D57;
-    --muted: #6B7480; --faint: #9AA2AD; --hair: #E2E6EB; --hair-2: #CFD5DC; --edge: #C4CAD2;
-    --tum: #3B72B0; --lmu: #178A5E; --fhi: #C0803A; --mpi: #8A5FB0; --other: #97A0AA;
-    --shadow: 0 1px 2px rgba(20,24,30,.04), 0 12px 30px -16px rgba(20,24,30,.22);
-    --display: "Spectral", Georgia, "Times New Roman", serif;
-    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #0F1318; --panel: #171C22; --ink: #EAEDF1; --ink-2: #C0C7D0;
-      --muted: #8B94A0; --faint: #616B77; --hair: #262C34; --hair-2: #333B45; --edge: #3A4653;
-      --tum: #5E97D6; --lmu: #3FB183; --fhi: #D8A05A; --mpi: #B189DA; --other: #7E8994;
-      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
-    }
-  }
-  /* an explicit light choice keeps the light palette even if the OS is dark */
-  :root[data-theme="light"] { color-scheme: light; }
-  :root[data-theme="dark"] {
-    --ground: #0F1318; --panel: #171C22; --ink: #EAEDF1; --ink-2: #C0C7D0;
-    --muted: #8B94A0; --faint: #616B77; --hair: #262C34; --hair-2: #333B45; --edge: #3A4653;
-    --tum: #5E97D6; --lmu: #3FB183; --fhi: #D8A05A; --mpi: #B189DA; --other: #7E8994;
-  }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--ground); color: var(--ink); font: 400 15px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
   .page { max-width: 100%; margin: 0; padding: 4px 6px 8px; }
@@ -43,7 +25,7 @@
   .encodes { margin-left: auto; font-size: 12px; color: var(--faint); }
   .encodes b { color: var(--ink-2); font-weight: 500; }
 
-  .frame { position: relative; margin-top: 12px; background: var(--panel); border: 1px solid var(--hair); border-radius: 14px; box-shadow: var(--shadow); overflow: hidden; height: 566px; min-height: 400px; }
+  .frame { position: relative; margin-top: 12px; background: var(--panel); border: 1px solid var(--hair); border-radius: calc(14px * var(--radius-scale)); box-shadow: var(--shadow); overflow: hidden; height: 566px; min-height: 400px; }
   #graph { width: 100%; height: 100%; display: block; cursor: grab; }
   #graph.grab { cursor: grabbing; }
   .link { stroke: var(--edge); fill: none; transition: stroke .12s, stroke-opacity .12s; }
@@ -54,12 +36,12 @@
   .lab.on { fill: var(--ink); font-weight: 600; }
   .hint { position: absolute; left: 14px; bottom: 12px; font-size: 11.5px; color: var(--faint); }
   .reset { position: absolute; top: 12px; left: 12px; border: 1px solid var(--hair-2); background: var(--panel); color: var(--ink-2);
-    font: inherit; font-size: 12px; padding: 4px 11px; border-radius: 8px; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s; }
+    font: inherit; font-size: 12px; padding: 4px 11px; border-radius: calc(8px * var(--radius-scale)); cursor: pointer; opacity: 0; pointer-events: none; transition: opacity .15s; }
   .reset.on { opacity: 1; pointer-events: auto; }
 
   /* About-the-person card, top-right */
   .card { position: absolute; top: 12px; right: 12px; width: 250px; background: var(--panel); border: 1px solid var(--hair-2);
-    border-radius: 12px; padding: 14px 16px; box-shadow: var(--shadow); opacity: 0; transform: translateY(-4px); transition: opacity .14s, transform .14s; pointer-events: none; }
+    border-radius: calc(12px * var(--radius-scale)); padding: 14px 16px; box-shadow: var(--shadow); opacity: 0; transform: translateY(-4px); transition: opacity .14s, transform .14s; pointer-events: none; }
   .card.on { opacity: 1; transform: none; }
   .card .cinst { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
   .card h3 { font: 500 19px/1.15 var(--display); margin: 5px 0 2px; }

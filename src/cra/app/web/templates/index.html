@@ -1,15 +1,14 @@
+{% import "_brand.html" as b with context -%}
 <!doctype html>
-<html lang="en">
+<html lang="en" data-brand-version="{{ brand.version }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>e-Converse</title>
-<link rel="icon" type="image/svg+xml" href="static/logo.svg">
+<title>{{ title }}</title>
+{{ b.head() }}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<script src="static/js/theme-boot.js"></script>
-<link rel="stylesheet" href="static/css/app.css">
 <script src="https://cdn.jsdelivr.net/npm/marked@18.0.13/lib/marked.umd.js"
         integrity="sha384-Jy8qDMspJASzATgFngF2ompIKy0StbCcvuTE65mxDm/E0/YSIF6Ndc+5V7bbwRcw"
         crossorigin="anonymous"></script>
@@ -18,27 +17,6 @@
         crossorigin="anonymous"></script>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="logo-mark" viewBox="0 0 128 128"><g transform="translate(11,15)">
-    <!-- top row -->
-    <circle cx="35" cy="17" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <circle cx="71" cy="17" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <!-- middle row -->
-    <circle cx="17" cy="49" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <circle cx="53" cy="49" r="16" fill="#C8FF4E"/>
-    <circle cx="89" cy="49" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <!-- bottom row -->
-    <circle cx="35" cy="81" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <circle cx="71" cy="81" r="16" fill="var(--logo-ink, #1B1F2E)"/>
-    <!-- terminals -->
-    <circle cx="35" cy="17" r="5.5" fill="#C8FF4E"/>
-    <circle cx="71" cy="17" r="5.5" fill="#C8FF4E"/>
-    <circle cx="17" cy="49" r="5.5" fill="#C8FF4E"/>
-    <circle cx="53" cy="49" r="5.5" fill="var(--logo-ink, #1B1F2E)"/>
-    <circle cx="89" cy="49" r="5.5" fill="#C8FF4E"/>
-    <circle cx="35" cy="81" r="5.5" fill="#C8FF4E"/>
-    <circle cx="71" cy="81" r="5.5" fill="#C8FF4E"/>
-  </g>
-</symbol></svg>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4.2 3.4c-.4.3-.8 0-.8-.5V5.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
   <symbol id="i-map" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="17" r="2.2"/><circle cx="11" cy="8" r="2.2"/><circle cx="17.5" cy="13" r="2.2"/><circle cx="18" cy="5" r="1.5"/><circle cx="13" cy="18.5" r="1.5"/></g></symbol>
@@ -54,7 +32,9 @@
   <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></g></symbol>
 </svg>
 <header class="top">
-  <a class="brand" href="#/chat" title="e-Converse"><svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg><span class="brand-name">e-Converse</span></a>
+  <a class="brand" href="#/chat" aria-label="{{ title }}">
+    {%- if brand.has_wide_logo %}{{ b.logo("wide") }}{% else %}{{ b.logo("square") }}<span class="brand-name">{{ title }}</span>{% endif -%}
+  </a>
   <nav class="nav" id="nav">
     <a href="#/chat" data-route="chat"><svg class="ico"><use href="#i-chat"/></svg><span>Chat</span></a>
     <a href="#/publication-map" data-route="publication-map"><svg class="ico"><use href="#i-map"/></svg><span>Publication Map</span></a>
@@ -258,10 +238,12 @@
       <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
     </header>
     <div id="stats-body" class="stats"><p class="muted">Loading…</p></div>
+    {% if brand.manifest.pipeline %}
     <details class="pipeline-box" id="pipeline-box">
       <summary>Pipeline map — every source, script, cache and tool behind the assistant. Click a box to trace what it is built from.</summary>
       <iframe id="pipeline-frame" title="Pipeline map" data-src="static/pipeline_map.html"></iframe>
     </details>
+    {% endif %}
   </form>
 </dialog>
 

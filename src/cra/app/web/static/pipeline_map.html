@@ -1,33 +1,14 @@
-<title>e-conversion Data Pipeline</title>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Data pipeline</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="js/theme-boot.js"></script>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="../brand/theme.css">
 <style>
-  :root {
-    --ground: #F4F6F8; --panel: #FFFFFF;
-    --ink: #171B21; --ink-2: #454D57; --muted: #6B7480; --faint: #9AA2AD;
-    --hair: #E2E6EB; --hair-2: #CFD5DC;
-    --src: #4C6EF5; --build: #0E9D8C; --cache: #C0892E; --tool: #C74E5B; --reg: #8A5FB0; --deliver: #647287;
-    --shadow: 0 1px 2px rgba(20,24,30,.04), 0 12px 30px -16px rgba(20,24,30,.22);
-    --display: "Spectral", Georgia, "Times New Roman", serif;
-    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
-    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --ground: #0F1318; --panel: #171C22; --ink: #EAEDF1; --ink-2: #C0C7D0;
-      --muted: #8B94A0; --faint: #616B77; --hair: #262C34; --hair-2: #333B45;
-      --src: #7C93F8; --build: #2FBBA9; --cache: #DBA652; --tool: #DB7580; --reg: #B189DA; --deliver: #8593A5;
-      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 14px 34px -18px rgba(0,0,0,.7);
-    }
-  }
-  /* an explicit light choice keeps the light palette even if the OS is dark */
-  :root[data-theme="light"] { color-scheme: light; }
-  :root[data-theme="dark"] {
-    --ground: #0F1318; --panel: #171C22; --ink: #EAEDF1; --ink-2: #C0C7D0;
-    --muted: #8B94A0; --faint: #616B77; --hair: #262C34; --hair-2: #333B45;
-    --src: #7C93F8; --build: #2FBBA9; --cache: #DBA652; --tool: #DB7580; --reg: #B189DA; --deliver: #8593A5;
-  }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--ground); color: var(--ink); font: 400 15px/1.55 var(--body); -webkit-font-smoothing: antialiased; }
   .page { max-width: 100%; margin: 0; padding: 4px 6px 14px; }
@@ -40,19 +21,19 @@
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 20px 0 4px; }
   .legend { display: flex; flex-wrap: wrap; gap: 4px 13px; font-size: 12.5px; color: var(--muted); }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
-  .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .legend i { width: 10px; height: 10px; border-radius: calc(3px * var(--radius-scale)); display: inline-block; }
   .reset { margin-left: auto; border: 1px solid var(--hair-2); background: var(--panel); color: var(--ink-2);
-    font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 8px; cursor: pointer; opacity: .5; pointer-events: none; transition: opacity .15s; }
+    font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: calc(8px * var(--radius-scale)); cursor: pointer; opacity: .5; pointer-events: none; transition: opacity .15s; }
   .reset.on { opacity: 1; pointer-events: auto; }
-  .reset:hover { border-color: var(--src); color: var(--src); }
+  .reset:hover { border-color: var(--accent); color: var(--accent); }
 
   #board { position: relative; margin-top: 14px; }
   #wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; overflow: visible; }
 
   .band { position: relative; z-index: 1; background: var(--panel); border: 1px solid var(--hair);
-    border-left: 3px solid var(--stage); border-radius: 11px; padding: 10px 13px 12px; box-shadow: var(--shadow); }
+    border-left: 3px solid var(--stage); border-radius: calc(11px * var(--radius-scale)); padding: 10px 13px 12px; box-shadow: var(--shadow); }
   .band .bh { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; font: 500 11px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
-  .band .bh b { width: 9px; height: 9px; border-radius: 2px; background: var(--stage); display: inline-block; }
+  .band .bh b { width: 9px; height: 9px; border-radius: calc(2px * var(--radius-scale)); background: var(--stage); display: inline-block; }
   .band .bh .c { margin-left: auto; color: var(--faint); }
   .band .body { display: flex; flex-wrap: wrap; gap: 8px; }
   .glab { flex-basis: 100%; font: 500 9.5px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin: 4px 0 -3px; }
@@ -63,7 +44,7 @@
   .flow path { fill: var(--hair-2); }
 
   .node { position: relative; z-index: 1; background: var(--panel); border: 1px solid var(--hair);
-    border-radius: 9px; padding: 7px 10px; cursor: pointer; min-width: 150px;
+    border-radius: calc(9px * var(--radius-scale)); padding: 7px 10px; cursor: pointer; min-width: 150px;
     transition: transform .12s, box-shadow .12s, opacity .16s, border-color .12s; }
   .node:hover { transform: translateY(-1px); border-color: var(--stage); }
   .node .nm { font: 500 12px/1.3 var(--mono); color: var(--ink); word-break: break-word; }
@@ -79,9 +60,9 @@
   .wire { fill: none; stroke-width: 2; }
   .whead { stroke: none; }
 
-  .detail { margin-top: 16px; background: var(--panel); border: 1px solid var(--hair); border-radius: 12px; padding: 15px 17px; box-shadow: var(--shadow); }
+  .detail { margin-top: 16px; background: var(--panel); border: 1px solid var(--hair); border-radius: calc(12px * var(--radius-scale)); padding: 15px 17px; box-shadow: var(--shadow); }
   .detail .dh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .detail .chip { font: 500 10px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 20px; color: #fff; }
+  .detail .chip { font: 500 10px/1 var(--mono); letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: calc(20px * var(--radius-scale)); color: var(--panel); }
   .detail .dn { font: 500 14.5px/1 var(--mono); }
   .detail .dsub { color: var(--faint); font-size: 12.5px; }
   .detail .dd { color: var(--ink-2); margin: 9px 0 0; font-size: 13.5px; max-width: 74ch; }
@@ -106,7 +87,7 @@
   <div id="board"><svg id="wires"></svg></div>
 
   <div class="detail" id="detail">
-    <div class="intro">Six stages, top to bottom: raw <b>sources</b> become local <b>caches</b> via <b>build scripts</b>; those caches back the MCP <b>tools</b> the agent calls; one <b>registry</b> exposes the tools to both <b>delivery</b> surfaces &mdash; the stdio MCP server and the web app. Click a node to light everything it's built from, plus the one thing it directly produces.</div>
+    <div class="intro" id="intro"></div>
   </div>
 </div>
 

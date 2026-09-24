@@ -1,8 +1,8 @@
-// Light, dark, or follow the system. Each page applies the stored choice in a
-// small inline script before first paint; this module keeps the controls in
-// sync and writes the choice back.
+// Light, dark, or follow the system. theme-boot.js applies the stored choice
+// before first paint; this module keeps the controls in sync and writes the
+// choice back.
 
-export const THEME_KEY = "econverse-theme";
+export const THEME_KEY = "cra-theme";
 const MODES = ["system", "light", "dark"];
 
 export function currentTheme() {
@@ -14,13 +14,17 @@ export function currentTheme() {
   }
 }
 
+/** The theme a choice comes to: "system" resolves to what the system shows now. */
+export function effectiveTheme(mode = currentTheme()) {
+  if (mode === "light" || mode === "dark") return mode;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export function applyTheme(mode) {
-  const root = document.documentElement;
-  if (mode === "light" || mode === "dark") root.dataset.theme = mode;
-  else delete root.dataset.theme;
   try {
     localStorage.setItem(THEME_KEY, mode);
   } catch { /* private mode */ }
+  document.documentElement.dataset.theme = effectiveTheme(mode);
   syncControls(mode);
   for (const frame of document.querySelectorAll("iframe")) propagateTheme(frame);
 }
@@ -32,13 +36,10 @@ export function syncControls(mode = currentTheme()) {
   }
 }
 
-/** Same-origin iframes (the maps) carry their own stylesheet; hand them the choice. */
+/** Same-origin iframes (the maps) run their own theme-boot; hand them a change made here. */
 export function propagateTheme(iframe) {
   try {
     const root = iframe.contentDocument?.documentElement;
-    if (!root) return;
-    const mode = currentTheme();
-    if (mode === "light" || mode === "dark") root.dataset.theme = mode;
-    else delete root.dataset.theme;
+    if (root) root.dataset.theme = effectiveTheme();
   } catch { /* cross-origin */ }
 }

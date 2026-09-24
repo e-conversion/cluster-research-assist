@@ -49,7 +49,7 @@ async def config() -> dict[str, Any]:
         "parameters": params_.payload(settings),
         "library": counts,
         "placeholder": _placeholder(counts),
-        "examples": examples.some(),
+        "examples": examples.some(ctx.brand.manifest.examples or examples.QUESTIONS),
         "sources": {kind: s.public() for kind, s in ctx.remote.sources.items()},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
         "mcp": _mcp(settings),

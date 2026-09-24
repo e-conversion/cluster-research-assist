@@ -77,12 +77,14 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
         {"CRA_AUTH_PROVIDER": "oidc"},
         {"CRA_AUTH_PROVIDER": "saml"},
         {"CRA_PORT": "0"},
+        {"CRA_BRAND_DIR": "/no/such/brand"},
     ],
     ids=[
         "relative base path",
         "oidc without client",
         "unknown auth",
         "port",
+        "missing brand directory",
     ],
 )
 def test_invalid_configuration_is_rejected(monkeypatch, env):

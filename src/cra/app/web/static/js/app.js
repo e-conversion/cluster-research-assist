@@ -6,6 +6,7 @@ import { initDialogs, toast } from "./settings.js";
 import { initHistory } from "./history.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration-graph.js";
+import { logo } from "./brand.js";
 
 export const store = {
   config: null,
@@ -36,7 +37,6 @@ function renderIdentity() {
 function renderSignIn(view, config) {
   const card = document.createElement("div");
   card.className = "signin";
-  card.innerHTML = '<svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>';
   const title = document.createElement("h1");
   title.textContent = config.title;
   const lede = document.createElement("p");
@@ -49,7 +49,7 @@ function renderSignIn(view, config) {
   const note = document.createElement("p");
   note.className = "muted small";
   note.textContent = "Access is by invitation.";
-  card.append(title, lede, signIn, note);
+  card.append(logo(), title, lede, signIn, note);
   view.replaceChildren(card);
   for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
@@ -74,8 +74,6 @@ async function boot() {
     renderUnreachable(view, e);
     return;
   }
-  document.title = config.title;
-  document.querySelector(".brand-name").textContent = config.title;
   if (config.notice) {
     const bar = document.getElementById("notice");
     bar.textContent = config.notice;

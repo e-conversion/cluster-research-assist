@@ -1,5 +1,6 @@
 // Chat view: history, streaming assistant turns with live tool steps, composer.
 import { streamChat, postJSON } from "./api.js";
+import { logo } from "./brand.js";
 import { StreamRenderer } from "./markdown.js";
 import { renderSettingsRow, toast } from "./settings.js";
 import { refreshSession } from "./app.js";
@@ -294,7 +295,7 @@ export function chatView(store) {
       function renderEmpty() {
         const e = el("div", "landing");
         const head = el("div", "landing-head");
-        head.append(svgUse("logo-mark", "logo"), el("h1", null, `Ask a detailed question about the research in ${store.config.cluster.name}`));
+        head.append(logo(), el("h1", null, `Ask a detailed question about the research in ${store.config.cluster.name}`));
         e.append(head, el("h2", "ex-label", "Example questions"));
         const starters = el("div", "starters");
         for (const q of store.config.examples) {

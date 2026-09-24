@@ -1,11 +1,14 @@
 // The collaboration graph page. Inline before, moved out so the CSP can refuse inline scripts.
-// Served by the FastAPI app: the graph comes from its API (relative URL, so
+// Served by the web app: the graph comes from its API (relative URL, so
 // the page works under any prefix). Everything below runs once it has loaded.
-fetch("../api/collaboration-graph").then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.hint || e.error))))
-.then(({ nodes: NODES, links: LINKS }) => {
-const INST = { TUM:{k:"tum",l:"TUM",n:"Technical University of Munich"}, LMU:{k:"lmu",l:"LMU",n:"Ludwig-Maximilians-Universität"},
-  FHI:{k:"fhi",l:"FHI",n:"Fritz Haber Institute"}, "MPI FKF":{k:"mpi",l:"MPI",n:"Max Planck Institute FKF"} };
-const instK = n => INST[n.inst] ? INST[n.inst].k : "other";
+const graph = fetch("../api/collaboration-graph").then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(new Error(e.hint || e.error))));
+// which institutions the legend tells apart comes from the deployment's brand
+const brand = fetch("../brand/brand.json").then((r) => r.json()).catch(() => ({ institutions: [] }));
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+Promise.all([graph, brand]).then(([{ nodes: NODES, links: LINKS }, { institutions }]) => {
+// each named institution takes the next colour of the categorical palette
+const INST = Object.fromEntries(institutions.map((it, i) => [it.key, { k: `viz-${(i % 8) + 1}`, l: it.label, n: it.name }]));
+const instK = n => INST[n.inst] ? INST[n.inst].k : "viz-other";
 const cssv = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const col = n => cssv("--" + instK(n));
 
@@ -20,11 +23,11 @@ const swOf = w => 0.7 + Math.sqrt(w / maxW) * 3.6;
 
 document.getElementById("hint").textContent = NODES.length + " PIs · " + LINKS.length + " collaborating pairs";
 const present = [...new Set(NODES.map(n => n.inst))];
-const legOrder = ["TUM","LMU","FHI","MPI FKF"].filter(i => present.includes(i));
+const legOrder = Object.keys(INST).filter(i => present.includes(i));
 if (present.some(i => !INST[i])) legOrder.push("__o");
 document.getElementById("legend").innerHTML = legOrder.map(i => {
-  const k = INST[i] ? INST[i].k : "other", l = INST[i] ? INST[i].l : "Other";
-  return `<span><i style="background:var(--${k})"></i>${l}</span>`;
+  const k = INST[i] ? INST[i].k : "viz-other", l = INST[i] ? INST[i].l : "Other";
+  return `<span><i style="background:var(--${k})"></i>${esc(l)}</span>`;
 }).join("");
 
 const frame = document.querySelector(".frame");
@@ -38,7 +41,7 @@ const link = gL.selectAll("path").data(LINKS).join("path")
   .attr("class", "link").attr("stroke-width", d => swOf(d.weight)).attr("stroke-opacity", .55);
 
 const node = gN.selectAll("g").data(NODES).join("g").attr("class", "node");
-node.append("circle").attr("r", rOf).attr("fill", d => d.deg ? col(d) : "var(--other)").attr("fill-opacity", d => d.deg ? 1 : .5);
+node.append("circle").attr("r", rOf).attr("fill", d => d.deg ? col(d) : "var(--viz-other)").attr("fill-opacity", d => d.deg ? 1 : .5);
 node.append("text").attr("class", "lab").attr("text-anchor", "middle").attr("dy", d => -rOf(d) - 4).text(d => d.label);
 node.call(d3.drag()
   .on("start", (e, d) => { if (!e.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; svg.node().classList.add("grab"); })
@@ -111,9 +114,9 @@ resetBtn.addEventListener("click", () => { pin = null; apply(null); });
 function showCard(id) {
   const n = byId[id], meta = INST[n.inst], c = col(n);
   const tops = [...n.co].sort((a, b) => b.w - a.w).slice(0, 5)
-    .map(x => `<li><span class="co">${byId[x.id].name.replace(/^(Prof\.|Dr\.|Prof\. Dr\.)\s*/, "")}</span><span class="w">${x.w} paper${x.w === 1 ? "" : "s"}</span></li>`).join("");
-  card.innerHTML = `<div class="cinst" style="color:${c}">${meta ? meta.l + " · " + meta.n : (n.inst || "—")}</div>
-    <h3>${n.name}</h3><div class="grp">${n.group || "—"}</div>
+    .map(x => `<li><span class="co">${esc(byId[x.id].name.replace(/^(Prof\.|Dr\.|Prof\. Dr\.)\s*/, ""))}</span><span class="w">${x.w} paper${x.w === 1 ? "" : "s"}</span></li>`).join("");
+  card.innerHTML = `<div class="cinst" style="color:${c}">${esc(meta ? [meta.l, meta.n].filter(Boolean).join(" · ") : (n.inst || "—"))}</div>
+    <h3>${esc(n.name)}</h3><div class="grp">${esc(n.group || "—")}</div>
     <div class="nums"><div><div class="n" style="color:${c}">${n.deg}</div><div class="l">collaborator${n.deg === 1 ? "" : "s"}</div></div>
       <div><div class="n">${n.papers}</div><div class="l">papers</div></div></div>
     ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : `<div class="hintline">No co-authorships recorded in the library.</div>`}`;
