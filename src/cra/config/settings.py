@@ -102,6 +102,8 @@ class Settings(BaseSettings):
 
     # questions per signed-in user per day; 0 removes the limit
     user_chat_daily_limit: int = Field(default=200, ge=0)
+    # DOI lookups per signed-in user per day; 0 removes the limit
+    user_lookup_daily_limit: int = Field(default=50, ge=0)
 
     # outward MCP surface, opt-in: it needs a reachable URL and a token secret
     mcp_server_enabled: bool = False
@@ -132,6 +134,14 @@ class Settings(BaseSettings):
     # connectors
     nomad_base_url: str = "https://nomad-lab.eu/prod/v1/api/v1"
     nomad_gui_url: str = "https://nomad-lab.eu/prod/v1/gui/entry/id/{}"
+    crossref_base_url: str = "https://api.crossref.org"
+    # consulted for the abstracts Crossref does not carry; empty disables it
+    openalex_base_url: str = "https://api.openalex.org"
+    # a contact address reaches the pool these APIs throttle least; it is
+    # published with every request, so use a group address, not a person's
+    doi_lookup_contact: str = ""
+    # how long a source that throttled us is left alone
+    doi_lookup_cooldown_s: int = Field(default=300, ge=0)
 
     # query encoder
     encoder_path: Path | None = None

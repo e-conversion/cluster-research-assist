@@ -8,7 +8,36 @@ serving image needs no numerical stack.
 from typing import Any
 
 from cra.app.viz.palette import colour
+from cra.core.library.citation import short, surnames
 from cra.core.library.library import Library
+from cra.core.library.records import Paper
+
+
+def point_view(
+    doi: str, x: float, y: float, paper: Paper | None = None, **extra: Any
+) -> dict[str, Any]:
+    """One paper as the browser sees it.
+
+    The single place the projection's y is flipped: deck.gl's orthographic
+    view has y pointing down, while the library stores it pointing up. Every
+    coordinate the frontend receives passes through here, so a placed paper
+    and the cloud it sits in can never end up mirrored relative to each other.
+    """
+    view: dict[str, Any] = {
+        "doi": doi,
+        "title": paper.title if paper else doi,
+        "year": paper.year if paper else "",
+        # `cite` carries author, title, journal and year in one bounded
+        # string, and `au` the surnames the client search matches on. Sending
+        # the raw author list instead would be unbounded: a paper with several
+        # hundred authors is ordinary in this field.
+        "cite": short(paper) if paper else doi,
+        "au": surnames(paper.authors) if paper else "",
+        "x": x,
+        "y": -y,
+    }
+    view.update(extra)
+    return view
 
 
 def payload(library: Library, clusters: int) -> dict[str, Any]:
@@ -24,21 +53,17 @@ def payload(library: Library, clusters: int) -> dict[str, Any]:
     colours = {
         name: colour(i) for i, name in enumerate(dict.fromkeys(sorted(set(named))))
     }
-    points = []
-    for index, doi in enumerate(stored.dois):
-        paper = library.papers.get(doi)
-        points.append(
-            {
-                "doi": doi,
-                "title": paper.title if paper else doi,
-                "year": paper.year if paper else "",
-                "x": stored.x[index],
-                # deck.gl's orthographic view has y pointing down
-                "y": -stored.y[index],
-                "cluster": named[index],
-                "color": colours[named[index]],
-            }
+    points = [
+        point_view(
+            doi,
+            stored.x[index],
+            stored.y[index],
+            library.papers.get(doi),
+            cluster=named[index],
+            color=colours[named[index]],
         )
+        for index, doi in enumerate(stored.dois)
+    ]
     return {
         "available": True,
         "clusters": count,
