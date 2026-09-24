@@ -29,6 +29,9 @@ const CLUSTER_FADE_START = 0.4, CLUSTER_FADE_LEN = 1.2;
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const truncate = (t) => (t.length > LABEL.chars ? t.slice(0, LABEL.chars - 1).trimEnd() + "…" : t);
+/** "an e-conversion paper", "a cluster paper": the cluster names itself. */
+const article = (word) => (/^[aeiou]/i.test(word) ? "an" : "a");
+
 /** A DOI as the library stores it, from whatever the user pasted. */
 const bareDoi = (raw) => raw.trim().toLowerCase()
   .replace(/^https?:\/\/(dx\.)?doi\.org\//, "").replace(/^doi:/, "").replace(/[}\s]+$/, "");
@@ -100,25 +103,35 @@ function planTitles(points, marks, fitZoom) {
   return at;
 }
 
-export function libraryMapView() {
+export function libraryMapView(store) {
   return {
     mount(container) {
+      // The cluster names itself, so this reads "an e-conversion paper" where
+      // it is deployed and stays sensible anywhere else.
+      const ours = store?.config?.cluster?.name || "cluster";
       container.innerHTML = `
         <div class="page">
           <h1>Publication Map</h1>
           <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
-            labeled with their top title keywords. There are three ways in:
-            <b>move around</b> — scroll to zoom, drag to pan, hover a point for its citation;
-            <b>find a paper here</b> — search the field below by title, author, year, journal or DOI;
-            or <b>bring a paper in</b> — paste any DOI and it is placed beside the work of ours it sits closest to.</p>
-          <div class="map-toolbar">
-            <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
-            <label>Find a paper <input type="search" id="paper-search" list="paper-titles" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
+            labeled with their top title keywords.</p>
+          <div class="map-row">
+            <p class="row-hint">Move around freely — scroll to zoom, drag to pan, hover a point for its citation.</p>
+            <div class="map-toolbar">
+              <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
+            </div>
           </div>
-          <div class="map-toolbar map-lookup">
-            <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
-            <button class="btn primary" id="doi-go" type="button">Place on the map</button>
-            <button class="btn ghost" id="doi-clear" type="button" hidden>Clear</button>
+          <div class="map-row">
+            <p class="row-hint">Find one of our own papers by title, author, year, journal or DOI.</p>
+            <div class="map-toolbar">
+              <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
+            </div>
+          </div>
+          <div class="map-row">
+            <p class="row-hint">Bring in a paper we do not have — paste a DOI and it is placed beside the work it sits closest to.</p>
+            <div class="map-toolbar">
+              <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
+              <button class="btn primary" id="doi-go" type="button">Place on the map</button>
+            </div>
           </div>
           <div class="lookup-card" id="lookup-card" hidden></div>
           <div class="legend" id="legend"></div>
@@ -391,7 +404,6 @@ export function libraryMapView() {
       function clearLookup() {
         placed = null;
         card.hidden = true;
-        $("doi-clear").hidden = true;
         if (data.length) draw();
       }
 
@@ -407,7 +419,6 @@ export function libraryMapView() {
           if (disposed) return;
           placed = found;
           showCard(describe(found));
-          $("doi-clear").hidden = false;
           draw();
         } catch (e) {
           if (disposed) return;
@@ -415,7 +426,6 @@ export function libraryMapView() {
           toast(e.message, "bad");
           placed = null;
           showCard(escapeHtml(e.message), true);
-          $("doi-clear").hidden = false;
           if (data.length) draw();
         } finally {
           busy = false;
@@ -425,9 +435,15 @@ export function libraryMapView() {
       }
 
       $("doi-go").addEventListener("click", lookupDoi);
-      $("doi-clear").addEventListener("click", () => { $("doi-input").value = ""; clearLookup(); });
       $("doi-input").addEventListener("keydown", (e) => {
         if (e.key === "Enter") { e.preventDefault(); lookupDoi(); }
+      });
+      // Emptying the field undoes the placement, the way emptying the search
+      // field undoes a search. That covers the input's own clear button, a
+      // selection deleted by hand, and the Escape key alike.
+      $("doi-input").addEventListener("input", () => {
+        // An error card belongs to the DOI that caused it, so it goes too.
+        if (!$("doi-input").value.trim() && (placed || !card.hidden)) clearLookup();
       });
 
       const slider = $("clusters");
