@@ -113,21 +113,21 @@ export function libraryMapView(store) {
         <div class="page">
           <h1>Publication Map</h1>
           <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
-            labeled with their top title keywords.</p>
+            labeled with their top title keywords. Hover over a point for its citation.</p>
           <div class="map-row">
-            <p class="row-hint">Move around freely — scroll to zoom, drag to pan, hover a point for its citation.</p>
+            <p class="row-hint">Adjust number of clusters</p>
             <div class="map-toolbar">
               <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
             </div>
           </div>
           <div class="map-row">
-            <p class="row-hint">Find one of our own papers by title, author, year, journal or DOI.</p>
+            <p class="row-hint">Locate ${escapeHtml(article(ours))} ${escapeHtml(ours)} publication.</p>
             <div class="map-toolbar">
               <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
             </div>
           </div>
           <div class="map-row">
-            <p class="row-hint">Bring in a paper we do not have — paste a DOI and it is placed beside the work it sits closest to.</p>
+            <p class="row-hint">Locate an external work based on the DOI.</p>
             <div class="map-toolbar">
               <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
               <button class="btn primary" id="doi-go" type="button">Place on the map</button>
