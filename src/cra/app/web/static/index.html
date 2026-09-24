@@ -66,13 +66,7 @@
     <details class="menu" id="menu">
       <summary class="btn ghost icon" title="Menu" aria-label="Menu"><svg class="ico"><use href="#i-more"/></svg></summary>
       <div class="menu-panel">
-        <div class="menu-label">Appearance</div>
-        <div class="seg" id="theme-seg" role="radiogroup">
-          <button type="button" data-theme="system">System</button>
-          <button type="button" data-theme="light">Light</button>
-          <button type="button" data-theme="dark">Dark</button>
-        </div>
-        <hr>
+        <button type="button" class="menu-item" id="settings-btn">Settings</button>
         <button type="button" class="menu-item" id="stats-btn">Stats for nerds</button>
         <a class="menu-item" id="admin-link" href="admin" hidden>Admin console</a>
         <button type="button" class="menu-item" id="sign-out" hidden>Sign out</button>
@@ -166,6 +160,92 @@
       <span class="spacer"></span>
       <button type="button" class="btn primary" id="feedback-submit">Submit</button>
     </footer>
+  </form>
+</dialog>
+
+<dialog id="dlg-settings" class="dlg wide tall">
+  <form method="dialog" class="dlg-body">
+    <header class="dlg-head">
+      <h2>Settings</h2>
+      <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+    </header>
+
+    <section class="set-section">
+      <h3>Appearance</h3>
+      <div class="seg" id="theme-seg" role="radiogroup" aria-label="Appearance">
+        <button type="button" data-theme="system">System</button>
+        <button type="button" data-theme="light">Light</button>
+        <button type="button" data-theme="dark">Dark</button>
+      </div>
+      <p class="muted small">Kept in this browser only.</p>
+    </section>
+
+    <section class="set-section" id="set-mcp" hidden>
+      <h3>MCP access</h3>
+      <p class="muted">A token lets an MCP client such as Claude Code or Cursor search
+        the cluster's public library on your behalf: papers and their abstracts, the
+        groups and who works with whom, never full texts or the proposal. Give each client its own token, so you can
+        revoke one without the others.</p>
+      <p class="muted small">The value is shown once, when you create it; treat it like
+        a password. Every call is logged against the token. It stops working when it
+        expires, when you revoke it here, or when your account is deactivated.</p>
+      <table class="token-table" id="token-table" hidden>
+        <thead><tr><th>Label</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+        <tbody id="token-rows"></tbody>
+      </table>
+      <p class="muted small" id="token-empty">No tokens yet.</p>
+      <div class="token-new">
+        <label class="field grow">
+          <span>Label</span>
+          <input type="text" id="token-label" maxlength="100" autocomplete="off" placeholder="e.g. Claude Code on the lab laptop">
+        </label>
+        <label class="field">
+          <span>Expires after</span>
+          <select id="token-days"></select>
+        </label>
+        <button type="button" class="btn primary" id="token-create">Create token</button>
+      </div>
+      <p class="error" id="token-error" hidden></p>
+      <div class="token-minted" id="token-minted" hidden>
+        <p><b>Copy your token now.</b> It will not be shown again.</p>
+        <div class="copy-row">
+          <input type="text" id="token-value" readonly aria-label="New token">
+          <button type="button" class="btn" data-copy="token-value">Copy</button>
+        </div>
+        <p class="muted small">Claude Code:</p>
+        <div class="copy-row">
+          <pre class="snippet" id="token-cli"></pre>
+          <button type="button" class="btn" data-copy="token-cli">Copy</button>
+        </div>
+        <p class="muted small">Cursor, and other clients configured with <code>mcpServers</code> JSON:</p>
+        <div class="copy-row">
+          <pre class="snippet" id="token-json"></pre>
+          <button type="button" class="btn" data-copy="token-json">Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="set-section">
+      <h3>Account</h3>
+      <dl class="account-facts" id="account-facts"></dl>
+      <p><a class="btn" id="account-export" href="api/me/export" download>Download my data</a>
+        <span class="muted small">Your conversations, feedback and tokens (not their values), as JSON.</span></p>
+      <div class="danger-zone">
+        <p><b>Delete account</b></p>
+        <p class="muted small" id="account-delete-hint">Deletes your account, your conversations,
+          your feedback and your tokens, and removes your invitation: signing in again
+          needs a new one. This cannot be undone.</p>
+        <p class="error" id="account-delete-blocked" hidden></p>
+        <div class="token-new" id="account-delete-form">
+          <label class="field grow">
+            <span>Type <b>delete</b> to confirm</span>
+            <input type="text" id="account-delete-confirm" autocomplete="off">
+          </label>
+          <button type="button" class="btn danger" id="account-delete" disabled>Delete my account</button>
+        </div>
+        <p class="error" id="account-delete-error" hidden></p>
+      </div>
+    </section>
   </form>
 </dialog>
 

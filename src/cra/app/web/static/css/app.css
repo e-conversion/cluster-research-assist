@@ -329,6 +329,29 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .radio-row { display: flex; gap: 18px; font-size: 14px; }
 
 .dlg.tall .dlg-body { max-height: 88vh; overflow: auto; }
+
+/* settings dialog */
+.set-section { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 4px; border-top: 1px solid var(--hair); }
+.set-section h3 { font: 500 11.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 0 0 2px; }
+.set-section p { margin: 0; }
+.set-section .seg { max-width: 320px; }
+.token-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.token-table th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--hair-2); }
+.token-table td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--hair); vertical-align: middle; }
+.token-table td:last-child { text-align: right; white-space: nowrap; }
+.token-table tr.ended td { color: var(--faint); }
+.badge { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+.token-new { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+.token-new .grow { flex: 1 1 240px; }
+.token-minted { display: flex; flex-direction: column; gap: 6px; background: var(--accent-soft); border-radius: 10px; padding: 12px 14px; }
+.copy-row { display: flex; gap: 8px; align-items: flex-start; }
+.copy-row input { flex: 1; min-width: 0; font: 13px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--hair-2); border-radius: 9px; padding: 7px 10px; }
+.snippet { flex: 1; min-width: 0; margin: 0; font: 12.5px/1.45 var(--mono); background: var(--panel); border: 1px solid var(--hair-2); border-radius: 9px; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.account-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
+.account-facts dt { color: var(--muted); }
+.account-facts dd { margin: 0; overflow-wrap: anywhere; }
+.danger-zone { display: flex; flex-direction: column; gap: 8px; border: 1px solid color-mix(in srgb, var(--bad) 45%, var(--hair)); border-radius: 10px; padding: 12px 14px; margin-top: 6px; }
+.btn.danger:not(.ghost):not(:disabled) { border-color: var(--bad); }
 .stats { font-size: 13.5px; display: flex; flex-direction: column; gap: 14px; }
 .pipeline-box { border-top: 1px solid var(--hair); padding-top: 12px; }
 .pipeline-box summary { cursor: pointer; font-size: 13.5px; color: var(--ink-2); }

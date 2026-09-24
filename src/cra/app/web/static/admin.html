@@ -27,6 +27,7 @@
     <button type="button" role="tab" data-tab="accounts">Accounts</button>
     <button type="button" role="tab" data-tab="settings">Settings</button>
     <button type="button" role="tab" data-tab="feedback">Feedback</button>
+    <button type="button" role="tab" data-tab="tokens" hidden>Tokens</button>
     <button type="button" role="tab" data-tab="library">Library</button>
   </nav>
 
@@ -58,6 +59,13 @@
     from is attached; open a row to read it.</p>
     <table><thead><tr><th>From</th><th>Kind</th><th>Note</th><th>When</th><th></th></tr></thead>
     <tbody id="feedback"></tbody></table>
+  </section>
+
+  <section id="tab-tokens" role="tabpanel" hidden>
+    <p class="desc">Everyone's tokens for the outward MCP endpoint, newest first. Values are never
+    stored, only what each token is for and when it was last used. Revoking one ends it at once.</p>
+    <table><thead><tr><th>Owner</th><th>Label</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+    <tbody id="tokens"></tbody></table>
   </section>
 
   <section id="tab-library" role="tabpanel" hidden>

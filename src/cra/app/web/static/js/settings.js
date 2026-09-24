@@ -1,5 +1,7 @@
-// Settings row (sources, model, feedback) and the dialogs (connect, feedback, stats).
+// Settings row (sources, model, feedback) and the dialogs (connect, feedback, stats;
+// the Settings dialog itself lives in account.js).
 import { getJSON, postJSON, del } from "./api.js";
+import { initSettings, openSettings } from "./account.js";
 import { refreshSession } from "./app.js";
 import { escapeHtml } from "./markdown.js";
 import { applyTheme, currentTheme, propagateTheme, syncControls } from "./theme.js";
@@ -299,6 +301,8 @@ export function initDialogs(s) {
     if (e.key === "Escape") for (const d of popovers()) d.open = false;
   });
   document.getElementById("stats-btn").addEventListener("click", () => { menu.open = false; openStats(); });
+  initSettings(s);
+  document.getElementById("settings-btn").addEventListener("click", () => { menu.open = false; openSettings(); });
   const box = document.getElementById("pipeline-box");
   box.addEventListener("toggle", () => {
     const f = document.getElementById("pipeline-frame");

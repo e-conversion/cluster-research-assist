@@ -248,6 +248,44 @@ async function loadFeedback() {
   }
 }
 
+async function loadTokens() {
+  const { tokens } = await getJSON("api/admin/tokens");
+  const body = $("tokens");
+  body.replaceChildren();
+  if (!tokens.length) {
+    const empty = el("tr");
+    const cell = el("td", "desc", "Nobody holds a token.");
+    cell.colSpan = 6;
+    empty.append(cell);
+    body.append(empty);
+    return;
+  }
+  for (const t of tokens) {
+    const row = el("tr");
+    row.append(el("td", null, t.owner));
+    row.append(el("td", null, t.label));
+    row.append(el("td", "desc", date(t.created_at)));
+    row.append(el("td", "desc", date(t.expires_at)));
+    row.append(el("td", "desc", date(t.last_used_at)));
+    const actions = el("td", "actions");
+    if (t.state === "active") {
+      actions.append(
+        button("Revoke", "ghost danger", () =>
+          guard(async () => {
+            await del(`api/admin/tokens/${encodeURIComponent(t.id)}`);
+            toast(`revoked ${t.owner}'s “${t.label}”`);
+            await loadTokens();
+          }),
+        ),
+      );
+    } else {
+      actions.append(el("span", "desc", t.state));
+    }
+    row.append(actions);
+    body.append(row);
+  }
+}
+
 const megabytes = (n) => `${(n / 1e6).toFixed(1)} MB`;
 
 async function loadLibrary() {
@@ -305,7 +343,7 @@ async function uploadLibrary(file) {
   return data;
 }
 
-const TABS = ["accounts", "settings", "feedback", "library"];
+const TABS = ["accounts", "settings", "feedback", "tokens", "library"];
 
 /** The open tab lives in the URL fragment, so a reload keeps it. */
 function showTab(name) {
@@ -335,8 +373,18 @@ async function boot() {
     location.assign("./");
     return;
   }
+  // tokens exist only where the deployment serves the MCP endpoint
+  const config = await getJSON("api/config").catch(() => ({}));
+  const tokensTab = $("tabs").querySelector('[data-tab="tokens"]');
+  tokensTab.hidden = !config.mcp;
   await guard(() =>
-    Promise.all([loadPeople(), loadPolicy(), loadFeedback(), loadLibrary()]),
+    Promise.all([
+      loadPeople(),
+      loadPolicy(),
+      loadFeedback(),
+      config.mcp ? loadTokens() : null,
+      loadLibrary(),
+    ]),
   );
   $("upload-form").addEventListener("submit", (ev) => {
     ev.preventDefault();
