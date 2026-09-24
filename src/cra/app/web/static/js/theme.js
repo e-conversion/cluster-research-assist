@@ -42,24 +42,3 @@ export function propagateTheme(iframe) {
     else delete root.dataset.theme;
   } catch { /* cross-origin */ }
 }
-
-/** A System / Light / Dark control, wired to the stored preference. */
-export function themeControl(label = "Appearance") {
-  const seg = document.createElement("div");
-  seg.className = "seg";
-  seg.setAttribute("role", "radiogroup");
-  seg.setAttribute("aria-label", label);
-  for (const mode of MODES) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.theme = mode;
-    button.textContent = mode[0].toUpperCase() + mode.slice(1);
-    seg.append(button);
-  }
-  seg.addEventListener("click", (event) => {
-    const button = event.target.closest("button[data-theme]");
-    if (button) applyTheme(button.dataset.theme);
-  });
-  syncControls();
-  return seg;
-}

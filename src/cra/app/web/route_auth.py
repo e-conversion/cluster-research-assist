@@ -45,9 +45,10 @@ CALLBACKS_PER_MINUTE = 30
 ERROR_PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title }}</title>
+<script src="{{ home }}static/js/theme-boot.js"></script>
 <link rel="stylesheet" href="{{ home }}static/css/app.css"></head>
-<body><main class="view"><div class="page"><h1>Sign-in not possible</h1>
-<p class="lede">{{ message }}</p><p><a class="btn" href="{{ home }}">Back</a></p>
+<body><main class="view"><div class="signin"><h1>Sign-in not possible</h1>
+<p class="lede">{{ message }}</p><a class="btn block" href="{{ home }}">Back</a>
 </div></main></body></html>"""
 
 

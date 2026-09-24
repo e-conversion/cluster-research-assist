@@ -128,7 +128,6 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 /* ---------- chat ---------- */
 .chat { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .messages { flex: 1; width: 100%; max-width: var(--col); margin: 0 auto; padding: 26px 18px 18px; }
-.signin-theme { margin-top: 26px; display: flex; justify-content: center; }
 .history { position: fixed; top: 0; right: 0; bottom: 0; width: 320px; z-index: 40;
   background: var(--panel); border-left: 1px solid var(--hair); padding: 14px;
   overflow-y: auto; box-shadow: -8px 0 24px rgba(0,0,0,.18); }
@@ -170,9 +169,15 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .admin .src.db { color: var(--accent); }
 .admin .desc { color: var(--muted); font-size: 13px; }
 .landing { padding: 8vh 0 24px; }
-.signin { max-width: 46ch; margin: 0 auto; text-align: center; }
-.signin .landing-head { margin-bottom: 24px; }
-.signin .lede { margin: 0 auto 22px; }
+.signin {
+  width: min(400px, calc(100vw - 32px)); margin: 12vh auto 24px; padding: 36px 32px 26px; text-align: center;
+  background: var(--panel); border: 1px solid var(--hair); border-radius: 18px; box-shadow: var(--shadow);
+}
+.signin .logo { width: 52px; height: 52px; display: block; margin: 0 auto 18px; }
+.signin h1 { font: 500 28px/1.15 var(--display); letter-spacing: -.01em; margin: 0 0 10px; color: var(--ink); }
+.signin .lede { margin: 0 auto 26px; max-width: 34ch; }
+.signin .btn.block { display: flex; width: 100%; padding: 11px 16px; font-size: 14.5px; }
+.signin .small { margin: 16px 0 0; }
 .landing-head { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 8vh; }
 .landing-head h1 { font: 500 24px/1.25 var(--body); margin: 0; color: var(--ink-2); letter-spacing: -.01em; }
 .landing-head .logo { width: 34px; height: 34px; }
