@@ -1,10 +1,11 @@
 # Real-endpoint tests. The job is bound to the GitHub Environment `llm`, whose
 # required reviewers must approve it before it receives the secrets and runs.
-# Approve it as the last action of a review; it is a required status check.
+# Manual only for now: the endpoint and model are not configured yet, so on
+# every pull request the job failed without saying anything about the change.
+# Put `pull_request:` back once CRA_LLM_BASE_URL and CRA_LLM_MODEL are set.
 name: Tests (LLM)
 
 on:
-  pull_request:
   workflow_dispatch:
 
 jobs:
