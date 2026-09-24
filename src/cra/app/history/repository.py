@@ -70,18 +70,31 @@ class Repository:
             )
             return result.rowcount == 1
 
-    async def delete_user(self, user_id: str) -> bool:
-        """Removes the account and, by cascade, its identities and sessions.
-        The address stays on the allow-list, unlinked, so a fresh sign-in
-        creates a new account."""
+    async def delete_user(self, user_id: str, *, keep_invitation: bool = True) -> bool:
+        """Removes the account and, by cascade, its identities, sessions,
+        conversations, feedback and tokens.
+
+        With ``keep_invitation`` the address stays on the allow-list, unlinked,
+        so a fresh sign-in creates a new account; without it the address goes
+        too, which is what deleting one's own account promises.
+        """
+        owned = RegisteredEmail.user_id == user_id
         async with self._sessions() as s, s.begin():
-            await s.execute(
-                update(RegisteredEmail)
-                .where(RegisteredEmail.user_id == user_id)
-                .values(user_id=None)
-            )
+            if keep_invitation:
+                await s.execute(
+                    update(RegisteredEmail).where(owned).values(user_id=None)
+                )
+            else:
+                await s.execute(delete(RegisteredEmail).where(owned))
             result = await s.execute(delete(User).where(User.id == user_id))
             return result.rowcount == 1
+
+    async def count_active_admins(self) -> int:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(User.id).where(User.role == "admin", User.is_active)
+            )
+            return len(list(rows))
 
     async def set_user_active(self, user_id: str, active: bool) -> bool:
         async with self._sessions() as s, s.begin():
@@ -144,6 +157,15 @@ class Repository:
                 .values(role=role)
             )
             return result.rowcount == 1
+
+    async def emails_of(self, user_id: str) -> list[str]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(RegisteredEmail.email)
+                .where(RegisteredEmail.user_id == user_id)
+                .order_by(RegisteredEmail.email)
+            )
+            return list(rows)
 
     async def link_registered_email(self, email: str, user_id: str) -> None:
         async with self._sessions() as s, s.begin():
@@ -229,7 +251,7 @@ class Repository:
             return await s.get(Conversation, conversation_id)
 
     async def list_conversations(
-        self, user_id: str, limit: int = 100
+        self, user_id: str, limit: int | None = 100
     ) -> list[Conversation]:
         async with self._sessions() as s:
             rows = await s.scalars(
@@ -349,6 +371,15 @@ class Repository:
     async def count_feedback(self) -> int:
         async with self._sessions() as s:
             return len(list(await s.scalars(select(Feedback.id))))
+
+    async def feedback_of(self, user_id: str) -> list[Feedback]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(Feedback)
+                .where(Feedback.user_id == user_id)
+                .order_by(Feedback.created_at, Feedback.id)
+            )
+            return list(rows)
 
     # MCP tokens
 

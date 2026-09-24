@@ -83,7 +83,7 @@ def _set_cookie(response: Response, cookie: str) -> Response:
     return response
 
 
-def _clear_cookie(response: Response) -> Response:
+def clear_cookie(response: Response) -> Response:
     response.delete_cookie(COOKIE_NAME, path=_ctx().settings.base_path or "/")
     return response
 
@@ -173,4 +173,4 @@ async def logout() -> Response:
         ),
         content_type="application/json",
     )
-    return _clear_cookie(response)
+    return clear_cookie(response)

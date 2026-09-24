@@ -64,6 +64,8 @@ USER_ROUTES = {
     "/api/collaboration-graph",
     "/api/tokens",
     "/api/tokens/<token_id>",
+    "/api/me",
+    "/api/me/export",
 }
 ADMIN_ROUTES = {
     "/admin",
