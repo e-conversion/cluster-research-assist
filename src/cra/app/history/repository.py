@@ -5,7 +5,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cra.app.history.tables import (
@@ -319,6 +319,20 @@ class Repository:
                 .values(updated_at=utcnow())
             )
         return row
+
+    async def answer_meta(self) -> list[tuple[dict[str, Any], str]]:
+        """Every stored answer's metadata, with the account it was given to."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(Message.meta, Conversation.user_id)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(Message.role == "assistant")
+            )
+            return [(row[0] or {}, row[1]) for row in rows]
+
+    async def count_conversations(self) -> int:
+        async with self._sessions() as s:
+            return int(await s.scalar(select(func.count()).select_from(Conversation)))
 
     async def purge_conversations(self, older_than_days: int) -> int:
         cutoff = utcnow() - timedelta(days=older_than_days)

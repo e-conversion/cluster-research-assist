@@ -245,7 +245,7 @@ export async function openStats() {
 }
 
 function renderStats(s) {
-  const build = s.build.git_sha + (s.build.build_time ? ` (${s.build.build_time})` : "");
+  const built = s.build.library_built_at ? s.build.library_built_at.slice(0, 16).replace("T", " ") : "unknown";
   const u = s.usage;
   const tools = store.session.tools;
   const inventory = [`${tools.local} local`]
@@ -253,21 +253,21 @@ function renderStats(s) {
   const kpi = (n, l) => `<div class="kpi"><div class="n">${escapeHtml(n)}</div><div class="l">${escapeHtml(l)}</div></div>`;
   const row = (cells, num = []) => `<tr>${cells.map((c, i) => `<td class="${num.includes(i) ? "num" : ""}">${escapeHtml(c ?? "—")}</td>`).join("")}</tr>`;
   return `
-    <p class="muted small">Build <code>${escapeHtml(build)}</code> · providers: ${escapeHtml(s.providers.join(", "))} ·
+    <p class="muted small">Version <code>${escapeHtml(s.build.version)}</code> · provider ${escapeHtml(s.provider)} ·
       default model <code>${escapeHtml(s.default_model)}</code> · tools in this session: ${escapeHtml(inventory)}</p>
-    <section><h3>Usage (from the server logs)</h3>
-      <div class="kpis">${kpi(u.turns, "turns")}${kpi(u.sessions, "sessions")}${kpi(u.error_turns, "error turns")}${kpi(u.avg_latency_ms + " ms", "⌀ latency")}${kpi(u.feedback, "feedback")}</div>
+    <section><h3>Usage (every stored answer)</h3>
+      <div class="kpis">${kpi(u.turns, "answers")}${kpi(u.conversations, "conversations")}${kpi(u.people, "people")}${kpi(u.error_turns, "failed answers")}${kpi(u.avg_latency_ms + " ms", "⌀ answer time")}${kpi(u.feedback, "feedback")}</div>
     </section>
-    <section><h3>Pipeline (sources → caches → tools)</h3>
-      <table><thead><tr><th>stage</th><th class="num">entries</th><th>available</th><th>built</th></tr></thead><tbody>
-      ${s.pipeline.map((p) => row([p.stage, p.entries == null ? (p.available ? "yes" : "no") : String(p.entries), p.available ? "yes" : "no", p.built], [1])).join("")}
+    <section><h3>Library (built ${escapeHtml(built)} UTC${s.build.embedding_model ? `, embeddings by ${escapeHtml(s.build.embedding_model)}` : ""})</h3>
+      <table><thead><tr><th>stage</th><th class="num">entries</th><th>available</th></tr></thead><tbody>
+      ${s.pipeline.map((p) => row([p.stage, p.entries == null ? "—" : String(p.entries), p.available ? "yes" : "no"], [1])).join("")}
       </tbody></table></section>
     <section><h3>Tools</h3>
       <table><thead><tr><th>tool</th><th class="num">calls</th><th class="num">errors</th><th class="num">avg</th></tr></thead><tbody>
       ${s.tools.length ? s.tools.map((t) => row([t.name, String(t.calls), String(t.errors), t.avg_ms + " ms"], [1, 2, 3])).join("") : row(["none yet", "", "", ""])}
       </tbody></table></section>
     <section><h3>Models</h3>
-      <table><thead><tr><th>model</th><th class="num">turns</th></tr></thead><tbody>
+      <table><thead><tr><th>model</th><th class="num">answers</th></tr></thead><tbody>
       ${s.models.length ? s.models.map((m) => row([m.name, String(m.turns)], [1])).join("") : row(["none yet", ""])}
       </tbody></table></section>
     `;

@@ -66,6 +66,7 @@ USER_ROUTES = {
     "/api/tokens/<token_id>",
     "/api/me",
     "/api/me/export",
+    "/api/stats",
 }
 ADMIN_ROUTES = {
     "/admin",
