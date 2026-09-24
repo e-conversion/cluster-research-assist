@@ -12,6 +12,7 @@ from cra.app.history.tables import (
     Conversation,
     Feedback,
     Identity,
+    McpToken,
     Message,
     PolicySetting,
     RegisteredEmail,
@@ -348,6 +349,85 @@ class Repository:
     async def count_feedback(self) -> int:
         async with self._sessions() as s:
             return len(list(await s.scalars(select(Feedback.id))))
+
+    # MCP tokens
+
+    async def create_token(
+        self, user_id: str, label: str, token_hash: str, expires_at: datetime
+    ) -> McpToken:
+        row = McpToken(
+            user_id=user_id,
+            label=label,
+            token_hash=token_hash,
+            created_at=utcnow(),
+            expires_at=expires_at,
+        )
+        async with self._sessions() as s, s.begin():
+            s.add(row)
+        return row
+
+    async def get_token_by_hash(self, token_hash: str) -> tuple[McpToken, bool] | None:
+        """The token and whether its owner's account is active."""
+        async with self._sessions() as s:
+            row = (
+                await s.execute(
+                    select(McpToken, User.is_active)
+                    .join(User, User.id == McpToken.user_id)
+                    .where(McpToken.token_hash == token_hash)
+                )
+            ).first()
+            return (row[0], bool(row[1])) if row else None
+
+    async def get_token(self, token_id: str) -> McpToken | None:
+        async with self._sessions() as s:
+            return await s.get(McpToken, token_id)
+
+    async def list_tokens(self, user_id: str) -> list[McpToken]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(McpToken)
+                .where(McpToken.user_id == user_id)
+                .order_by(McpToken.created_at.desc())
+            )
+            return list(rows)
+
+    async def list_all_tokens(self) -> list[tuple[McpToken, str]]:
+        """Newest first, each with its owner's name."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(McpToken, User.display_name)
+                .join(User, User.id == McpToken.user_id)
+                .order_by(McpToken.created_at.desc())
+            )
+            return [(row[0], row[1]) for row in rows]
+
+    async def revoke_token(self, token_id: str, user_id: str | None = None) -> bool:
+        """Ends a token; ``user_id`` restricts it to that owner's. Revoking a
+        token that is already revoked succeeds and keeps the first time."""
+        async with self._sessions() as s, s.begin():
+            row = await s.get(McpToken, token_id)
+            if row is None or (user_id is not None and row.user_id != user_id):
+                return False
+            if row.revoked_at is None:
+                row.revoked_at = utcnow()
+            return True
+
+    async def revoke_tokens_of(self, user_id: str) -> int:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(McpToken)
+                .where(McpToken.user_id == user_id, McpToken.revoked_at.is_(None))
+                .values(revoked_at=utcnow())
+            )
+            return int(result.rowcount)
+
+    async def touch_token(self, token_id: str, when: datetime) -> None:
+        async with self._sessions() as s, s.begin():
+            await s.execute(
+                update(McpToken)
+                .where(McpToken.id == token_id)
+                .values(last_used_at=when)
+            )
 
     # web sessions
 

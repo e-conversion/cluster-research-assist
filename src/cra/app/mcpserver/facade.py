@@ -70,11 +70,11 @@ def build(ctx: Any) -> Server:
 
 
 def caller(request: Any) -> str:
-    """Who asked, for the audit line: the token's subject, else the address."""
+    """Who asked, for the audit line: the token's id, else the address."""
     http = getattr(request, "request", None)
-    subject = getattr(http, "headers", {}).get("x-cra-subject", "") if http else ""
-    if subject:
-        return subject
+    token_id = getattr(http, "headers", {}).get("x-cra-caller", "") if http else ""
+    if token_id:
+        return token_id
     client = getattr(http, "client", None)
     return getattr(client, "host", "") or "anonymous"
 

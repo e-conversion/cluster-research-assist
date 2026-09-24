@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from cra import __version__
@@ -59,21 +61,42 @@ def test_library_manifest_then_check(tmp_path, capsys):
     assert "papers       3" in capsys.readouterr().out
 
 
-def test_token_issue_then_check(tmp_path, capsys):
+def an_account(env, name: str) -> str:
+    """A migrated database with one account in it, and that account's id."""
+    from cra.app.history.engine import make_engine, make_session_factory
+    from cra.app.history.repository import Repository
+
+    assert main(["--env-file", str(env), "db", "upgrade"]) == 0
+
+    async def create() -> str:
+        engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
+        user = await Repository(make_session_factory(engine)).create_user(name)
+        await engine.dispose()
+        return user.id
+
+    return asyncio.run(create())
+
+
+def test_a_token_issued_on_the_command_line_can_be_listed_and_revoked(tmp_path, capsys):
     env = tmp_path / ".env"
-    env.write_text("CRA_LIBRARY_PATH=/c\nCRA_MCP_TOKEN_SECRET=s3cret\n")
-    assert main(["--env-file", str(env), "token", "issue", "a-colleague"]) == 0
+    env.write_text(
+        f"CRA_LIBRARY_PATH=/c\nCRA_HISTORY_URL=sqlite+aiosqlite:///{tmp_path}/cra.sqlite\n"
+    )
+    user_id = an_account(env, "Ada")
+    capsys.readouterr()
+    cli = ["--env-file", str(env), "token"]
+
+    assert main([*cli, "issue", user_id, "--label", "lab laptop"]) == 0
     printed = capsys.readouterr()
-    token = printed.out.strip()
-    assert "a-colleague" in printed.err
+    assert printed.out.startswith("cra1_")
+    token_id = printed.err.split()[1]
 
-    assert main(["--env-file", str(env), "token", "check", token]) == 0
-    assert "a-colleague" in capsys.readouterr().out
-    assert main(["--env-file", str(env), "token", "check", "nonsense"]) == 1
+    assert main([*cli, "list"]) == 0
+    listed = capsys.readouterr().out
+    assert token_id in listed
+    assert "active" in listed
+    assert printed.out.strip() not in listed
 
-
-def test_a_token_needs_a_configured_secret(tmp_path, capsys):
-    env = tmp_path / ".env"
-    env.write_text("CRA_LIBRARY_PATH=/c\n")
-    assert main(["--env-file", str(env), "token", "issue", "someone"]) == 1
-    assert "secret" in capsys.readouterr().err
+    assert main([*cli, "revoke", token_id]) == 0
+    assert main([*cli, "list", user_id]) == 0
+    assert "revoked" in capsys.readouterr().out

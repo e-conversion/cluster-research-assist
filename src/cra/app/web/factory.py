@@ -33,6 +33,7 @@ from cra.app.web import (
     route_health,
     route_preferences,
     route_session,
+    route_tokens,
     route_views,
 )
 from cra.app.web.access import required_role, satisfies
@@ -227,6 +228,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_connect.bp,
         route_conversation.bp,
         route_views.bp,
+        route_tokens.bp,
         route_admin.bp,
     ):
         app.register_blueprint(blueprint, url_prefix=base or None)

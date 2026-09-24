@@ -103,9 +103,11 @@ async def update_user(user_id: str) -> Any:
         active = bool(body["is_active"])
         await repo.set_user_active(user_id, active)
         if not active:
-            # a disabled account keeps no live connection to anyone's eLN
+            # a disabled account keeps no live connection to anyone's eLN, and
+            # no token that would work again if it were reactivated
             for session in await repo.sessions_of(user_id):
                 await _ctx().remote.forget(session.id)
+            await repo.revoke_tokens_of(user_id)
         auditlog.record("set_active", user=user_id, active=active)
     return {"ok": True}
 

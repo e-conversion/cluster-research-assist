@@ -122,6 +122,25 @@ class Feedback(Base):
     messages: Mapped[list[Any]] = mapped_column(default=list)
 
 
+class McpToken(Base):
+    """A bearer token for the outward MCP endpoint, owned by one account.
+
+    Only the sha256 of the value is kept: the value is shown once, when it is
+    minted, and a database dump yields nothing a client could present.
+    """
+
+    __tablename__ = "mcp_tokens"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    label: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime]
+    expires_at: Mapped[datetime]
+    last_used_at: Mapped[datetime | None]
+    revoked_at: Mapped[datetime | None]
+
+
 class WebSession(Base):
     """Server-side browser session. ``id`` is the hash of the cookie value, so
     a database dump does not yield usable cookies."""
