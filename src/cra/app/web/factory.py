@@ -24,6 +24,7 @@ from cra.app.history.repository import Repository
 from cra.app.policy import Policy
 from cra.app.ratelimit import RateLimiter
 from cra.app.web import (
+    route_account,
     route_admin,
     route_auth,
     route_chat,
@@ -33,6 +34,8 @@ from cra.app.web import (
     route_health,
     route_preferences,
     route_session,
+    route_stats,
+    route_tokens,
     route_views,
 )
 from cra.app.web.access import required_role, satisfies
@@ -227,6 +230,9 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_connect.bp,
         route_conversation.bp,
         route_views.bp,
+        route_tokens.bp,
+        route_stats.bp,
+        route_account.bp,
         route_admin.bp,
     ):
         app.register_blueprint(blueprint, url_prefix=base or None)

@@ -2,15 +2,21 @@
 ``tests/test_migrations.py`` checks that."""
 
 import secrets
+import string
 from datetime import datetime
 from typing import Any, ClassVar
 
 from sqlalchemy import JSON, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+# Letters and digits only: token_urlsafe starts one id in 64 with "-", which the
+# CLI then reads as an option. 16 characters of 62 are about 95 bits.
+ID_ALPHABET = string.ascii_letters + string.digits
+ID_LENGTH = 16
+
 
 def new_id() -> str:
-    return secrets.token_urlsafe(12)
+    return "".join(secrets.choice(ID_ALPHABET) for _ in range(ID_LENGTH))
 
 
 class Base(DeclarativeBase):
@@ -120,6 +126,25 @@ class Feedback(Base):
     text: Mapped[str] = mapped_column(Text)
     model: Mapped[str] = mapped_column(String(120), default="")
     messages: Mapped[list[Any]] = mapped_column(default=list)
+
+
+class McpToken(Base):
+    """A bearer token for the outward MCP endpoint, owned by one account.
+
+    Only the sha256 of the value is kept: the value is shown once, when it is
+    minted, and a database dump yields nothing a client could present.
+    """
+
+    __tablename__ = "mcp_tokens"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    label: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime]
+    expires_at: Mapped[datetime]
+    last_used_at: Mapped[datetime | None]
+    revoked_at: Mapped[datetime | None]
 
 
 class WebSession(Base):

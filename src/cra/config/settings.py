@@ -105,14 +105,14 @@ class Settings(BaseSettings):
     # DOI lookups per signed-in user per day; 0 removes the limit
     user_lookup_daily_limit: int = Field(default=50, ge=0)
 
-    # outward MCP surface, opt-in: it needs a reachable URL and a token secret
+    # outward MCP surface, opt-in: it needs a reachable URL; tokens are minted
+    # by signed-in users in the web interface and stored in the history database
     mcp_server_enabled: bool = False
     mcp_server_path: str = "/mcp"
     mcp_server_require_token: bool = True
     mcp_server_rate_limit: int = Field(default=60, ge=1)
     # Host values the endpoint answers to; empty turns DNS-rebinding checks off
     mcp_server_allowed_hosts: CommaList = []
-    mcp_token_secret: SecretStr = SecretStr("")
 
     # history
     history_url: str = "sqlite+aiosqlite:///./cra.sqlite"
@@ -183,12 +183,6 @@ class Settings(BaseSettings):
                     "auth_provider=oidc needs "
                     + ", ".join(f"CRA_{m.upper()}" for m in missing)
                 )
-        if (
-            self.mcp_server_enabled
-            and self.mcp_server_require_token
-            and not self.mcp_token_secret.get_secret_value()
-        ):
-            raise ValueError("CRA_MCP_SERVER_REQUIRE_TOKEN needs CRA_MCP_TOKEN_SECRET")
         if self.llm_model and self.llm_models and self.llm_model not in self.llm_models:
             self.llm_models.insert(0, self.llm_model)
         return self

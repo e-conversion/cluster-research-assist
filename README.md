@@ -149,18 +149,22 @@ backed by the very same registry, asked at the public tier: an internal tool is
 neither listed nor reachable by name, and full texts and the proposal never
 leave through it.
 
+Signed-in users mint their own tokens under **Settings → MCP access**: a label,
+an expiry of 30, 90 or 365 days, and the value, shown once. Only its sha256 is
+stored. A token can be revoked there at any time, by an admin in the console's
+Tokens tab, or from the command line:
+
 ```bash
-cra token issue "a colleague"     # prints the token; the details go to stderr
-cra token check <token>           # who it is for and when it ends
+cra token issue <user-id-or-email> --label "lab laptop" --days 90
+cra token list [<user-id-or-email>]   # everyone's without an argument
+cra token revoke <token-id>
 ```
 
-Tokens are signed with `CRA_MCP_TOKEN_SECRET` and carry their own expiry, so
-verifying one costs no database lookup. A single token cannot be revoked:
-rotating the secret ends every one of them. With
+Deactivating an account revokes its tokens; deleting it removes them. With
 `CRA_MCP_SERVER_REQUIRE_TOKEN=false` the endpoint is open, which is a choice for
 a network that is already closed. Either way every call is rate-limited
 (`CRA_MCP_SERVER_RATE_LIMIT` a minute, per token, or per address without one)
-and written to the audit log as one line naming the caller, the tool and how
+and written to the audit log as one line naming the token id, the tool and how
 long it took -- never the arguments, which are someone else's query.
 
 Point a client at `https://<host><base path>/mcp` with

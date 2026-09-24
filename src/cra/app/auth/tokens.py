@@ -1,84 +1,93 @@
 """Bearer tokens for the outward MCP endpoint.
 
-A token is self-contained and signed, so the endpoint verifies one with the
-deployment secret alone: no table, no lookup on the hot path. The trade is that
-a single token cannot be revoked on its own -- rotating ``CRA_MCP_TOKEN_SECRET``
-revokes all of them at once, which is the right blunt instrument for a surface
-that only ever serves public data.
+A token belongs to one account and is stored as the sha256 of its value, so
+each one can be listed, revoked and seen to be in use on its own. Verifying
+one is a single indexed read; ``last_used_at`` is written at most once per
+``TOUCH_INTERVAL`` so that a busy client does not turn every call into a write.
 """
 
-import base64
 import hashlib
-import hmac
-import json
-import time
-from dataclasses import dataclass
+import secrets
+from datetime import datetime, timedelta
+from typing import Any
 
-VERSION = "cra1"
-DEFAULT_DAYS = 365
-DAY_S = 24 * 60 * 60
+from cra.app.history.repository import Repository, utcnow
+from cra.app.history.tables import McpToken
 
-
-@dataclass(frozen=True)
-class Claims:
-    subject: str
-    issued_at: int
-    expires_at: int
-
-
-def issue(
-    secret: str, subject: str, *, days: int = DEFAULT_DAYS, now: float | None = None
-) -> str:
-    """A token for ``subject``, valid for ``days``."""
-    subject = subject.strip()
-    if not secret:
-        raise ValueError("no token secret is configured")
-    if not subject:
-        raise ValueError("a token needs a subject")
-    if days < 1:
-        raise ValueError("a token must be valid for at least one day")
-    issued = int(now if now is not None else time.time())
-    payload = _encode({"sub": subject, "iat": issued, "exp": issued + days * DAY_S})
-    return f"{VERSION}.{payload}.{_sign(secret, payload)}"
+PREFIX = "cra1_"
+DEFAULT_DAYS = 90
+MAX_DAYS = 365
+# what the web interface offers; the CLI takes any number of days up to MAX_DAYS
+EXPIRY_CHOICES = (30, 90, 365)
+LABEL_MAX = 100
+TOUCH_INTERVAL = timedelta(minutes=1)
 
 
-def verify(secret: str, token: str, *, now: float | None = None) -> Claims | None:
-    """The claims, or None for anything that is not a live, signed token."""
-    if not secret or not token:
+def hash_value(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+async def mint(
+    repo: Repository, user_id: str, label: str, days: int = DEFAULT_DAYS
+) -> tuple[McpToken, str]:
+    """A new token for ``user_id``, and its value, which is never seen again."""
+    label = label.strip()
+    if not label:
+        raise ValueError("a token needs a label")
+    if len(label) > LABEL_MAX:
+        raise ValueError(f"a label is at most {LABEL_MAX} characters")
+    if not 1 <= days <= MAX_DAYS:
+        raise ValueError(f"a token is valid for 1 to {MAX_DAYS} days")
+    value = PREFIX + secrets.token_urlsafe(32)
+    row = await repo.create_token(
+        user_id, label, hash_value(value), utcnow() + timedelta(days=days)
+    )
+    return row, value
+
+
+async def verify(
+    repo: Repository, value: str, *, now: datetime | None = None
+) -> McpToken | None:
+    """The token, or None for anything that is not live: unknown, revoked,
+    expired, or owned by an account that has been deactivated."""
+    if not value.startswith(PREFIX):
         return None
-    version, _, rest = token.partition(".")
-    payload, _, signature = rest.partition(".")
-    if version != VERSION or not payload or not signature:
+    found = await repo.get_token_by_hash(hash_value(value))
+    if found is None:
         return None
-    if not hmac.compare_digest(signature, _sign(secret, payload)):
+    row, owner_active = found
+    now = now or utcnow()
+    if row.revoked_at is not None or row.expires_at <= now or not owner_active:
         return None
-    try:
-        claims = json.loads(_decode(payload))
-        expires = int(claims["exp"])
-        subject = str(claims["sub"])
-        issued = int(claims["iat"])
-    except (ValueError, KeyError, TypeError):
-        return None
-    if expires <= (now if now is not None else time.time()):
-        return None
-    return Claims(subject=subject, issued_at=issued, expires_at=expires)
+    if row.last_used_at is None or now - row.last_used_at >= TOUCH_INTERVAL:
+        await repo.touch_token(row.id, now)
+    return row
+
+
+def state(row: McpToken, now: datetime | None = None) -> str:
+    if row.revoked_at is not None:
+        return "revoked"
+    return "expired" if row.expires_at <= (now or utcnow()) else "active"
+
+
+def describe(row: McpToken) -> dict[str, Any]:
+    """What a listing shows about a token: everything but the value."""
+
+    def iso(when: datetime | None) -> str | None:
+        return when.isoformat() if when else None
+
+    return {
+        "id": row.id,
+        "label": row.label,
+        "created_at": iso(row.created_at),
+        "expires_at": iso(row.expires_at),
+        "last_used_at": iso(row.last_used_at),
+        "revoked_at": iso(row.revoked_at),
+        "state": state(row),
+    }
 
 
 def bearer(header: str) -> str:
     """The token out of an Authorization header, or an empty string."""
     scheme, _, value = header.strip().partition(" ")
     return value.strip() if scheme.lower() == "bearer" else ""
-
-
-def _sign(secret: str, payload: str) -> str:
-    digest = hmac.new(secret.encode(), payload.encode(), hashlib.sha256).digest()
-    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
-
-
-def _encode(claims: dict[str, object]) -> str:
-    raw = json.dumps(claims, sort_keys=True, separators=(",", ":")).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def _decode(payload: str) -> bytes:
-    return base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4))

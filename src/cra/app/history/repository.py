@@ -5,13 +5,14 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cra.app.history.tables import (
     Conversation,
     Feedback,
     Identity,
+    McpToken,
     Message,
     PolicySetting,
     RegisteredEmail,
@@ -69,18 +70,31 @@ class Repository:
             )
             return result.rowcount == 1
 
-    async def delete_user(self, user_id: str) -> bool:
-        """Removes the account and, by cascade, its identities and sessions.
-        The address stays on the allow-list, unlinked, so a fresh sign-in
-        creates a new account."""
+    async def delete_user(self, user_id: str, *, keep_invitation: bool = True) -> bool:
+        """Removes the account and, by cascade, its identities, sessions,
+        conversations, feedback and tokens.
+
+        With ``keep_invitation`` the address stays on the allow-list, unlinked,
+        so a fresh sign-in creates a new account; without it the address goes
+        too, which is what deleting one's own account promises.
+        """
+        owned = RegisteredEmail.user_id == user_id
         async with self._sessions() as s, s.begin():
-            await s.execute(
-                update(RegisteredEmail)
-                .where(RegisteredEmail.user_id == user_id)
-                .values(user_id=None)
-            )
+            if keep_invitation:
+                await s.execute(
+                    update(RegisteredEmail).where(owned).values(user_id=None)
+                )
+            else:
+                await s.execute(delete(RegisteredEmail).where(owned))
             result = await s.execute(delete(User).where(User.id == user_id))
             return result.rowcount == 1
+
+    async def count_active_admins(self) -> int:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(User.id).where(User.role == "admin", User.is_active)
+            )
+            return len(list(rows))
 
     async def set_user_active(self, user_id: str, active: bool) -> bool:
         async with self._sessions() as s, s.begin():
@@ -143,6 +157,15 @@ class Repository:
                 .values(role=role)
             )
             return result.rowcount == 1
+
+    async def emails_of(self, user_id: str) -> list[str]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(RegisteredEmail.email)
+                .where(RegisteredEmail.user_id == user_id)
+                .order_by(RegisteredEmail.email)
+            )
+            return list(rows)
 
     async def link_registered_email(self, email: str, user_id: str) -> None:
         async with self._sessions() as s, s.begin():
@@ -228,7 +251,7 @@ class Repository:
             return await s.get(Conversation, conversation_id)
 
     async def list_conversations(
-        self, user_id: str, limit: int = 100
+        self, user_id: str, limit: int | None = 100
     ) -> list[Conversation]:
         async with self._sessions() as s:
             rows = await s.scalars(
@@ -297,6 +320,20 @@ class Repository:
             )
         return row
 
+    async def answer_meta(self) -> list[tuple[dict[str, Any], str]]:
+        """Every stored answer's metadata, with the account it was given to."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(Message.meta, Conversation.user_id)
+                .join(Conversation, Conversation.id == Message.conversation_id)
+                .where(Message.role == "assistant")
+            )
+            return [(row[0] or {}, row[1]) for row in rows]
+
+    async def count_conversations(self) -> int:
+        async with self._sessions() as s:
+            return int(await s.scalar(select(func.count()).select_from(Conversation)))
+
     async def purge_conversations(self, older_than_days: int) -> int:
         cutoff = utcnow() - timedelta(days=older_than_days)
         async with self._sessions() as s, s.begin():
@@ -348,6 +385,94 @@ class Repository:
     async def count_feedback(self) -> int:
         async with self._sessions() as s:
             return len(list(await s.scalars(select(Feedback.id))))
+
+    async def feedback_of(self, user_id: str) -> list[Feedback]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(Feedback)
+                .where(Feedback.user_id == user_id)
+                .order_by(Feedback.created_at, Feedback.id)
+            )
+            return list(rows)
+
+    # MCP tokens
+
+    async def create_token(
+        self, user_id: str, label: str, token_hash: str, expires_at: datetime
+    ) -> McpToken:
+        row = McpToken(
+            user_id=user_id,
+            label=label,
+            token_hash=token_hash,
+            created_at=utcnow(),
+            expires_at=expires_at,
+        )
+        async with self._sessions() as s, s.begin():
+            s.add(row)
+        return row
+
+    async def get_token_by_hash(self, token_hash: str) -> tuple[McpToken, bool] | None:
+        """The token and whether its owner's account is active."""
+        async with self._sessions() as s:
+            row = (
+                await s.execute(
+                    select(McpToken, User.is_active)
+                    .join(User, User.id == McpToken.user_id)
+                    .where(McpToken.token_hash == token_hash)
+                )
+            ).first()
+            return (row[0], bool(row[1])) if row else None
+
+    async def get_token(self, token_id: str) -> McpToken | None:
+        async with self._sessions() as s:
+            return await s.get(McpToken, token_id)
+
+    async def list_tokens(self, user_id: str) -> list[McpToken]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(McpToken)
+                .where(McpToken.user_id == user_id)
+                .order_by(McpToken.created_at.desc())
+            )
+            return list(rows)
+
+    async def list_all_tokens(self) -> list[tuple[McpToken, str]]:
+        """Newest first, each with its owner's name."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(McpToken, User.display_name)
+                .join(User, User.id == McpToken.user_id)
+                .order_by(McpToken.created_at.desc())
+            )
+            return [(row[0], row[1]) for row in rows]
+
+    async def revoke_token(self, token_id: str, user_id: str | None = None) -> bool:
+        """Ends a token; ``user_id`` restricts it to that owner's. Revoking a
+        token that is already revoked succeeds and keeps the first time."""
+        async with self._sessions() as s, s.begin():
+            row = await s.get(McpToken, token_id)
+            if row is None or (user_id is not None and row.user_id != user_id):
+                return False
+            if row.revoked_at is None:
+                row.revoked_at = utcnow()
+            return True
+
+    async def revoke_tokens_of(self, user_id: str) -> int:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(McpToken)
+                .where(McpToken.user_id == user_id, McpToken.revoked_at.is_(None))
+                .values(revoked_at=utcnow())
+            )
+            return int(result.rowcount)
+
+    async def touch_token(self, token_id: str, when: datetime) -> None:
+        async with self._sessions() as s, s.begin():
+            await s.execute(
+                update(McpToken)
+                .where(McpToken.id == token_id)
+                .values(last_used_at=when)
+            )
 
     # web sessions
 

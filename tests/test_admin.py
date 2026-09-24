@@ -375,13 +375,9 @@ async def test_an_invitation_names_where_it_may_be_claimed_from(admin):
 async def test_admin_actions_are_logged_with_the_actor(admin, admin_app, caplog):
     import logging
 
-    caplog.set_level(logging.INFO, logger="cra.app.web.route_admin")
+    caplog.set_level(logging.INFO, logger="cra.app.web.auditlog")
     await admin.post("/api/admin/emails", json={"email": "ada@tum.de"})
-    actions = [
-        r.fields["action"] for r in caplog.records if r.getMessage() == "admin action"
-    ]
+    actions = [r.fields["action"] for r in caplog.records if r.getMessage() == "audit"]
     assert actions == ["invite"]
-    actor = next(
-        r.fields["by"] for r in caplog.records if r.getMessage() == "admin action"
-    )
+    actor = next(r.fields["by"] for r in caplog.records if r.getMessage() == "audit")
     assert actor == (await admin_app.extensions["cra"].repo.list_users())[0].id

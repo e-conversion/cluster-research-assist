@@ -4,7 +4,6 @@ import { createRouter } from "./router.js";
 import { chatView } from "./chat.js";
 import { initDialogs, toast } from "./settings.js";
 import { initHistory } from "./history.js";
-import { themeControl } from "./theme.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration-graph.js";
 
@@ -32,22 +31,26 @@ function renderIdentity() {
   document.getElementById("admin-link").hidden = !s.is_admin;
 }
 
+// The sign-in page follows the system theme; the choice between light and
+// dark is offered in Settings, once there is someone to remember it for.
 function renderSignIn(view, config) {
-  const page = document.createElement("div");
-  page.className = "landing signin";
-  page.innerHTML = `
-    <div class="landing-head">
-      <svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>
-      <h1>Sign in to ${config.title}</h1>
-    </div>
-    <p class="lede">The assistant answers questions about the research in ${config.cluster.name}.
-    Sign in with your institutional account to start.</p>
-    <p><a class="btn primary" href="${config.auth.login_url}">Sign in</a></p>`;
-  const appearance = document.createElement("p");
-  appearance.className = "signin-theme";
-  appearance.append(themeControl());
-  page.append(appearance);
-  view.replaceChildren(page);
+  const card = document.createElement("div");
+  card.className = "signin";
+  card.innerHTML = '<svg class="logo" aria-hidden="true"><use href="#logo-mark"/></svg>';
+  const title = document.createElement("h1");
+  title.textContent = config.title;
+  const lede = document.createElement("p");
+  lede.className = "lede";
+  lede.textContent = `Ask about the research in ${config.cluster.name}: its papers, its groups and who works with whom.`;
+  const signIn = document.createElement("a");
+  signIn.className = "btn primary block";
+  signIn.href = config.auth.login_url;
+  signIn.textContent = "Sign in with your institution";
+  const note = document.createElement("p");
+  note.className = "muted small";
+  note.textContent = "Access is by invitation.";
+  card.append(title, lede, signIn, note);
+  view.replaceChildren(card);
   for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
 

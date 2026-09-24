@@ -3,6 +3,7 @@ from datetime import timedelta
 import pytest
 
 from cra.app.history.repository import utcnow, valid_email
+from cra.app.history.tables import new_id
 
 
 async def test_registered_emails_are_normalised(repo):
@@ -87,3 +88,9 @@ async def test_session_data_and_user_are_updated(repo):
 )
 def test_only_plain_addresses_can_be_invited(address, ok):
     assert valid_email(address) is ok
+
+
+def test_ids_can_be_passed_on_the_command_line():
+    """An id starting with "-" is read by argparse as an option."""
+    ids = {new_id() for _ in range(2000)}
+    assert not [i for i in ids if not i.isalnum()]

@@ -23,7 +23,7 @@ from cra.app.mcpserver import audit, facade
 
 log = logging.getLogger(__name__)
 
-SUBJECT_HEADER = b"x-cra-subject"
+CALLER_HEADER = b"x-cra-caller"
 WINDOW_S = 60
 
 
@@ -61,13 +61,13 @@ class Dispatcher:
         settings = self._ctx.settings
         headers = {k.decode("latin-1").lower(): v for k, v in scope["headers"]}
         address = _address(scope, headers)
-        subject = ""
+        token_id = ""
         if settings.mcp_server_require_token:
-            claims = tokens.verify(
-                settings.mcp_token_secret.get_secret_value(),
+            token = await tokens.verify(
+                self._ctx.repo,
                 tokens.bearer(headers.get("authorization", b"").decode("latin-1")),
             )
-            if claims is None:
+            if token is None:
                 audit.refused(caller=address, reason="no valid token")
                 await _refuse(
                     send,
@@ -76,8 +76,10 @@ class Dispatcher:
                     [(b"www-authenticate", b'Bearer realm="cra"')],
                 )
                 return
-            subject = claims.subject
-        caller = subject or _address(scope, headers)
+            # the token, not its owner: two tokens of one person are two
+            # clients, each with its own budget and its own audit trail
+            token_id = token.id
+        caller = token_id or address
         allowance = self._ctx.limiter.check(
             f"mcp:{caller}", settings.mcp_server_rate_limit, WINDOW_S
         )
@@ -90,15 +92,19 @@ class Dispatcher:
                 [(b"retry-after", str(allowance.retry_after).encode())],
             )
             return
-        await self._manager.handle_request(_stamped(scope, subject), receive, send)
+        await self._manager.handle_request(_stamped(scope, token_id), receive, send)
 
 
-def _stamped(scope: dict, subject: str) -> dict:
-    """The scope with the verified subject attached, and any claim the caller
-    made about it removed: the audit line must say who the token says they are."""
-    headers = [(k, v) for k, v in scope["headers"] if k.lower() != SUBJECT_HEADER]
-    if subject:
-        headers.append((SUBJECT_HEADER, subject.encode("latin-1", "replace")))
+def _stamped(scope: dict, token_id: str) -> dict:
+    """The scope with the verified token id attached, and any claim the caller
+    made about it removed: the audit line must name the token that was shown.
+
+    A header is the one thing that reaches the tool handler through the
+    session manager; ``ToolContext.caller`` is not filled from it yet.
+    """
+    headers = [(k, v) for k, v in scope["headers"] if k.lower() != CALLER_HEADER]
+    if token_id:
+        headers.append((CALLER_HEADER, token_id.encode("ascii")))
     return {**scope, "headers": headers}
 
 
@@ -125,7 +131,7 @@ def _address(scope: dict, headers: dict[str, bytes]) -> str:
     the address it saw, so the last entry is its word and the earlier ones are
     the caller's; only the last is taken. The limit is cost control, and a
     deployment that needs a boundary turns the token gate on, where the bucket
-    is the token's subject instead.
+    is the token instead.
     """
     forwarded = headers.get("x-forwarded-for", b"").decode("latin-1")
     if last := forwarded.rpartition(",")[2].strip():

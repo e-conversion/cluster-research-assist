@@ -6,6 +6,7 @@ from typing import Any
 from quart import Blueprint, current_app, g
 
 from cra import __version__
+from cra.app.auth import tokens
 from cra.app.web import examples
 from cra.app.web.access import public
 from cra.app.web.route_preferences import selection
@@ -51,7 +52,24 @@ async def config() -> dict[str, Any]:
         "examples": examples.some(),
         "sources": {kind: s.public() for kind, s in ctx.remote.sources.items()},
         "max_tool_rounds": policy["llm_max_tool_rounds"],
+        "mcp": _mcp(settings),
         "version": {"version": __version__},
+    }
+
+
+def _mcp(settings) -> dict[str, Any] | None:
+    """Where the outward endpoint is, relative to the page, so the browser
+    resolves it against the address it actually used: behind the proxy this
+    process does not know its own scheme."""
+    if not settings.mcp_server_enabled:
+        return None
+    return {
+        "path": settings.mcp_server_path.lstrip("/"),
+        "token_required": settings.mcp_server_require_token,
+        "token_days": {
+            "default": tokens.DEFAULT_DAYS,
+            "choices": list(tokens.EXPIRY_CHOICES),
+        },
     }
 
 

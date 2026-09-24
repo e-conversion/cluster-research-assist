@@ -12,6 +12,7 @@ from quart import Blueprint, current_app, g, request
 from cra.app.auth.principal import Role
 from cra.app.history.repository import valid_email
 from cra.app.policy import KEYS, PolicyError
+from cra.app.web import auditlog
 from cra.app.web.access import requires_admin
 from cra.core.library import versions as versioning
 from cra.core.library.library import Library, LibraryError
@@ -27,15 +28,6 @@ def _ctx():
 
 def _bad(message: str, status: int = 400) -> tuple[dict[str, str], int]:
     return {"error": message}, status
-
-
-def _audit(action: str, **fields: Any) -> None:
-    """Who changed what about whom. Access decisions are the one thing the
-    log has to be able to answer for afterwards."""
-    log.info(
-        "admin action",
-        extra={"fields": {"action": action, "by": g.principal.user_id, **fields}},
-    )
 
 
 @bp.get("/api/admin/people")
@@ -104,17 +96,19 @@ async def update_user(user_id: str) -> Any:
         if user_id == g.principal.user_id and role != Role.ADMIN:
             return _bad("an admin cannot take their own admin rights away")
         await repo.set_user_role(user_id, role)
-        _audit("set_role", user=user_id, role=role, was=user.role)
+        auditlog.record("set_role", user=user_id, role=role, was=user.role)
     if "is_active" in body:
         if user_id == g.principal.user_id and not body["is_active"]:
             return _bad("an admin cannot deactivate their own account")
         active = bool(body["is_active"])
         await repo.set_user_active(user_id, active)
         if not active:
-            # a disabled account keeps no live connection to anyone's eLN
+            # a disabled account keeps no live connection to anyone's eLN, and
+            # no token that would work again if it were reactivated
             for session in await repo.sessions_of(user_id):
                 await _ctx().remote.forget(session.id)
-        _audit("set_active", user=user_id, active=active)
+            await repo.revoke_tokens_of(user_id)
+        auditlog.record("set_active", user=user_id, active=active)
     return {"ok": True}
 
 
@@ -128,7 +122,7 @@ async def delete_user(user_id: str) -> Any:
         await ctx.remote.forget(session.id)
     if not await ctx.repo.delete_user(user_id):
         return _bad("no such account", 404)
-    _audit("delete_user", user=user_id)
+    auditlog.record("delete_user", user=user_id)
     return {"ok": True}
 
 
@@ -149,7 +143,7 @@ async def invite() -> Any:
     await repo.add_registered_email(
         email, g.principal.display or "admin", role, home_organization=organization
     )
-    _audit("invite", email=email, role=role, home_organization=organization)
+    auditlog.record("invite", email=email, role=role, home_organization=organization)
     return {"email": email, "role": role, "home_organization": organization}
 
 
@@ -162,7 +156,7 @@ async def update_invitation(email: str) -> Any:
         return _bad(f"role must be {Role.USER} or {Role.ADMIN}")
     if not await _ctx().repo.set_registered_email_role(email, role):
         return _bad("not invited", 404)
-    _audit("set_invitation_role", email=email, role=role)
+    auditlog.record("set_invitation_role", email=email, role=role)
     return {"email": email, "role": role}
 
 
@@ -171,7 +165,7 @@ async def update_invitation(email: str) -> Any:
 async def remove_email(email: str) -> Any:
     if not await _ctx().repo.remove_registered_email(email):
         return _bad("not on the list", 404)
-    _audit("remove_email", email=email)
+    auditlog.record("remove_email", email=email)
     return {"ok": True}
 
 

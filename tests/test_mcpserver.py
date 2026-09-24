@@ -18,7 +18,6 @@ from cra.app.auth import tokens
 from cra.app.mcpserver.dispatcher import Dispatcher, wrap
 from cra.app.web.factory import create_app
 
-SECRET = "test-secret"
 BASE = "http://cra.test"
 
 
@@ -45,10 +44,17 @@ def make_endpoint(tmp_path, **overrides):
     values = {
         "mcp_server_enabled": True,
         "mcp_server_require_token": False,
-        "mcp_token_secret": SECRET,
         **overrides,
     }
     return wrap(create_app(make_settings(tmp_path, **values)))
+
+
+async def mint(app, owner: str = "a-colleague"):
+    """A token row and its value, for an account made up on the spot; the
+    schema exists only once the lifespan has started."""
+    repo = app._ctx.repo
+    user = await repo.create_user(owner)
+    return await tokens.mint(repo, user.id, "test client")
 
 
 @pytest.fixture
@@ -139,12 +145,12 @@ async def test_a_token_is_required_when_the_gate_is_on(tmp_path):
         assert refused.status_code == 401
         assert refused.headers["www-authenticate"].startswith("Bearer")
 
-        token = tokens.issue(SECRET, "a-colleague", days=1)
+        _, token = await mint(app)
         async with connect(app, token) as session:
             assert (await session.list_tools()).tools
 
 
-async def test_a_token_from_another_deployment_is_not_enough(tmp_path):
+async def test_a_revoked_token_is_refused(tmp_path):
     app = make_endpoint(tmp_path, mcp_server_require_token=True)
     async with (
         lifespan(app),
@@ -152,10 +158,12 @@ async def test_a_token_from_another_deployment_is_not_enough(tmp_path):
             transport=httpx2.ASGITransport(app=app), base_url=BASE
         ) as http,
     ):
+        row, token = await mint(app)
+        await app._ctx.repo.revoke_token(row.id)
         response = await http.post(
             "/mcp",
             json={"jsonrpc": "2.0", "method": "ping"},
-            headers={"Authorization": f"Bearer {tokens.issue('other', 'x', days=1)}"},
+            headers={"Authorization": f"Bearer {token}"},
         )
     assert response.status_code == 401
 
@@ -198,16 +206,17 @@ async def test_callers_behind_the_proxy_are_counted_apart(tmp_path):
     assert again.status_code == 429
 
 
-async def test_the_audit_line_names_the_token_holder(tmp_path, caplog):
+async def test_the_audit_line_names_the_token(tmp_path, caplog):
     app = make_endpoint(tmp_path, mcp_server_require_token=True)
     async with lifespan(app):
+        row, token = await mint(app)
         with caplog.at_level("INFO", logger="cra.mcp.audit"):
-            async with connect(app, tokens.issue(SECRET, "a-colleague", days=1)) as s:
+            async with connect(app, token) as s:
                 await s.call_tool("search_papers", {"query": "machine learning"})
     fields = [r.fields for r in caplog.records if r.message == "mcp call"]
     assert fields == [
         {
-            "caller": "a-colleague",
+            "caller": row.id,
             "tool": "search_papers",
             "ok": True,
             "duration_ms": fields[0]["duration_ms"],
@@ -220,9 +229,10 @@ async def test_a_caller_cannot_name_themselves(tmp_path, caplog):
     """The audit line comes from the token, not from a header anyone can send."""
     app = make_endpoint(tmp_path, mcp_server_require_token=True)
     async with lifespan(app):
+        row, token = await mint(app)
         headers = {
-            "Authorization": f"Bearer {tokens.issue(SECRET, 'real', days=1)}",
-            "X-CRA-Subject": "someone-else",
+            "Authorization": f"Bearer {token}",
+            "X-CRA-Caller": "someone-else",
         }
         with caplog.at_level("INFO", logger="cra.mcp.audit"):
             async with (
@@ -240,7 +250,7 @@ async def test_a_caller_cannot_name_themselves(tmp_path, caplog):
                 await session.initialize()
                 await session.call_tool("search_papers", {"query": "x"})
     callers = [r.fields["caller"] for r in caplog.records if r.message == "mcp call"]
-    assert callers == ["real"]
+    assert callers == [row.id]
 
 
 def test_the_dispatcher_only_claims_its_own_path(tmp_path):

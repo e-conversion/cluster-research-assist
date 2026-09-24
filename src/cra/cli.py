@@ -2,7 +2,6 @@
 
 import argparse
 import asyncio
-import datetime
 import shutil
 import sys
 from collections.abc import Sequence
@@ -403,6 +402,8 @@ def cmd_users_set_active(args: argparse.Namespace, active: bool) -> int:
 
     async def run() -> int:
         changed = await repo.set_user_active(args.user_id, active)
+        if changed and not active:
+            await repo.revoke_tokens_of(args.user_id)
         await engine.dispose()
         if not changed:
             sys.stderr.write("no such user\n")
@@ -411,38 +412,82 @@ def cmd_users_set_active(args: argparse.Namespace, active: bool) -> int:
     return asyncio.run(run())
 
 
+async def _account(repo, who: str) -> str | None:
+    """The user id for an id or an invited, claimed address."""
+    if "@" in who:
+        invitation = await repo.get_registered_email(who)
+        return invitation.user_id if invitation else None
+    user = await repo.get_user(who)
+    return user.id if user else None
+
+
 def cmd_token_issue(args: argparse.Namespace) -> int:
     from cra.app.auth import tokens
 
-    settings = load_settings(args)
-    try:
-        token = tokens.issue(
-            settings.mcp_token_secret.get_secret_value(), args.subject, days=args.days
+    engine, repo = _repo(load_settings(args))
+
+    async def run() -> int:
+        try:
+            user_id = await _account(repo, args.user)
+            if user_id is None:
+                sys.stderr.write("no such account\n")
+                return 1
+            row, value = await tokens.mint(repo, user_id, args.label, args.days)
+        except ValueError as exc:
+            sys.stderr.write(f"{exc}\n")
+            return 1
+        finally:
+            await engine.dispose()
+        # the value on stdout, so it can be piped; the rest on stderr
+        _out(value)
+        sys.stderr.write(
+            f"token {row.id} for {args.user}, valid until {row.expires_at:%Y-%m-%d}. "
+            "This is the only time the value is shown.\n"
         )
-    except ValueError as exc:
-        sys.stderr.write(f"{exc}\n")
-        return 1
-    # the token itself on stdout, so it can be piped; the rest on stderr
-    _out(token)
-    expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=args.days)
-    sys.stderr.write(
-        f"for {args.subject}, valid until {expires:%Y-%m-%d}. It cannot be revoked "
-        "on its own: rotating CRA_MCP_TOKEN_SECRET ends every token.\n"
-    )
-    return 0
+        return 0
+
+    return asyncio.run(run())
 
 
-def cmd_token_check(args: argparse.Namespace) -> int:
+def cmd_token_list(args: argparse.Namespace) -> int:
     from cra.app.auth import tokens
 
-    settings = load_settings(args)
-    claims = tokens.verify(settings.mcp_token_secret.get_secret_value(), args.token)
-    if claims is None:
-        _out("not a valid token for this deployment")
-        return 1
-    expires = datetime.datetime.fromtimestamp(claims.expires_at, datetime.UTC)
-    _out(f"{claims.subject}, valid until {expires:%Y-%m-%d %H:%M} UTC")
-    return 0
+    engine, repo = _repo(load_settings(args))
+
+    async def run() -> int:
+        try:
+            if args.user:
+                user_id = await _account(repo, args.user)
+                if user_id is None:
+                    sys.stderr.write("no such account\n")
+                    return 1
+                rows = [(row, args.user) for row in await repo.list_tokens(user_id)]
+            else:
+                rows = await repo.list_all_tokens()
+        finally:
+            await engine.dispose()
+        for row, owner in rows:
+            used = f"{row.last_used_at:%Y-%m-%d %H:%M}" if row.last_used_at else "never"
+            _out(
+                f"{row.id:18} {tokens.state(row):8} until {row.expires_at:%Y-%m-%d}  "
+                f"used {used:16}  {owner:24} {row.label}"
+            )
+        return 0
+
+    return asyncio.run(run())
+
+
+def cmd_token_revoke(args: argparse.Namespace) -> int:
+    engine, repo = _repo(load_settings(args))
+
+    async def run() -> int:
+        revoked = await repo.revoke_token(args.token_id)
+        await engine.dispose()
+        if not revoked:
+            sys.stderr.write("no such token\n")
+        return 0 if revoked else 1
+
+    return asyncio.run(run())
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -576,15 +621,21 @@ def build_parser() -> argparse.ArgumentParser:
     token_sub = token.add_subparsers(
         dest="token_command", metavar="<command>", required=True
     )
-    issue = token_sub.add_parser("issue", help="mint a token")
-    issue.add_argument("subject", help="who it is for, as it will appear in the log")
+    issue = token_sub.add_parser("issue", help="mint a token for an account")
+    issue.add_argument("user", help="the account's user id or email address")
+    issue.add_argument("--label", required=True, help="what the token is for")
     issue.add_argument(
         "--days", type=int, default=tokens_default_days(), help="how long it is valid"
     )
     issue.set_defaults(func=cmd_token_issue)
-    check = token_sub.add_parser("check", help="say what a token is and when it ends")
-    check.add_argument("token")
-    check.set_defaults(func=cmd_token_check)
+    listing = token_sub.add_parser("list", help="list tokens, never their values")
+    listing.add_argument(
+        "user", nargs="?", default="", help="one account's (id or email); else all"
+    )
+    listing.set_defaults(func=cmd_token_list)
+    revoke = token_sub.add_parser("revoke", help="end a token")
+    revoke.add_argument("token_id")
+    revoke.set_defaults(func=cmd_token_revoke)
 
     policy = sub.add_parser("policy", help="operational settings admins may change")
     policy_sub = policy.add_subparsers(

@@ -62,6 +62,11 @@ USER_ROUTES = {
     "/api/publication-map",
     "/api/publication-map/lookup",
     "/api/collaboration-graph",
+    "/api/tokens",
+    "/api/tokens/<token_id>",
+    "/api/me",
+    "/api/me/export",
+    "/api/stats",
 }
 ADMIN_ROUTES = {
     "/admin",
@@ -75,6 +80,8 @@ ADMIN_ROUTES = {
     "/api/admin/policy/<key>",
     "/api/admin/library",
     "/api/admin/library/<version>/activate",
+    "/api/admin/tokens",
+    "/api/admin/tokens/<token_id>",
 }
 
 
