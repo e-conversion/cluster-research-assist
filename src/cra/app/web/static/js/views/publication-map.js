@@ -1,5 +1,7 @@
 // Library map: UMAP layout of the paper embeddings rendered with deck.gl.
-import { getJSON } from "../api.js";
+import { getJSON, postJSON } from "../api.js";
+import { escapeHtml } from "../markdown.js";
+import { toast } from "../toast.js";
 
 const DECK_URL = "https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js";
 // pinned build; bump both together
@@ -20,13 +22,19 @@ const cache = new Map(); // clusters -> payload (server memoises too; this saves
 
 // Title labels: footprint of one label on screen, and how far above the
 // fitted view the first titles appear and the last ones are handed out.
-const LABEL = { w: 330, h: 22, size: 11.5, chars: 56, offset: 9 };
+const LABEL = { w: 345, h: 22, size: 11.5, chars: 60, offset: 9 };
 const FIRST_TITLES_AT = 0.75, LAST_TITLES_AT = 8, TITLE_STEP = 0.5, FADE = 0.5;
 // Cluster names are full at the fitted view and gone this many zoom levels in.
 const CLUSTER_FADE_START = 0.4, CLUSTER_FADE_LEN = 1.2;
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const truncate = (t) => (t.length > LABEL.chars ? t.slice(0, LABEL.chars - 1).trimEnd() + "…" : t);
+/** "an e-conversion paper", "a cluster paper": the cluster names itself. */
+const article = (word) => (/^[aeiou]/i.test(word) ? "an" : "a");
+
+/** A DOI as the library stores it, from whatever the user pasted. */
+const bareDoi = (raw) => raw.trim().toLowerCase()
+  .replace(/^https?:\/\/(dx\.)?doi\.org\//, "").replace(/^doi:/, "").replace(/[}\s]+$/, "");
 
 /** A CSS colour token as [r, g, b], so the canvas labels follow the theme. */
 function tokenRGB(name) {
@@ -95,19 +103,37 @@ function planTitles(points, marks, fitZoom) {
   return at;
 }
 
-export function libraryMapView() {
+export function libraryMapView(store) {
   return {
     mount(container) {
+      // The cluster names itself, so this reads "an e-conversion paper" where
+      // it is deployed and stays sensible anywhere else.
+      const ours = store?.config?.cluster?.name || "cluster";
       container.innerHTML = `
         <div class="page">
           <h1>Publication Map</h1>
           <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
-            labeled with their top title keywords. Scroll to zoom, drag to pan, hover a point for its title —
-            a visual answer to “which papers are near the one I'm reading?”</p>
-          <div class="map-toolbar">
-            <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
-            <label>Find a paper <input type="search" id="paper-search" list="paper-titles" placeholder="Search or pick from the paper list…"><datalist id="paper-titles"></datalist></label>
+            labeled with their top title keywords. Hover over a point for its citation.</p>
+          <div class="map-row">
+            <p class="row-hint">Adjust number of clusters</p>
+            <div class="map-toolbar">
+              <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
+            </div>
           </div>
+          <div class="map-row">
+            <p class="row-hint">Locate ${escapeHtml(article(ours))} ${escapeHtml(ours)} publication.</p>
+            <div class="map-toolbar">
+              <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
+            </div>
+          </div>
+          <div class="map-row">
+            <p class="row-hint">Locate an external work based on the DOI.</p>
+            <div class="map-toolbar">
+              <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
+              <button class="btn primary" id="doi-go" type="button">Place on the map</button>
+            </div>
+          </div>
+          <div class="lookup-card" id="lookup-card" hidden></div>
           <div class="legend" id="legend"></div>
           <div class="map-frame"><canvas id="deck-canvas"></canvas><div class="map-status" id="map-status">Loading…</div></div>
         </div>`;
@@ -121,6 +147,8 @@ export function libraryMapView() {
       let fitZoom = 0;
       let zoom = 0;
       let hits = [];
+      let placed = null;   // the response for a DOI brought in from outside
+      let busy = false;
       let disposed = false;
 
       function frameSize() { return [wrap.clientWidth || 700, wrap.clientHeight || 540]; }
@@ -144,8 +172,17 @@ export function libraryMapView() {
         // its ~30-neighbor surroundings; several get a bounding-box fit.
         let target = [(minx + maxx) / 2, (miny + maxy) / 2, 0];
         let z = fitZoom;
-        const found = data.filter((d) => matches.has(d.title));
-        if (found.length === 1) {
+        const found = data.filter((d) => matches.has(d.doi));
+        if (placed && !found.length) {
+          // Frame the new paper together with the papers it was placed from,
+          // which is the whole point of having looked it up.
+          const near = [placed.point, ...placed.neighbours];
+          const nx = Math.min(...near.map((d) => d.x)), Xx = Math.max(...near.map((d) => d.x));
+          const ny = Math.min(...near.map((d) => d.y)), Xy = Math.max(...near.map((d) => d.y));
+          target = [(nx + Xx) / 2, (ny + Xy) / 2, 0];
+          const zfit = Math.log2(0.55 * Math.min(W / Math.max(Xx - nx, 1e-6), H / Math.max(Xy - ny, 1e-6)));
+          z = Math.min(Math.max(zfit, fitZoom + 0.5), fitZoom + 5);
+        } else if (found.length === 1) {
           const sel = found[0];
           const dists = data.map((d) => Math.hypot(d.x - sel.x, d.y - sel.y)).sort((a, b) => a - b);
           const R = dists[Math.min(30, dists.length - 1)] || 1;
@@ -190,7 +227,7 @@ export function libraryMapView() {
         }));
         if (titled.length) L.push(new TextLayer({
           id: "titles", data: titled, pickable: false, characterSet: "auto", fontFamily: font,
-          getPosition: (d) => [d.x, d.y], getText: (d) => truncate(d.title),
+          getPosition: (d) => [d.x, d.y], getText: (d) => truncate(d.cite || d.title),
           getSize: LABEL.size, sizeUnits: "pixels", getTextAnchor: "start", getAlignmentBaseline: "center",
           getPixelOffset: [LABEL.offset, 0],
           getColor: (d) => [...muted, Math.round(235 * titleAlpha(d))],
@@ -208,6 +245,37 @@ export function libraryMapView() {
           getBorderColor: (d) => [...d.color, Math.round(255 * clusterAlpha)], getBorderWidth: 1.5,
           updateTriggers: { getBorderColor: clusterAlpha },
         }));
+        if (placed) {
+          const { LineLayer } = window.deck;
+          const accent = tokenRGB("--accent");
+          // Lines to the papers the position was averaged from: the estimate
+          // is an interpolation, and drawing it says so.
+          L.push(new LineLayer({
+            id: "placed-links", data: placed.neighbours.slice(0, 5),
+            getSourcePosition: () => [placed.point.x, placed.point.y],
+            getTargetPosition: (d) => [d.x, d.y],
+            getColor: [...accent, 120], getWidth: 1, widthUnits: "pixels", pickable: false,
+            updateTriggers: { getColor: accent, getSourcePosition: placed.point },
+          }));
+          L.push(new ScatterplotLayer({
+            id: "placed", data: [placed.point], getPosition: (d) => [d.x, d.y],
+            getFillColor: [...accent, 235], getRadius: 8, radiusUnits: "pixels",
+            radiusMinPixels: 8, radiusMaxPixels: 8,
+            stroked: true, getLineColor: ink, lineWidthUnits: "pixels", getLineWidth: 2,
+            pickable: true, updateTriggers: { getFillColor: accent, getLineColor: ink },
+          }));
+          L.push(new TextLayer({
+            id: "placed-label", data: [placed.point], pickable: false,
+            characterSet: "auto", fontFamily: font,
+            getPosition: (d) => [d.x, d.y], getText: (d) => truncate(d.cite),
+            getSize: LABEL.size + 0.5, sizeUnits: "pixels", fontWeight: 600,
+            getTextAnchor: "start", getAlignmentBaseline: "center",
+            getPixelOffset: [LABEL.offset + 4, 0],
+            getColor: [...ink, 255], background: true, backgroundPadding: [6, 3],
+            getBackgroundColor: [...panel, 240], getBorderColor: [...accent, 255], getBorderWidth: 1.5,
+            updateTriggers: { getColor: ink, getBackgroundColor: panel, getBorderColor: accent },
+          }));
+        }
         return L;
       }
 
@@ -218,13 +286,24 @@ export function libraryMapView() {
         requestAnimationFrame(() => { relayerPending = false; if (deckInst && !disposed) deckInst.setProps({ layers: layers() }); });
       }
 
+      // A DOI is the join key everywhere: two papers can share a title, and
+      // the citation the datalist offers is not the title either.
       function matchesFor(q) {
         q = (q || "").trim();
         if (!q) return new Set();
-        const exact = data.find((d) => d.title === q);
-        if (exact) return new Set([exact.title]);
-        const lq = q.toLowerCase();
-        return new Set(data.filter((d) => d.title.toLowerCase().includes(lq)).slice(0, 100).map((d) => d.title));
+        const asDoi = bareDoi(q);
+        const exact = data.find((d) => d.cite === q || d.title === q || d.doi === asDoi);
+        if (exact) return new Set([exact.doi]);
+        // Every term must appear, so a second word narrows the result.
+        const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+        const found = new Set();
+        for (const d of data) {
+          if (terms.every((term) => d._hay.includes(term))) {
+            found.add(d.doi);
+            if (found.size >= 100) break;
+          }
+        }
+        return found;
       }
 
       function draw() {
@@ -243,7 +322,12 @@ export function libraryMapView() {
               const q = Math.round(vs.zoom * 100) / 100;
               if (q !== zoom) { zoom = q; relayer(); }
             },
-            getTooltip: ({ object }) => object && { html: `<b>${object.title}</b><br/>${object.year} · ${object.cluster}`, className: "dk-tip" },
+            getTooltip: ({ object }) => object && {
+              html: object.placed
+                ? `<b>${escapeHtml(object.cite)}</b><br/>not in the library · placed among its nearest neighbours`
+                : `<b>${escapeHtml(object.cite || object.title)}</b><br/>${escapeHtml(object.title)}<br/>${escapeHtml(String(object.year || ""))} · ${escapeHtml(String(object.cluster || ""))}`,
+              className: "dk-tip",
+            },
           });
         } else {
           deckInst.setProps({ layers: layers(), initialViewState: viewState });
@@ -267,9 +351,16 @@ export function libraryMapView() {
           await loadDeck();
           if (disposed) return;
           data = payload.points;
+          // One haystack per paper, built once: doing it per keystroke would
+          // rebuild every string on a library of a few thousand.
+          for (const d of data) {
+            d._hay = `${d.cite || ""} ${d.title || ""} ${d.au || ""} ${d.year || ""} ${d.doi}`.toLowerCase();
+          }
           if (!$("paper-titles").children.length) {
             const dl = $("paper-titles");
-            for (const t of [...new Set(data.map((d) => d.title))].sort()) { const o = document.createElement("option"); o.value = t; dl.append(o); }
+            for (const c of [...new Set(data.map((d) => d.cite || d.title))].sort()) {
+              const o = document.createElement("option"); o.value = c; dl.append(o);
+            }
           }
           renderLegend(payload.legend);
           marks = clusterMarks(data, payload.legend);
@@ -278,6 +369,82 @@ export function libraryMapView() {
           draw();
         } catch (e) { status.textContent = e.message; status.hidden = false; }
       }
+
+      const card = $("lookup-card");
+
+      function showCard(html, bad = false) {
+        card.className = "lookup-card" + (bad ? " bad" : "");
+        card.innerHTML = html;
+        card.hidden = false;
+      }
+
+      function describe(found) {
+        const point = found.point;
+        const lines = [`<div class="cite">${escapeHtml(point.cite)}</div>`];
+        if (found.in_library) {
+          lines.push('<div class="meta">Already in the library — shown at its own place on the map.</div>');
+        } else {
+          const percent = Math.round((found.confidence || 0) * 100);
+          const where = found.duplicate_of
+            ? "The library already holds what looks like the same paper"
+            : `Placed among the ${found.used} closest papers, which the projection was not refitted for`;
+          lines.push(`<div class="meta">${where}. Closest match ${percent}% similar. Metadata from ${escapeHtml(found.source)}.</div>`);
+          if (!found.has_abstract) {
+            lines.push('<div class="meta">No abstract was published for this DOI, so it was placed by its title alone — treat the position as rough.</div>');
+          }
+        }
+        if (found.neighbours.length) {
+          const items = found.neighbours.slice(0, 5)
+            .map((n) => `<li>${escapeHtml(n.cite)}</li>`).join("");
+          lines.push(`<div class="meta">Closest in the library:</div><ol>${items}</ol>`);
+        }
+        return lines.join("");
+      }
+
+      function clearLookup() {
+        placed = null;
+        card.hidden = true;
+        if (data.length) draw();
+      }
+
+      async function lookupDoi() {
+        const raw = $("doi-input").value.trim();
+        if (!raw || busy) return;
+        busy = true;
+        const button = $("doi-go");
+        button.disabled = true;
+        button.textContent = "Looking up…";
+        try {
+          const found = await postJSON("api/publication-map/lookup", { doi: raw });
+          if (disposed) return;
+          placed = found;
+          showCard(describe(found));
+          draw();
+        } catch (e) {
+          if (disposed) return;
+          // The toast goes; the card stays while the DOI is being corrected.
+          toast(e.message, "bad");
+          placed = null;
+          showCard(escapeHtml(e.message), true);
+          if (data.length) draw();
+        } finally {
+          busy = false;
+          button.disabled = false;
+          button.textContent = "Place on the map";
+        }
+      }
+
+      $("doi-go").addEventListener("click", lookupDoi);
+      $("doi-input").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); lookupDoi(); }
+      });
+      // Emptying the field undoes the placement, the way emptying the search
+      // field undoes a search. That covers the input's own clear button, a
+      // selection deleted by hand, and the Escape key alike.
+      $("doi-input").addEventListener("input", () => {
+        // An error card belongs to the DOI that caused it, so it goes too.
+        if (!$("doi-input").value.trim() && (placed || !card.hidden)) clearLookup();
+      });
 
       const slider = $("clusters");
       let timer = 0;

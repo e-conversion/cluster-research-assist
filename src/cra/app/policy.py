@@ -103,6 +103,12 @@ KEYS: dict[str, PolicyKey] = {
             "Questions per day for a signed-in user; 0 removes the limit.",
         ),
         PolicyKey(
+            "user_lookup_daily_limit",
+            "user_lookup_daily_limit",
+            _non_negative_int,
+            "DOI lookups per day for a signed-in user; 0 removes the limit.",
+        ),
+        PolicyKey(
             "fulltext_snippet_chars",
             "fulltext_snippet_chars",
             _positive_int,

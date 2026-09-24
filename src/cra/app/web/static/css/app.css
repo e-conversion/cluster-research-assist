@@ -368,6 +368,19 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .legend i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
 .dk-tip { background: #1b1e26 !important; color: #e9ebf0 !important; font: 12px/1.4 var(--body) !important; padding: 6px 9px !important; border-radius: 6px !important; max-width: 340px; box-shadow: 0 4px 16px rgba(0,0,0,.45); }
 
+/* ---------- placing a DOI on the map ---------- */
+/* One control per row, each under the line that says what it is for. */
+.map-row { margin: 0 0 12px; }
+.map-row .map-toolbar { margin: 0; }
+.row-hint { margin: 0 0 5px; color: var(--muted); font-size: 12.5px; max-width: 70ch; }
+.lookup-card { border: 1px solid var(--hair); background: var(--panel-2); border-radius: 12px;
+  padding: 10px 13px; margin: 0 0 12px; font-size: 13.5px; color: var(--ink-2); }
+.lookup-card.bad { border-color: var(--bad); background: var(--bad-soft); color: var(--ink); }
+.lookup-card .cite { color: var(--ink); font-weight: 500; }
+.lookup-card .meta { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+.lookup-card ol { margin: 6px 0 0; padding-left: 20px; }
+.lookup-card li { margin: 2px 0; }
+
 @media (max-width: 720px) {
   .top { gap: 10px; padding: 0 12px; }
   .brand-name { display: none; }

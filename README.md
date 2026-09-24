@@ -70,6 +70,20 @@ because two models' vectors are not comparable even when the widths agree.
 Leaving `CRA_ENCODER_PATH` empty turns semantic search off and leaves keyword
 search, the publication map and everything else working.
 
+## Placing a DOI on the map
+
+The publication map also takes a DOI the library does not hold: the metadata is
+fetched from Crossref, and from OpenAlex for the abstract Crossref often lacks,
+and the paper is placed among the library's nearest work. This needs the query
+encoder above; without it the map still pans, zooms and searches.
+
+Both APIs are public and neither owes us an answer, so results and failures are
+cached, and a source that starts throttling us is left alone for as long as it
+asked rather than retried. Set `CRA_DOI_LOOKUP_CONTACT` to a group address --
+it is sent with every request and reaches the pool these services throttle
+least. `CRA_OPENALEX_BASE_URL` empty drops the abstract fallback, at the cost
+of placing more papers by their title alone.
+
 ## Who may do what
 
 Signing in is the rule. The landing page and the sign-in flow answer without an

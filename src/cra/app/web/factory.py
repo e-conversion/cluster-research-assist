@@ -43,6 +43,7 @@ from cra.assistant.llm.selection import ModelCatalogue
 from cra.assistant.mcpclient.host import RemoteHost
 from cra.assistant.mcpclient.pool import RemotePool
 from cra.config.settings import Settings
+from cra.core.connectors.doi_lookup import LookupGuard
 from cra.core.connectors.sources import configured as configured_sources
 from cra.core.library.library import Library
 from cra.core.retrieval.encoder import OnnxEncoder
@@ -126,6 +127,9 @@ class AppContext:
     catalogue: ModelCatalogue
     remote: RemoteHost
     limiter: RateLimiter = field(default_factory=RateLimiter)
+    # Owned here rather than by the connector module so it cannot outlive the
+    # app that created it, leak between tests, or survive a reload.
+    lookups: LookupGuard = field(default_factory=LookupGuard)
     turns: TurnSlots = field(default_factory=TurnSlots)
     library: Library | None = None
     indexes: Indexes | None = None
@@ -158,7 +162,11 @@ class AppContext:
         if self.indexes is None:
             raise RuntimeError("the library is not loaded")
         return ToolContext(
-            indexes=self.indexes, settings=self.settings, tier=tier, http=self.http
+            indexes=self.indexes,
+            settings=self.settings,
+            tier=tier,
+            http=self.http,
+            lookups=self.lookups,
         )
 
     @property

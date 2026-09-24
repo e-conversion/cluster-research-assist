@@ -60,6 +60,7 @@ USER_ROUTES = {
     "/api/conversations/<conversation_id>",
     "/api/conversations/<conversation_id>/open",
     "/api/publication-map",
+    "/api/publication-map/lookup",
     "/api/collaboration-graph",
 }
 ADMIN_ROUTES = {

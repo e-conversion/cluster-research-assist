@@ -49,6 +49,7 @@ def test_every_tool_is_registered_with_a_tier(registry):
         "count_papers": Tier.PUBLIC,
         "get_collaborators": Tier.PUBLIC,
         "get_paper_by_doi": Tier.PUBLIC,
+        "locate_paper_by_doi": Tier.PUBLIC,
         "get_paper_fulltext": Tier.INTERNAL,
         "get_pi": Tier.PUBLIC,
         "find_experts": Tier.PUBLIC,
@@ -427,3 +428,59 @@ def test_find_experts_needs_papers_attributed_to_people(tmp_path, settings):
     bare = Indexes.build(Library.load(directory, verify=False))
     names = {spec.name for spec in load(settings, bare, ["pis"])}
     assert names == {"search_pis", "get_pi", "list_pis"}
+
+
+# ---------- placing a DOI from outside the library ----------
+
+OUTSIDE_DOI = "10.1038/s41586-021-03819-2"
+OUTSIDE_URL = "https://api.crossref.org/works/10.1038%2Fs41586-021-03819-2"
+
+
+def test_the_locate_tool_is_absent_without_a_metadata_source(indexes, tmp_path):
+    registry = load(make_settings(tmp_path, crossref_base_url=""), indexes, ALL_MODULES)
+    assert "locate_paper_by_doi" not in {spec.name for spec in registry}
+
+
+def test_the_locate_tool_is_absent_without_an_encoder(settings, tmp_path):
+    bare = Indexes.build(Library.load(write_library(tmp_path / "bare")))
+    assert "locate_paper_by_doi" not in {
+        spec.name for spec in load(settings, bare, ALL_MODULES)
+    }
+
+
+@respx.mock
+async def test_locating_an_outside_paper_returns_the_closest_work(registry, ctx):
+    respx.get(OUTSIDE_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "message": {
+                    "DOI": OUTSIDE_DOI,
+                    "title": ["A paper from elsewhere"],
+                    "author": [{"given": "Ada", "family": "Lovelace"}],
+                    "issued": {"date-parts": [[2021]]},
+                    "abstract": "<jats:p>Perovskite films.</jats:p>",
+                }
+            },
+        )
+    )
+    result = await call(registry, ctx, "locate_paper_by_doi", doi=OUTSIDE_DOI)
+    assert result["in_library"] is False
+    assert result["citation"].startswith("Lovelace, ")
+    assert result["closest"]
+    # The model must not read the position as a recomputed projection.
+    assert "estimated" in result["placement"]
+
+
+@respx.mock
+async def test_locating_a_library_paper_asks_no_one(registry, ctx):
+    route = respx.get(OUTSIDE_URL)
+    result = await call(registry, ctx, "locate_paper_by_doi", doi="10.1000/beta")
+    assert result["in_library"] is True
+    assert not route.called
+
+
+async def test_similar_papers_points_at_the_tool_for_outside_dois(registry, ctx):
+    """So the model reroutes itself instead of reporting a dead end."""
+    result = await call(registry, ctx, "get_similar_papers", doi=OUTSIDE_DOI)
+    assert "locate_paper_by_doi" in result["error"]

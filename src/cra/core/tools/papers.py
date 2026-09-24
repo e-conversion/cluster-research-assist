@@ -5,9 +5,11 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from cra.config.settings import Settings
+from cra.core.connectors.doi_lookup import LookupGuard
 from cra.core.library.records import normalise_doi
 from cra.core.library.text import query_tokens
 from cra.core.retrieval.indexes import Indexes
+from cra.core.retrieval.locate import LocateError, locate
 from cra.core.tools.registry import Registry, ToolContext, ToolError, tool
 from cra.core.tools.tiers import Tier
 from cra.core.tools.views import ABSTRACT_IN_LIST, paper_view
@@ -72,7 +74,10 @@ def get_similar_papers(ctx: ToolContext, doi: Doi, limit: Limit = 5) -> dict[str
         raise ToolError("This library has no embeddings.")
     hits = ctx.indexes.dense.similar(doi, limit)
     if hits is None:
-        raise ToolError(f"{doi} is not in the library.")
+        raise ToolError(
+            f"{doi} is not in the library. Use locate_paper_by_doi, which "
+            "fetches the paper's metadata and finds the closest papers here."
+        )
     papers = ctx.indexes.library.papers
     return {
         "doi": normalise_doi(doi),
@@ -83,6 +88,53 @@ def get_similar_papers(ctx: ToolContext, doi: Doi, limit: Limit = 5) -> dict[str
             }
             for h in hits
             if h.doi in papers
+        ],
+    }
+
+
+@tool(tier=Tier.PUBLIC)
+async def locate_paper_by_doi(
+    ctx: ToolContext, doi: Doi, limit: Limit = 5
+) -> dict[str, Any]:
+    """Where a paper from outside the library sits among the ones inside it.
+
+    Takes any DOI, fetches its metadata from the public registries, and
+    returns the cluster's closest work. Use it for "is anyone here working on
+    this?" and for a DOI get_similar_papers rejects. A paper already in the
+    library is answered from it, without asking anyone."""
+    if ctx.http is None:
+        raise ToolError("No HTTP client is available for external requests.")
+    try:
+        found = await locate(
+            doi,
+            indexes=ctx.indexes,
+            http=ctx.http,
+            guard=ctx.lookups or LookupGuard(),
+            settings=ctx.settings,
+        )
+    except LocateError as error:
+        raise ToolError(str(error)) from None
+
+    papers = ctx.indexes.library.papers
+    return {
+        "doi": found.doi,
+        "in_library": found.in_library,
+        "citation": found.citation,
+        "title": found.work.title,
+        "year": found.work.year,
+        "journal": found.work.journal,
+        "metadata_source": found.work.source,
+        # Said plainly, because the model will otherwise report the position
+        # as though the projection had been recomputed for this paper.
+        "placement": "estimated from the nearest papers; the projection was not refitted",
+        "similarity_to_closest": round(found.placement.confidence, 4),
+        "closest": [
+            {
+                **paper_view(papers[n.doi], abstract=ABSTRACT_IN_LIST),
+                "score": round(n.score, 4),
+            }
+            for n in found.placement.neighbours[:limit]
+            if n.doi in papers
         ],
     }
 
@@ -277,6 +329,8 @@ def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
         registry.register(get_similar_papers)
     if indexes.semantic_ready:
         registry.register(semantic_search_papers)
+        if settings.crossref_base_url:
+            registry.register(locate_paper_by_doi)
     if indexes.library.fulltexts:
         registry.register(search_fulltext)
         registry.register(get_paper_fulltext)

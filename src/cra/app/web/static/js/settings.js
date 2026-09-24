@@ -3,16 +3,11 @@ import { getJSON, postJSON, del } from "./api.js";
 import { refreshSession } from "./app.js";
 import { escapeHtml } from "./markdown.js";
 import { applyTheme, currentTheme, propagateTheme, syncControls } from "./theme.js";
+import { toast } from "./toast.js";
 
 let store = null;
 
-export function toast(message, kind = "") {
-  const t = document.createElement("div");
-  t.className = "toast " + kind;
-  t.textContent = message;
-  document.getElementById("toasts").append(t);
-  setTimeout(() => t.remove(), 3200);
-}
+export { toast } from "./toast.js";
 
 // ---------- connect dialog ----------
 let connectKind = null;

@@ -49,6 +49,7 @@ class ToolContext:
     settings: Settings
     tier: Tier = Tier.INTERNAL
     http: Any = None
+    lookups: Any = None
     caller: str = ""
 
 
