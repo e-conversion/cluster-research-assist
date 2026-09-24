@@ -170,15 +170,32 @@ async function deleteAccount() {
 
 // ---------- dialog ----------
 
+const TABS = ["appearance", "mcp", "account"];
+let openTab = TABS[0];
+
+function mcpOffered() {
+  return Boolean(store.config.mcp) && store.session.signed_in;
+}
+
+function showTab(name) {
+  openTab = TABS.includes(name) && (name !== "mcp" || mcpOffered()) ? name : TABS[0];
+  for (const tab of TABS) el(`set-${tab}`).hidden = tab !== openTab;
+  for (const b of el("settings-tabs").querySelectorAll("button[data-tab]")) {
+    b.classList.toggle("on", b.dataset.tab === openTab);
+    b.setAttribute("aria-selected", String(b.dataset.tab === openTab));
+  }
+}
+
+/** Opens on the tab it was last left on; each tab loads what it shows. */
 export async function openSettings() {
-  const mcp = store.config.mcp;
-  el("set-mcp").hidden = !mcp || !store.session.signed_in;
+  el("settings-tab-mcp").hidden = !mcpOffered();
   forgetMinted();
   showError("token-error", "");
   syncControls();
+  showTab(openTab);
   el("dlg-settings").showModal();
   const loading = [getJSON("api/me").then(renderAccount).catch((e) => showError("account-delete-error", e.message))];
-  if (!el("set-mcp").hidden) loading.push(loadTokens());
+  if (mcpOffered()) loading.push(loadTokens());
   await Promise.all(loading);
 }
 
@@ -195,6 +212,10 @@ export function initSettings(s) {
       select.append(option);
     }
   }
+  el("settings-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-tab]");
+    if (b) showTab(b.dataset.tab);
+  });
   el("token-create").addEventListener("click", createToken);
   el("token-label").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); createToken(); } });
   for (const button of el("dlg-settings").querySelectorAll("button[data-copy]")) {

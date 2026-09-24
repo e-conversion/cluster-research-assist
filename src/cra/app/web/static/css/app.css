@@ -146,11 +146,13 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .admin { width: 100%; max-width: var(--col); margin: 0 auto; padding: 22px 18px 48px; }
 .admin h1 { font: 500 26px/1.2 var(--display); margin: 0 0 4px; }
 .admin section { margin-top: 22px; }
-.admin .tabs { display: flex; gap: 4px; margin-top: 22px; border-bottom: 1px solid var(--hair); }
-.admin .tabs button { background: none; border: none; border-bottom: 2px solid transparent;
+/* tab strips: the admin console and the Settings dialog */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); }
+.admin .tabs { margin-top: 22px; }
+.tabs button { background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--muted); font: 500 14px/1 var(--body); padding: 10px 14px; cursor: pointer; }
-.admin .tabs button:hover { color: var(--ink); }
-.admin .tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs button:hover { color: var(--ink); }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
 .admin .desc code { font: 12.5px var(--mono); background: var(--panel-2); padding: 1px 5px;
   border-radius: 5px; }
 .admin table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -336,8 +338,7 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .dlg.tall .dlg-body { max-height: 88vh; overflow: auto; }
 
 /* settings dialog */
-.set-section { display: flex; flex-direction: column; gap: 8px; padding: 12px 0 4px; border-top: 1px solid var(--hair); }
-.set-section h3 { font: 500 11.5px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 0 0 2px; }
+.set-section { display: flex; flex-direction: column; gap: 10px; padding: 6px 0 4px; min-height: 300px; }
 .set-section p { margin: 0; }
 .set-section .seg { max-width: 320px; }
 .token-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }

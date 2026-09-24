@@ -169,9 +169,13 @@
       <h2>Settings</h2>
       <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
     </header>
+    <nav class="tabs" id="settings-tabs" role="tablist">
+      <button type="button" role="tab" data-tab="appearance">Appearance</button>
+      <button type="button" role="tab" data-tab="mcp" id="settings-tab-mcp">MCP access</button>
+      <button type="button" role="tab" data-tab="account">Account</button>
+    </nav>
 
-    <section class="set-section">
-      <h3>Appearance</h3>
+    <section class="set-section" id="set-appearance" role="tabpanel">
       <div class="seg" id="theme-seg" role="radiogroup" aria-label="Appearance">
         <button type="button" data-theme="system">System</button>
         <button type="button" data-theme="light">Light</button>
@@ -180,8 +184,7 @@
       <p class="muted small">Kept in this browser only.</p>
     </section>
 
-    <section class="set-section" id="set-mcp" hidden>
-      <h3>MCP access</h3>
+    <section class="set-section" id="set-mcp" role="tabpanel" hidden>
       <p class="muted">A token lets an MCP client such as Claude Code or Cursor search
         the cluster's public library on your behalf: papers and their abstracts, the
         groups and who works with whom, never full texts or the proposal. Give each client its own token, so you can
@@ -225,8 +228,7 @@
       </div>
     </section>
 
-    <section class="set-section">
-      <h3>Account</h3>
+    <section class="set-section" id="set-account" role="tabpanel" hidden>
       <dl class="account-facts" id="account-facts"></dl>
       <p><a class="btn" id="account-export" href="api/me/export" download>Download my data</a>
         <span class="muted small">Your conversations, feedback and tokens (not their values), as JSON.</span></p>
