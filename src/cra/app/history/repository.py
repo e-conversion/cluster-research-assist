@@ -20,6 +20,7 @@ from cra.app.history.tables import (
     PasswordToken,
     PolicySetting,
     RegisteredEmail,
+    SourceConnection,
     User,
     WebSession,
 )
@@ -330,6 +331,34 @@ class Repository:
                 .values(password_hash=password_hash, password_changed_at=now)
             )
             return user_id
+
+    # connected sources
+
+    async def save_source_connection(
+        self, user_id: str, kind: str, sealed: str
+    ) -> None:
+        async with self._sessions() as s, s.begin():
+            await s.merge(
+                SourceConnection(
+                    user_id=user_id, kind=kind, sealed=sealed, connected_at=utcnow()
+                )
+            )
+
+    async def source_connections_of(self, user_id: str) -> list[SourceConnection]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(SourceConnection).where(SourceConnection.user_id == user_id)
+            )
+            return list(rows)
+
+    async def delete_source_connections(
+        self, user_id: str, kind: str | None = None
+    ) -> None:
+        condition = SourceConnection.user_id == user_id
+        if kind is not None:
+            condition = condition & (SourceConnection.kind == kind)
+        async with self._sessions() as s, s.begin():
+            await s.execute(delete(SourceConnection).where(condition))
 
     # access requests
 

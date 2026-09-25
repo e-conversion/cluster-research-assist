@@ -48,6 +48,13 @@ def cmd_check_config(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_secret_key(_args: argparse.Namespace) -> int:
+    from cryptography.fernet import Fernet
+
+    _out(Fernet.generate_key().decode())
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     from hypercorn.asyncio import serve
     from hypercorn.config import Config
@@ -393,6 +400,7 @@ def cmd_users_password_link(args: argparse.Namespace) -> int:
             value = await local.reset(repo, credential.user_id, "cli")
             await repo.delete_sessions_of(credential.user_id)
             await repo.revoke_tokens_of(credential.user_id)
+            await repo.delete_source_connections(credential.user_id)
             _link_hint(local.link_path(settings.base_path, value))
             return 0
         finally:
@@ -499,6 +507,7 @@ def cmd_users_set_active(args: argparse.Namespace, active: bool) -> int:
         changed = await repo.set_user_active(args.user_id, active)
         if changed and not active:
             await repo.revoke_tokens_of(args.user_id)
+            await repo.delete_source_connections(args.user_id)
         await engine.dispose()
         if not changed:
             sys.stderr.write("no such user\n")
@@ -603,6 +612,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="validate the configuration and print it with secrets redacted",
     )
     check.set_defaults(func=cmd_check_config)
+
+    sub.add_parser(
+        "secret-key", help="print a new key for CRA_SOURCE_TOKEN_KEY"
+    ).set_defaults(func=cmd_secret_key)
 
     serve = sub.add_parser("serve", help="run the web application")
     serve.set_defaults(func=cmd_serve)

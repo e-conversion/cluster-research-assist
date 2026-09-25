@@ -130,6 +130,21 @@ class AccessRequest(Base):
     decision_note: Mapped[str] = mapped_column(Text, default="")
 
 
+class SourceConnection(Base):
+    """A token for an external MCP server, kept for its account across
+    sessions. ``sealed`` is Fernet ciphertext under CRA_SOURCE_TOKEN_KEY: a
+    database dump alone yields no credentials for somebody else's server."""
+
+    __tablename__ = "source_connections"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    kind: Mapped[str] = mapped_column(String(20), primary_key=True)
+    sealed: Mapped[str] = mapped_column(Text)
+    connected_at: Mapped[datetime]
+
+
 class PolicySetting(Base):
     """An operational setting an admin changed, overriding the configured
     default. Endpoints, secrets and paths are not settings: they stay in the

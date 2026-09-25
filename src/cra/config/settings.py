@@ -145,6 +145,10 @@ class Settings(BaseSettings):
     # offer remote tools that change data (eLN writes) to the model; off, only
     # tools declared or named read-only are listed
     remote_write_tools: bool = False
+    # Fernet key (`cra secret-key`) that encrypts the tokens of connected
+    # sources in the database, so they survive signing out and restarts; empty
+    # keeps them for one browser session only
+    source_token_key: SecretStr = SecretStr("")
 
     # connectors
     nomad_base_url: str = "https://nomad-lab.eu/prod/v1/api/v1"
@@ -172,6 +176,20 @@ class Settings(BaseSettings):
         value = value.strip().rstrip("/")
         if value and not value.startswith("/"):
             raise ValueError("must start with '/'")
+        return value
+
+    @field_validator("source_token_key")
+    @classmethod
+    def _fernet_key(cls, value: SecretStr) -> SecretStr:
+        from cryptography.fernet import Fernet
+
+        if value.get_secret_value():
+            try:
+                Fernet(value.get_secret_value())
+            except ValueError:
+                raise ValueError(
+                    "not a Fernet key; generate one with `cra secret-key`"
+                ) from None
         return value
 
     @field_validator("brand_dir")
