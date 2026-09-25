@@ -10,6 +10,7 @@ from typing import Any
 
 from quart import Blueprint, Response, current_app, g, request
 
+from cra.app.web import stored_sources
 from cra.app.web.route_preferences import selection
 from cra.assistant.chat import title as title_
 from cra.assistant.chat.orchestrator import run_turn
@@ -114,6 +115,7 @@ async def chat() -> Any:
             "retry_after": allowance.retry_after,
         }, 429
 
+    await stored_sources.restore(ctx, g.session, g.principal.user_id)
     chosen = await selection(ctx, g.session)
     conversation_id = await _conversation(ctx, g.session, g.principal)
     history = await _history(ctx, conversation_id)

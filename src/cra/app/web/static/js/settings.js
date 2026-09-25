@@ -28,6 +28,11 @@ function openConnect(kind) {
   el("connect-error").hidden = true;
   el("connect-paste").open = false;
   el("connect-disconnect").hidden = !conn.active;
+  el("connect-storage").textContent = store.config.sources_kept
+    ? "Your key is passed to the registration service to mint a personal token and is not kept. " +
+      "The token is stored encrypted with your account, so the connection stays until you disconnect it."
+    : "Your key is passed to the registration service to mint a personal token. " +
+      "Neither is written to the database; the token lives in this session only.";
   el("connect-hint").textContent = conn.active
     ? `Connected — ${conn.tools} tools available. Registering again replaces the token.`
     : "Register your account once; the tools it unlocks are then available in the chat.";

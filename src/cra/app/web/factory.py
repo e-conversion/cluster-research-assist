@@ -50,6 +50,7 @@ from cra.app.web import (
 from cra.app.web.access import public, required_role, satisfies
 from cra.app.web.brand import MANIFEST, Brand
 from cra.app.web.sessions import COOKIE_NAME, SessionStore
+from cra.app.web.stored_sources import Vault
 from cra.app.web.turns import TurnSlots
 from cra.assistant.chat import prompt as prompt_
 from cra.assistant.llm.selection import ModelCatalogue
@@ -142,6 +143,7 @@ class AppContext:
     catalogue: ModelCatalogue
     remote: RemoteHost
     brand: Brand
+    vault: Vault
     limiter: RateLimiter = field(default_factory=RateLimiter)
     # Owned here rather than by the connector module so it cannot outlive the
     # app that created it, leak between tests, or survive a reload.
@@ -237,7 +239,12 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         ),
         # read now, so a broken brand stops the server instead of the page
         brand=Brand.load(settings.brand_dir),
+        vault=Vault(settings.source_token_key.get_secret_value()),
     )
+    if ctx.remote.sources and not ctx.vault.enabled:
+        log.warning(
+            "no CRA_SOURCE_TOKEN_KEY: connected sources last one browser session"
+        )
     app.extensions["cra"] = ctx
 
     for blueprint in (

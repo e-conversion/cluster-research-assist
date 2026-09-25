@@ -7,7 +7,7 @@ from quart import Blueprint, current_app, g
 
 from cra import __version__
 from cra.app.auth import tokens
-from cra.app.web import examples
+from cra.app.web import examples, stored_sources
 from cra.app.web.access import public
 from cra.app.web.route_preferences import selection
 from cra.assistant.llm import params as params_
@@ -52,6 +52,7 @@ async def config() -> dict[str, Any]:
         "placeholder": _placeholder(counts),
         "examples": examples.some(ctx.brand.manifest.examples or examples.QUESTIONS),
         "sources": {kind: s.public() for kind, s in ctx.remote.sources.items()},
+        "sources_kept": ctx.vault.enabled,
         "max_tool_rounds": policy["llm_max_tool_rounds"],
         "mcp": _mcp(settings),
         "version": {"version": __version__},
@@ -116,6 +117,7 @@ async def _conversation_view(ctx, session, principal) -> dict[str, Any]:
 async def session() -> dict[str, Any]:
     ctx = _ctx()
     principal = g.principal
+    await stored_sources.restore(ctx, g.session, principal.user_id)
     return {
         "session": g.session.id[:12] if g.session else None,
         "user": principal.display or None,

@@ -117,6 +117,7 @@ async def update_user(user_id: str) -> Any:
                 await _ctx().remote.forget(session.id)
             await repo.delete_sessions_of(user_id)
             await repo.revoke_tokens_of(user_id)
+            await repo.delete_source_connections(user_id)
         auditlog.record("set_active", user=user_id, active=active)
     return {"ok": True}
 
@@ -163,8 +164,10 @@ async def reset_password(user_id: str) -> Any:
     for session in await ctx.repo.sessions_of(user_id):
         await ctx.remote.forget(session.id)
     await ctx.repo.delete_sessions_of(user_id)
-    # whoever the reset is meant to lock out may have minted some
+    # whoever the reset is meant to lock out may have minted tokens, or
+    # connected an eLN of their own that the owner's questions would then reach
     await ctx.repo.revoke_tokens_of(user_id)
+    await ctx.repo.delete_source_connections(user_id)
     auditlog.record("reset_password", user=user_id)
     return {
         "link": local.link_path(ctx.settings.base_path, value),

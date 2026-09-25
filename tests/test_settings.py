@@ -144,3 +144,10 @@ def test_a_partial_oidc_configuration_names_what_is_missing(monkeypatch):
     with pytest.raises(ValidationError) as exc:
         Settings.load(None)
     assert "CRA_OIDC_CLIENT_SECRET, CRA_OIDC_REDIRECT_URI" in str(exc.value)
+
+
+def test_a_source_token_key_must_be_a_fernet_key(monkeypatch):
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    monkeypatch.setenv("CRA_SOURCE_TOKEN_KEY", "not-a-key")
+    with pytest.raises(ValidationError, match="cra secret-key"):
+        Settings.load(None)

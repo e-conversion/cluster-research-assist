@@ -1,10 +1,13 @@
-"""Attaching a personal account on an external MCP server to this session."""
+"""Attaching a personal account on an external MCP server. The connection is
+live in this session and, with CRA_SOURCE_TOKEN_KEY set, kept for the account
+(``stored_sources``)."""
 
 import logging
 from typing import Any
 
 from quart import Blueprint, current_app, g, request
 
+from cra.app.web import stored_sources
 from cra.core.connectors.registration import RegistrationError, register
 
 log = logging.getLogger(__name__)
@@ -29,9 +32,14 @@ async def connect(kind: str) -> Any:
     if kind not in ctx.remote.sources:
         return {"error": f"Unknown source: {kind}"}, 404
     body = await request.get_json(silent=True) or {}
-    result = await ctx.remote.connect(
-        g.session.id, kind, str(body.get("token", "") or "")
-    )
+    token = str(body.get("token", "") or "").strip()
+    return await _connect(ctx, kind, token)
+
+
+async def _connect(ctx, kind: str, token: str) -> Any:
+    result = await ctx.remote.connect(g.session.id, kind, token)
+    if result["active"]:
+        await stored_sources.remember(ctx, g.principal.user_id, kind, token)
     return result, 200 if result["active"] else 400
 
 
@@ -40,6 +48,7 @@ async def disconnect(kind: str) -> Any:
     ctx = _ctx()
     if kind not in ctx.remote.sources:
         return {"error": f"Unknown source: {kind}"}, 404
+    await ctx.repo.delete_source_connections(g.principal.user_id, kind)
     return await ctx.remote.disconnect(g.session.id, kind)
 
 
@@ -69,5 +78,4 @@ async def register_source(kind: str) -> Any:
             "tools": 0,
             "error": str(exc),
         }, exc.status
-    result = await ctx.remote.connect(g.session.id, kind, token)
-    return result, 200 if result["active"] else 400
+    return await _connect(ctx, kind, token)

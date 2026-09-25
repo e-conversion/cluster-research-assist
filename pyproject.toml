@@ -39,6 +39,7 @@ dependencies = [
     "alembic",
     "joserfc",
     "argon2-cffi",
+    "cryptography",
     "onnxruntime",
     "tokenizers",
     "huggingface_hub",
