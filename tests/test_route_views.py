@@ -3,7 +3,7 @@
 import httpx
 import pytest
 import respx
-from conftest import make_settings
+from conftest import make_settings, sign_in
 from fakes import FakeEncoder
 from library_builder import write_library
 
@@ -52,7 +52,7 @@ async def app(tmp_path):
 @pytest.fixture
 async def client(app):
     made = app.test_client()
-    await made.get("/auth/login")
+    await sign_in(app, made)
     return made
 
 
@@ -205,7 +205,7 @@ async def test_an_upstream_throttle_is_not_reported_as_our_own_limit(client):
 async def test_our_own_daily_limit_is_a_429_that_says_so(app):
     app.extensions["cra"].policy.set("user_lookup_daily_limit", 1)
     client = app.test_client()
-    await client.get("/auth/login")
+    await sign_in(app, client)
     respx.get(WORK_URL).mock(return_value=crossref_ok())
     assert (await lookup(client, OUTSIDE))[0] == 200
     status, body = await lookup(client, "10.1234/second")
@@ -218,7 +218,7 @@ async def test_our_own_daily_limit_is_a_429_that_says_so(app):
 async def test_the_allowance_is_not_spent_on_papers_we_already_have(app):
     app.extensions["cra"].policy.set("user_lookup_daily_limit", 1)
     client = app.test_client()
-    await client.get("/auth/login")
+    await sign_in(app, client)
     respx.get(WORK_URL).mock(return_value=crossref_ok())
     for _ in range(3):
         assert (await lookup(client, INSIDE))[0] == 200
@@ -240,7 +240,7 @@ async def test_a_deployment_without_an_encoder_says_what_is_missing(tmp_path):
     made = create_app(make_settings(tmp_path, library_path=root))
     async with made.test_app():
         client = made.test_client()
-        await client.get("/auth/login")
+        await sign_in(made, client)
         status, body = await lookup(client, OUTSIDE)
     assert status == 503
     assert body["reason"] == "semantic_unavailable"

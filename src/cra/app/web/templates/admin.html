@@ -24,6 +24,7 @@
 
   <nav class="tabs" id="tabs" role="tablist">
     <button type="button" role="tab" data-tab="accounts">Accounts</button>
+    <button type="button" role="tab" data-tab="requests">Requests <span class="count" id="requests-count" hidden></span></button>
     <button type="button" role="tab" data-tab="settings">Server settings</button>
     <button type="button" role="tab" data-tab="feedback">Feedback</button>
     <button type="button" role="tab" data-tab="tokens" hidden>Tokens</button>
@@ -34,8 +35,35 @@
     <p class="desc">Everyone who can sign in: accounts that have, addresses invited but not yet
     used, and the addresses named in <code>CRA_AUTH_ADMINS</code>, which become admins on their
     first sign-in.</p>
-    <table><thead><tr><th>Name</th><th>Role</th><th>From</th><th>Last sign-in</th><th></th></tr></thead>
+    <table><thead><tr><th>Name</th><th>Role</th><th>Signs in with</th><th>Last sign-in</th><th></th></tr></thead>
     <tbody id="people"><tr><td colspan="5" class="desc">Loading…</td></tr></tbody></table>
+
+    <div class="one-time" id="link-box" hidden>
+      <p><b id="link-title"></b></p>
+      <div class="copy-row">
+        <input type="text" id="link-value" readonly aria-label="One-time link">
+        <button type="button" class="btn" id="link-copy">Copy</button>
+      </div>
+      <p class="desc" id="link-hint"></p>
+    </div>
+
+    <h2>Add a password account</h2>
+    <p class="desc">For people without an institutional sign-in. The account gets a one-time
+    link to set its password; nobody else ever sees the password.</p>
+    <form class="row-form wrap" id="local-form">
+      <input type="text" id="local-name" placeholder="Full name" required maxlength="200">
+      <input type="text" id="local-username" placeholder="username" required
+        pattern="[a-z0-9][a-z0-9._\-]{1,63}" autocapitalize="none" spellcheck="false">
+      <input type="email" id="local-email" placeholder="email (optional)">
+      <select id="local-role">
+        <option value="user">user</option>
+        <option value="admin">admin</option>
+      </select>
+      <button class="btn primary" type="submit">Create</button>
+    </form>
+
+    <h2 id="invite-heading">Invite an institutional address</h2>
+    <p class="desc" id="invite-desc">The first sign-in through DFN-AAI with this address creates the account.</p>
     <form class="row-form" id="invite-form">
       <input type="email" id="invite-email" placeholder="someone@university.de" required>
       <select id="invite-role">
@@ -44,6 +72,14 @@
       </select>
       <button class="btn primary" type="submit">Invite</button>
     </form>
+  </section>
+
+  <section id="tab-requests" role="tabpanel" hidden>
+    <p class="desc">People who signed in at their institution without an account and asked for
+    one. Name, email and institution come from their university; group, page and message are
+    what they wrote. Check the page before approving: approving lets them sign in at once.</p>
+    <table><thead><tr><th>Person</th><th>Group</th><th>Page</th><th>Asked</th><th></th></tr></thead>
+    <tbody id="requests"></tbody></table>
   </section>
 
   <section id="tab-settings" role="tabpanel" hidden>

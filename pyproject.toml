@@ -38,6 +38,7 @@ dependencies = [
     "aiosqlite",
     "alembic",
     "joserfc",
+    "argon2-cffi",
     "onnxruntime",
     "tokenizers",
     "huggingface_hub",

@@ -2,9 +2,15 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 import pytest
-from conftest import make_settings, session_user
-from oidc_mock import CLIENT_ID, CLIENT_SECRET, ISSUER, MockIdp
-from quart.testing.app import LifespanError
+from conftest import make_settings, session_user, sign_in
+from oidc_mock import (
+    CLIENT_ID,
+    ISSUER,
+    SETTINGS,
+    MockIdp,
+    institution_sign_in,
+    start_login,
+)
 
 from cra.app.auth.principal import LoginDenied
 from cra.app.web.factory import create_app
@@ -20,16 +26,7 @@ def idp(respx_mock):
 
 @pytest.fixture
 async def oidc_app(tmp_path, idp):
-    settings = make_settings(
-        tmp_path,
-        auth_provider="oidc",
-        oidc_issuer=ISSUER,
-        oidc_client_id=CLIENT_ID,
-        oidc_client_secret=CLIENT_SECRET,
-        oidc_redirect_uri="https://cra.test/auth/callback",
-        auth_admin_contact="admin@cra.test",
-    )
-    app = create_app(settings)
+    app = create_app(make_settings(tmp_path, **SETTINGS))
     async with app.test_app():
         yield app
 
@@ -37,15 +34,6 @@ async def oidc_app(tmp_path, idp):
 @pytest.fixture
 def repo(oidc_app):
     return oidc_app.extensions["cra"].repo
-
-
-async def start_login(client, idp):
-    """GET /auth/login and hand back the state the provider expects."""
-    response = await client.get("/auth/login")
-    assert response.status_code == 302
-    query = parse_qs(urlparse(response.headers["location"]).query)
-    idp.nonce = query["nonce"][0]
-    return query
 
 
 async def test_login_redirects_with_pkce_and_stores_the_pending_state(oidc_app, idp):
@@ -77,14 +65,13 @@ async def test_full_login_binds_identity_and_signs_in(oidc_app, idp, repo):
 
 
 @pytest.mark.parametrize(
-    ("claims", "text"),
-    [
-        ({"email": "nobody@example.org"}, "not yet registered for this service"),
-        ({"email": None}, "did not transmit an email address"),
-    ],
+    "claims",
+    [{"email": "nobody@example.org"}, {"email": None}],
     ids=["unregistered", "no email"],
 )
-async def test_denied_logins_render_the_handover_messages(oidc_app, idp, claims, text):
+async def test_an_identity_without_an_account_is_offered_the_request_form(
+    oidc_app, idp, repo, claims
+):
     if claims["email"] is None:
         del idp.claims["email"]
     else:
@@ -92,11 +79,13 @@ async def test_denied_logins_render_the_handover_messages(oidc_app, idp, claims,
     client = oidc_app.test_client()
     query = await start_login(client, idp)
     response = await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
-    body = (await response.get_data()).decode()
-    assert response.status_code == 403
-    assert text in body
-    assert "admin@cra.test" in body
-    assert "pairwise-1" not in body
+    assert response.status_code == 302
+    assert response.headers["location"] == "/#/request-access"
+    assert await session_user(client) is None
+    assert await repo.list_users() == []
+    pending = await (await client.get("/api/access-requests/me")).get_json()
+    assert pending["identity"]["name"] == "Ada Lovelace"
+    assert "pairwise-1" not in str(pending)
 
 
 async def test_inactive_user_sees_the_disabled_page(oidc_app, idp, repo):
@@ -156,24 +145,19 @@ async def test_logout_redirects_to_the_end_session_endpoint(oidc_app, idp, repo)
     assert await session_user(client) is None
 
 
-async def test_provider_refuses_a_discovery_document_for_another_issuer(
+async def test_a_discovery_document_for_another_issuer_fails_only_that_sign_in(
     tmp_path, respx_mock, idp
 ):
+    """Password sign-in does not depend on the identity provider, so a broken
+    discovery does not keep the service from starting."""
     respx_mock.get(f"{ISSUER}/.well-known/openid-configuration").mock(
         return_value=httpx.Response(200, json={"issuer": "https://other"})
     )
-    settings = make_settings(
-        tmp_path,
-        auth_provider="oidc",
-        oidc_issuer=ISSUER,
-        oidc_client_id=CLIENT_ID,
-        oidc_client_secret=CLIENT_SECRET,
-        oidc_redirect_uri="https://cra.test/auth/callback",
-    )
-    app = create_app(settings)
-    with pytest.raises(LifespanError, match="discovery issuer"):
-        async with app.test_app():
-            pass
+    app = await make_oidc_app(tmp_path)
+    async with app.test_app():
+        response = await app.test_client().get("/auth/login")
+    assert response.status_code == 400
+    assert "Sign-in failed" in (await response.get_data()).decode()
 
 
 def test_login_denied_enum_covers_every_message():
@@ -183,22 +167,7 @@ def test_login_denied_enum_covers_every_message():
 
 
 async def make_oidc_app(tmp_path, **overrides):
-    settings = make_settings(
-        tmp_path,
-        auth_provider="oidc",
-        oidc_issuer=ISSUER,
-        oidc_client_id=CLIENT_ID,
-        oidc_client_secret=CLIENT_SECRET,
-        oidc_redirect_uri="https://cra.test/auth/callback",
-        auth_admin_contact="admin@cra.test",
-        **overrides,
-    )
-    return create_app(settings)
-
-
-async def sign_in(client, idp):
-    query = await start_login(client, idp)
-    return await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
+    return create_app(make_settings(tmp_path, **SETTINGS, **overrides))
 
 
 async def test_admin_from_configuration_is_granted_once_at_binding(tmp_path, idp):
@@ -209,14 +178,14 @@ async def test_admin_from_configuration_is_granted_once_at_binding(tmp_path, idp
         repo = app.extensions["cra"].repo
         await repo.add_registered_email("ada@example.org", "cli")
         client = app.test_client()
-        await sign_in(client, idp)
+        await institution_sign_in(client, idp)
         session = await (await client.get("/api/session")).get_json()
         assert session["is_admin"] is True
 
         user_id = (await repo.get_identity(ISSUER, "pairwise-1")).user_id
         await repo.set_user_role(user_id, "user")
         await client.post("/auth/logout")
-        await sign_in(client, idp)
+        await institution_sign_in(client, idp)
         session = await (await client.get("/api/session")).get_json()
         assert session["is_admin"] is False
 
@@ -227,7 +196,7 @@ async def test_an_invitation_from_another_organisation_is_refused(tmp_path, idp)
         repo = app.extensions["cra"].repo
         await repo.add_registered_email("ada@example.org", "cli")
         client = app.test_client()
-        response = await sign_in(client, idp)
+        response = await institution_sign_in(client, idp)
         body = (await response.get_data()).decode()
         assert response.status_code == 403
         assert "not for accounts at tum.de" in body
@@ -243,7 +212,7 @@ async def test_forged_tokens_do_not_refetch_the_keys_each_time(
     async with app.test_app():
         client = app.test_client()
         for _ in range(3):
-            assert (await sign_in(client, idp)).status_code == 400
+            assert (await institution_sign_in(client, idp)).status_code == 400
     fetched = sum(1 for c in respx_mock.calls if str(c.request.url).endswith("/jwks"))
     assert fetched == 1
 
@@ -258,3 +227,13 @@ async def test_the_callback_is_rate_limited_per_address(oidc_app, idp):
     ]
     assert statuses[:-1] == [400] * CALLBACKS_PER_MINUTE
     assert statuses[-1] == 429
+
+
+async def test_a_password_session_is_not_ended_at_the_institution(oidc_app):
+    client = await sign_in(oidc_app, oidc_app.test_client())
+    assert (await (await client.post("/auth/logout")).get_json())["redirect"] == "/"
+
+
+async def test_the_landing_page_is_told_institutional_sign_in_is_on(oidc_app):
+    config = await (await oidc_app.test_client().get("/api/config")).get_json()
+    assert config["auth"]["institution"] is True

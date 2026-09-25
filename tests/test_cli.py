@@ -31,13 +31,17 @@ def test_check_config_prints_redacted_settings(tmp_path, capsys):
 @pytest.mark.parametrize(
     ("content", "message"),
     [
-        ("CRA_LIBRARY_PATH=/c\nCRA_AUTH_PROVIDER=oidc\n", "CRA_OIDC_ISSUER"),
+        ("CRA_LIBRARY_PATH=/c\nCRA_OIDC_CLIENT_ID=x\n", "CRA_OIDC_ISSUER"),
         (
             "CRA_LIBRARY_PATH=/c\nCRA_LLM_MODLE=x\n",
             "unknown configuration keys: CRA_LLM_MODLE",
         ),
+        (
+            "CRA_LIBRARY_PATH=/c\nCRA_AUTH_PROVIDER=dev\n",
+            "CRA_AUTH_PROVIDER was removed: password sign-in is always on",
+        ),
     ],
-    ids=["invalid", "typo"],
+    ids=["invalid", "typo", "retired"],
 )
 def test_check_config_fails_with_exit_2(tmp_path, capsys, content, message):
     env = tmp_path / ".env"

@@ -6,7 +6,7 @@ Nothing else in the package reads ``os.environ``.
 
 import os
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 from dotenv import dotenv_values
 from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
@@ -14,7 +14,23 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ENV_PREFIX = "CRA_"
 REDACTED = "***"
-LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+# keys an older release read, with what replaces them: an .env that still sets
+# one would otherwise only be told the key is unknown
+RETIRED_KEYS = {
+    "CRA_AUTH_PROVIDER": "password sign-in is always on; DFN-AAI sign-in is on "
+    "when the four CRA_OIDC_* keys are set",
+    "CRA_AUTH_DEV_USER": "create an account with `cra users create`",
+    "CRA_AUTH_USER_HEADER": "the proxy-header sign-in is gone; create accounts "
+    "with `cra users create`",
+    "CRA_AUTH_DEV_INSECURE": "the development sign-in it guarded is gone",
+    "CRA_MCP_TOKEN_SECRET": "users mint their own tokens under Settings",
+}
+OIDC_REQUIRED = (
+    "oidc_issuer",
+    "oidc_client_id",
+    "oidc_client_secret",
+    "oidc_redirect_uri",
+)
 
 
 def _split_commas(value: Any) -> Any:
@@ -84,18 +100,14 @@ class Settings(BaseSettings):
     openrouter_quantizations: CommaList = ["fp8", "fp16", "bf16", "fp32", "unknown"]
     openrouter_ignore_providers: CommaList = []
 
-    # auth
-    auth_provider: Literal["dev", "oidc"] = "dev"
+    # auth: password accounts always; DFN-AAI (OIDC) when all four
+    # oidc_* connection keys are set
     # addresses that are made admin the first time they bind an identity;
     # never demotes anyone, and never consulted again for a bound identity
     auth_admins: CommaList = []
     # home organisations (schacHomeOrganization) an invitation may be claimed
     # from; empty accepts any identity provider in the federation
     auth_home_organizations: CommaList = []
-    auth_dev_user: str = ""
-    auth_user_header: str = ""
-    # the dev provider signs anyone in: off a loopback address it needs this
-    auth_dev_insecure: bool = False
     auth_admin_contact: str = ""
     oidc_issuer: str = ""
     oidc_client_id: str = ""
@@ -171,31 +183,31 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_cross_field(self) -> "Settings":
-        if (
-            self.auth_provider == "dev"
-            and self.host not in LOOPBACK_HOSTS
-            and not self.auth_dev_insecure
-        ):
+        missing = self._oidc_missing()
+        # half a configuration is a mistake, not a choice to leave OIDC off
+        if missing and len(missing) < len(OIDC_REQUIRED):
             raise ValueError(
-                f"auth_provider=dev signs anyone in; on host {self.host!r} it needs "
-                "CRA_AUTH_DEV_INSECURE=true (or CRA_AUTH_PROVIDER=oidc)"
+                "DFN-AAI sign-in is partly configured; also set "
+                + ", ".join(f"CRA_{m.upper()}" for m in missing)
+                + ", or clear all of them"
             )
-        if self.auth_provider == "oidc":
-            missing = [
-                name
-                for name in ("oidc_issuer", "oidc_client_id", "oidc_redirect_uri")
-                if not getattr(self, name)
-            ]
-            if not self.oidc_client_secret.get_secret_value():
-                missing.append("oidc_client_secret")
-            if missing:
-                raise ValueError(
-                    "auth_provider=oidc needs "
-                    + ", ".join(f"CRA_{m.upper()}" for m in missing)
-                )
         if self.llm_model and self.llm_models and self.llm_model not in self.llm_models:
             self.llm_models.insert(0, self.llm_model)
         return self
+
+    def _oidc_missing(self) -> list[str]:
+        missing = []
+        for name in OIDC_REQUIRED:
+            value = getattr(self, name)
+            if isinstance(value, SecretStr):
+                value = value.get_secret_value()
+            if not value.strip():
+                missing.append(name)
+        return missing
+
+    @property
+    def oidc_enabled(self) -> bool:
+        return not self._oidc_missing()
 
     @classmethod
     def load(cls, env_file: Path | None = Path(".env")) -> "Settings":

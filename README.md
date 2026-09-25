@@ -104,16 +104,31 @@ graph. Nothing that reads inside the full texts or the proposal is reachable
 through it, passage search included: passages around a chosen query would
 reconstruct a paper one query at a time.
 
-Sign-in is `CRA_AUTH_PROVIDER=dev` by default, which signs everyone in as
-`CRA_AUTH_DEV_USER` (or as the user named by the trusted proxy header
-`CRA_AUTH_USER_HEADER`). Because that signs *anyone* in, the server refuses to
-start with it on any address but loopback unless `CRA_AUTH_DEV_INSECURE=true`.
-With `CRA_AUTH_PROVIDER=oidc` users log in at the configured OpenID Connect
-issuer, and only pre-registered addresses may sign in. `CRA_AUTH_ADMINS` lists
-the addresses that become admin the first time they bind an identity, so a
-fresh deployment has an administrator without shell access; the claim is not
-consulted again afterwards, so the role is changed in the console, not by
-editing the list.
+There are two ways to sign in. **Password accounts** are always on: nobody
+signs up, and there is no built-in admin. The first admin is created on the
+command line with a username of your choosing (`admin`, `root` and other
+guessable names are refused); admins create further accounts in the console.
+A new account, and one whose password an admin reset, gets a one-time link
+valid for 72 hours to set its password, so no admin ever knows it. Passwords
+are argon2id hashes, links are stored as sha256, and sign-in attempts are
+rate-limited per address and per username.
+
+```bash
+cra users create jdoe --name "Jane Doe" --admin     # asks for the password
+cra users create bob --name "Bob Builder"            # prints a one-time link
+cra users password-link bob                          # a forgotten password
+```
+
+**Institutional sign-in** through an OpenID Connect issuer such as the DFN-AAI
+proxy is on when `CRA_OIDC_ISSUER`, `CRA_OIDC_CLIENT_ID`,
+`CRA_OIDC_CLIENT_SECRET` and `CRA_OIDC_REDIRECT_URI` are all set, and off when
+none are. Pre-registered addresses sign straight in. Anyone else whose
+institution vouches for them may ask for an account: the request carries the
+name, address and institution the identity provider asserted, plus the group
+and the institutional page the person gives, and waits in the console for an
+admin to approve it. `CRA_AUTH_ADMINS` lists the addresses that become admin
+the first time they bind an identity; the claim is not consulted again
+afterwards, so the role is changed in the console, not by editing the list.
 
 An email claim is asserted by the user's home identity provider and verified
 by nobody else, so an invitation also says where it may be claimed from:

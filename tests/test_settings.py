@@ -74,15 +74,15 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
     "env",
     [
         {"CRA_BASE_PATH": "nomad"},
-        {"CRA_AUTH_PROVIDER": "oidc"},
-        {"CRA_AUTH_PROVIDER": "saml"},
+        {"CRA_OIDC_ISSUER": "https://oidc-testproxy.aai.dfn.de"},
+        {"CRA_OIDC_CLIENT_SECRET": "s", "CRA_OIDC_CLIENT_ID": "c"},
         {"CRA_PORT": "0"},
         {"CRA_BRAND_DIR": "/no/such/brand"},
     ],
     ids=[
         "relative base path",
-        "oidc without client",
-        "unknown auth",
+        "oidc issuer without client",
+        "oidc client without issuer",
         "port",
         "missing brand directory",
     ],
@@ -119,12 +119,28 @@ def test_unknown_keys_flags_typos_but_ignores_other_prefixes(tmp_path, monkeypat
     assert unknown_keys(env) == ["CRA_LLM_MODLE", "CRA_PORTT"]
 
 
-def test_dev_auth_off_loopback_needs_an_explicit_opt_in(monkeypatch):
-    """The dev provider signs anyone in: a container that binds 0.0.0.0 with
-    it is an open door unless the operator said so."""
+OIDC_KEYS = {
+    "CRA_OIDC_ISSUER": "https://oidc-testproxy.aai.dfn.de",
+    "CRA_OIDC_CLIENT_ID": "client",
+    "CRA_OIDC_CLIENT_SECRET": "secret",
+    "CRA_OIDC_REDIRECT_URI": "https://example.org/auth/callback",
+}
+
+
+@pytest.mark.parametrize(("keys", "enabled"), [({}, False), (OIDC_KEYS, True)])
+def test_institutional_sign_in_is_on_only_when_fully_configured(
+    monkeypatch, keys, enabled
+):
     monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
-    monkeypatch.setenv("CRA_HOST", "0.0.0.0")
-    with pytest.raises(ValidationError, match="CRA_AUTH_DEV_INSECURE"):
+    for key, value in keys.items():
+        monkeypatch.setenv(key, value)
+    assert Settings.load(None).oidc_enabled is enabled
+
+
+def test_a_partial_oidc_configuration_names_what_is_missing(monkeypatch):
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    monkeypatch.setenv("CRA_OIDC_ISSUER", OIDC_KEYS["CRA_OIDC_ISSUER"])
+    monkeypatch.setenv("CRA_OIDC_CLIENT_ID", OIDC_KEYS["CRA_OIDC_CLIENT_ID"])
+    with pytest.raises(ValidationError) as exc:
         Settings.load(None)
-    monkeypatch.setenv("CRA_AUTH_DEV_INSECURE", "true")
-    assert Settings.load(None).auth_dev_insecure is True
+    assert "CRA_OIDC_CLIENT_SECRET, CRA_OIDC_REDIRECT_URI" in str(exc.value)

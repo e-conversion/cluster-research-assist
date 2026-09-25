@@ -24,15 +24,15 @@ from quart import (
 from quart.wrappers import Request
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from cra.app.auth.dev import DevProvider
 from cra.app.auth.oidc import OidcProvider
-from cra.app.auth.principal import ANONYMOUS, AuthProvider, Principal, Role
+from cra.app.auth.principal import ANONYMOUS, Principal, Role
 from cra.app.history import migrate
 from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
 from cra.app.policy import Policy
 from cra.app.ratelimit import RateLimiter
 from cra.app.web import (
+    route_access,
     route_account,
     route_admin,
     route_auth,
@@ -135,7 +135,8 @@ class AppContext:
     engine: AsyncEngine
     repo: Repository
     sessions: SessionStore
-    provider: AuthProvider
+    # None when the deployment has no DFN-AAI client: password sign-in only
+    oidc: OidcProvider | None
     http: httpx.AsyncClient
     policy: Policy
     catalogue: ModelCatalogue
@@ -197,14 +198,6 @@ class AppContext:
         }
 
 
-def make_provider(
-    settings: Settings, repo: Repository, http: httpx.AsyncClient
-) -> AuthProvider:
-    if settings.auth_provider == "oidc":
-        return OidcProvider(settings, repo, http)
-    return DevProvider(settings, repo)
-
-
 def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
     base = settings.base_path
     app = Quart(
@@ -233,7 +226,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
             timedelta(hours=settings.session_max_age_hours),
             timedelta(hours=settings.session_absolute_hours),
         ),
-        provider=make_provider(settings, repo, http),
+        oidc=OidcProvider(settings, repo, http) if settings.oidc_enabled else None,
         http=http,
         policy=Policy(settings),
         catalogue=ModelCatalogue(settings),
@@ -251,6 +244,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_health.bp,
         route_session.bp,
         route_auth.bp,
+        route_access.bp,
         route_feedback.bp,
         route_preferences.bp,
         route_chat.bp,
@@ -308,11 +302,17 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
             )
             await _check_schema(ctx)
             ctx.policy = await Policy.load(ctx.settings, ctx.repo)
-            await ctx.provider.start()
         except Exception:
             # after_serving does not run when startup fails: release the pool here
             await _close(ctx)
             raise
+        if ctx.oidc is not None:
+            try:
+                await ctx.oidc.start()
+            except (httpx.HTTPError, ValueError):
+                # password sign-in does not depend on the identity provider;
+                # the first institutional sign-in tries the discovery again
+                log.exception("the OIDC discovery failed; retried at the next sign-in")
 
     @app.after_serving
     async def stop() -> None:
@@ -401,7 +401,8 @@ async def _page(ctx: AppContext, name: str) -> Response:
 
 
 def _refuse(ctx: AppContext, required: Role) -> Response:
-    login_url = f"{ctx.settings.base_path}/auth/login"
+    # the landing page is where every way of signing in starts
+    login_url = ctx.home
     if required is Role.ADMIN and g.principal.signed_in:
         response = jsonify(error="admin_required")
         response.status_code = 403

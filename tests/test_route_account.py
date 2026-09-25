@@ -1,20 +1,16 @@
 """One's own account: the export and deleting it."""
 
 import pytest
-from conftest import make_settings, session_user
+from conftest import make_settings, session_user, sign_in
 
 from cra.app.web.factory import create_app
 
-HEADER = "X-Forwarded-User"
+CONFIGURED_ADMIN = "root@tum.de"
 
 
 @pytest.fixture
 async def app(tmp_path):
-    app = create_app(
-        make_settings(
-            tmp_path, auth_dev_user="", auth_user_header=HEADER, auth_admins=["root"]
-        )
-    )
+    app = create_app(make_settings(tmp_path, auth_admins=[CONFIGURED_ADMIN]))
     async with app.test_app():
         yield app
 
@@ -24,10 +20,8 @@ def repo(app):
     return app.extensions["cra"].repo
 
 
-async def signed_in(app, name: str):
-    client = app.test_client()
-    await client.get("/auth/login", headers={HEADER: name})
-    return client
+async def signed_in(app, name: str, role: str = "user"):
+    return await sign_in(app, app.test_client(), name, role)
 
 
 async def user_id(repo, name: str) -> str:
@@ -65,7 +59,9 @@ async def test_deleting_takes_the_invitation_with_it(app, repo):
 
 
 async def test_a_configured_admin_cannot_delete_themselves(app, repo):
-    root = await signed_in(app, "root")
+    root = await signed_in(app, "rooty", "admin")
+    await repo.add_registered_email(CONFIGURED_ADMIN, "cli")
+    await repo.link_registered_email(CONFIGURED_ADMIN, await user_id(repo, "rooty"))
     await signed_in(app, "ada")
     await repo.set_user_role(await user_id(repo, "ada"), "admin")
     assert (
@@ -73,7 +69,7 @@ async def test_a_configured_admin_cannot_delete_themselves(app, repo):
         in (await (await root.get("/api/me")).get_json())["delete_blocked"]
     )
     assert (await root.delete("/api/me")).status_code == 403
-    assert await repo.get_user(await user_id(repo, "root")) is not None
+    assert await repo.get_user(await user_id(repo, "rooty")) is not None
 
 
 async def test_the_last_admin_cannot_delete_themselves(app, repo):
@@ -83,7 +79,7 @@ async def test_the_last_admin_cannot_delete_themselves(app, repo):
 
 
 async def test_an_admin_who_is_not_the_last_can_delete_themselves(app, repo):
-    await signed_in(app, "root")
+    await signed_in(app, "rooty", "admin")
     ada = await signed_in(app, "ada")
     await repo.set_user_role(await user_id(repo, "ada"), "admin")
     assert (await ada.delete("/api/me")).status_code == 204

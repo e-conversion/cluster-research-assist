@@ -10,7 +10,7 @@ import contextlib
 import json
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 from mcp.server.mcpserver import MCPServer
 from mcp.shared.memory import create_client_server_memory_streams
 from mcp.types import ToolAnnotations
@@ -211,7 +211,7 @@ async def connected_app(tmp_path, toy):
 @pytest.fixture
 async def client(connected_app):
     client = connected_app.test_client()
-    await client.get("/auth/login")
+    await sign_in(connected_app, client)
     return client
 
 

@@ -4,6 +4,7 @@ login redirect and the callback."""
 
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 import respx
 from httpx import Response
@@ -13,6 +14,29 @@ from joserfc.jwk import RSAKey
 ISSUER = "https://idp.test"
 CLIENT_ID = "cra-client"
 CLIENT_SECRET = "cra-secret"
+# the settings that turn institutional sign-in on against this provider
+SETTINGS = {
+    "oidc_issuer": ISSUER,
+    "oidc_client_id": CLIENT_ID,
+    "oidc_client_secret": CLIENT_SECRET,
+    "oidc_redirect_uri": "https://cra.test/auth/callback",
+    "auth_admin_contact": "admin@cra.test",
+}
+
+
+async def start_login(client, idp: "MockIdp") -> dict[str, list[str]]:
+    """GET /auth/login and hand back the state the provider expects."""
+    response = await client.get("/auth/login")
+    assert response.status_code == 302
+    query = parse_qs(urlparse(response.headers["location"]).query)
+    idp.nonce = query["nonce"][0]
+    return query
+
+
+async def institution_sign_in(client, idp: "MockIdp"):
+    """The whole round trip; returns the callback's response."""
+    query = await start_login(client, idp)
+    return await client.get(f"/auth/callback?code=c&state={query['state'][0]}")
 
 
 class MockIdp:
@@ -25,6 +49,7 @@ class MockIdp:
             "given_name": "Ada",
             "family_name": "Lovelace",
             "schac_home_organization": "tum.de",
+            "organization_name": "Technische Universität München",
         }
         self.token_requests: list[dict[str, str]] = []
 

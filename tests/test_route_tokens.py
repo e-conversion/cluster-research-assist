@@ -1,11 +1,9 @@
 """Minting, listing and revoking MCP tokens through the web API."""
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 
 from cra.app.web.factory import create_app
-
-HEADER = "X-Forwarded-User"
 
 
 @pytest.fixture
@@ -13,9 +11,6 @@ async def app(tmp_path):
     app = create_app(
         make_settings(
             tmp_path,
-            auth_dev_user="",
-            auth_user_header=HEADER,
-            auth_admins=["root"],
             mcp_server_enabled=True,
         )
     )
@@ -23,10 +18,8 @@ async def app(tmp_path):
         yield app
 
 
-async def signed_in(app, name: str):
-    client = app.test_client()
-    await client.get("/auth/login", headers={HEADER: name})
-    return client
+async def signed_in(app, name: str, role: str = "user"):
+    return await sign_in(app, app.test_client(), name, role)
 
 
 @pytest.fixture
@@ -76,7 +69,7 @@ async def test_the_owner_can_revoke_their_token(ada):
 
 async def test_an_admin_can_revoke_anyones_token(app, ada):
     minted = await mint(ada)
-    root = await signed_in(app, "root")
+    root = await signed_in(app, "rooty", "admin")
     everyone = await listing(root, "/api/admin/tokens")
     assert [(t["id"], t["owner"]) for t in everyone] == [(minted["id"], "ada")]
     revoked = await root.delete(f"/api/admin/tokens/{minted['id']}")
@@ -104,7 +97,7 @@ async def test_deactivating_an_account_revokes_its_tokens(app, ada):
     await mint(ada)
     ctx = app.extensions["cra"]
     ada_id = next(u.id for u in await ctx.repo.list_users() if u.display_name == "ada")
-    root = await signed_in(app, "root")
+    root = await signed_in(app, "rooty", "admin")
     await root.put(f"/api/admin/users/{ada_id}", json={"is_active": False})
     assert [t["state"] for t in await listing(root, "/api/admin/tokens")] == ["revoked"]
 
@@ -112,8 +105,7 @@ async def test_deactivating_an_account_revokes_its_tokens(app, ada):
 async def test_there_are_no_tokens_without_an_endpoint(tmp_path):
     app = create_app(make_settings(tmp_path, mcp_server_enabled=False))
     async with app.test_app():
-        client = app.test_client()
-        await client.get("/auth/login")
+        client = await sign_in(app, app.test_client())
         response = await client.post("/api/tokens", json={"label": "x", "days": 90})
     assert response.status_code == 404
 

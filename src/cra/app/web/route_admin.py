@@ -9,11 +9,13 @@ from typing import Any
 
 from quart import Blueprint, current_app, g, request
 
+from cra.app.auth import local
 from cra.app.auth.principal import Role
 from cra.app.history.repository import valid_email
 from cra.app.policy import KEYS, PolicyError
 from cra.app.web import auditlog
 from cra.app.web.access import requires_admin
+from cra.app.web.route_auth import body_of
 from cra.core.library import versions as versioning
 from cra.core.library.library import Library, LibraryError
 
@@ -39,16 +41,22 @@ async def list_people() -> dict[str, Any]:
     repo = ctx.repo
     invitations = await repo.list_registered_emails()
     email_of = {i.user_id: i.email for i in invitations if i.user_id}
+    usernames = await repo.usernames()
 
     people = []
     for user in await repo.list_users():
         identities = await repo.list_identities(user.id)
+        sign_in = (["password"] if user.id in usernames else []) + (
+            ["institution"] if identities else []
+        )
         people.append(
             {
                 "kind": "account",
                 "id": user.id,
                 "name": user.display_name,
-                "email": email_of.get(user.id),
+                "username": usernames.get(user.id),
+                "sign_in": sign_in,
+                "email": user.email or email_of.get(user.id),
                 "role": user.role,
                 "active": user.is_active,
                 "last_login_at": user.last_login_at.isoformat()
@@ -107,9 +115,61 @@ async def update_user(user_id: str) -> Any:
             # no token that would work again if it were reactivated
             for session in await repo.sessions_of(user_id):
                 await _ctx().remote.forget(session.id)
+            await repo.delete_sessions_of(user_id)
             await repo.revoke_tokens_of(user_id)
         auditlog.record("set_active", user=user_id, active=active)
     return {"ok": True}
+
+
+@bp.post("/api/admin/local-users")
+@requires_admin
+async def create_local_user() -> Any:
+    ctx = _ctx()
+    body = await body_of()
+    role = str(body.get("role", Role.USER))
+    if role not in (Role.USER, Role.ADMIN):
+        return _bad(f"role must be {Role.USER} or {Role.ADMIN}")
+    try:
+        user = await local.create_user(
+            ctx.repo,
+            str(body.get("username", "")),
+            str(body.get("name", "")),
+            str(body.get("email", "") or ""),
+            role,
+        )
+    except local.CredentialError as exc:
+        return _bad(str(exc))
+    value = await local.issue_link(
+        ctx.repo, user.id, local.Purpose.SETUP, g.principal.display or "admin"
+    )
+    auditlog.record("create_local_user", user=user.id, role=role)
+    return {
+        "id": user.id,
+        "link": local.link_path(ctx.settings.base_path, value),
+        "expires_in_hours": int(local.LINK_LIFETIME.total_seconds() // 3600),
+    }, 201
+
+
+@bp.post("/api/admin/users/<user_id>/password-reset")
+@requires_admin
+async def reset_password(user_id: str) -> Any:
+    ctx = _ctx()
+    if await ctx.repo.get_user(user_id) is None:
+        return _bad("no such account", 404)
+    try:
+        value = await local.reset(ctx.repo, user_id, g.principal.display or "admin")
+    except local.CredentialError as exc:
+        return _bad(str(exc))
+    for session in await ctx.repo.sessions_of(user_id):
+        await ctx.remote.forget(session.id)
+    await ctx.repo.delete_sessions_of(user_id)
+    # whoever the reset is meant to lock out may have minted some
+    await ctx.repo.revoke_tokens_of(user_id)
+    auditlog.record("reset_password", user=user_id)
+    return {
+        "link": local.link_path(ctx.settings.base_path, value),
+        "expires_in_hours": int(local.LINK_LIFETIME.total_seconds() // 3600),
+    }
 
 
 @bp.delete("/api/admin/users/<user_id>")

@@ -3,7 +3,7 @@
 import httpx
 import pytest
 import respx
-from conftest import make_settings
+from conftest import make_settings, sign_in
 
 from cra.app.web.factory import create_app
 from cra.assistant.llm import params as params_
@@ -22,7 +22,7 @@ async def app(tmp_path):
 @pytest.fixture
 async def client(app):
     client = app.test_client()
-    await client.get("/auth/login")
+    await sign_in(app, client)
     return client
 
 
@@ -57,7 +57,7 @@ async def test_picking_a_model_sticks_to_the_session(client, app):
 
     # a second browser is unaffected
     other = app.test_client()
-    await other.get("/auth/login")
+    await sign_in(app, other)
     assert (await session_of(other))["model"] == MODELS[0]
 
 

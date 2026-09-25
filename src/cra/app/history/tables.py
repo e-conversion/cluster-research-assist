@@ -32,6 +32,10 @@ class User(Base):
     last_login_at: Mapped[datetime | None]
     is_active: Mapped[bool] = mapped_column(default=True)
     role: Mapped[str] = mapped_column(String(20), default="user")
+    # where to reach the person; never a way to sign in (that is what
+    # registered_emails is for, and a contact address must not open the account
+    # to whoever holds that address at some university)
+    email: Mapped[str] = mapped_column(String(320), default="")
 
 
 class RegisteredEmail(Base):
@@ -65,6 +69,65 @@ class Identity(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     home_organization: Mapped[str] = mapped_column(String(200), default="")
     bound_at: Mapped[datetime]
+
+
+class LocalCredential(Base):
+    """A username and password for an account that signs in here rather than
+    at an institution. ``password_hash`` is empty until the person has used
+    their set-password link, and again after an admin reset."""
+
+    __tablename__ = "local_credentials"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    username: Mapped[str] = mapped_column(String(64), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(200), default="")
+    password_changed_at: Mapped[datetime | None]
+
+
+class PasswordToken(Base):
+    """Stored as the sha256 of the link's value, like an MCP token."""
+
+    __tablename__ = "password_tokens"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    # "setup" for a new account, "reset" after an admin cleared the password
+    purpose: Mapped[str] = mapped_column(String(10))
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime]
+    expires_at: Mapped[datetime]
+    used_at: Mapped[datetime | None]
+
+
+class AccessRequest(Base):
+    """Name, email and organisation are the identity provider's claims;
+    group, profile link and message are what the person typed. One request per
+    identity: a declined one stays, so the person sees the decision, until an
+    admin deletes it."""
+
+    __tablename__ = "access_requests"
+    __table_args__ = (UniqueConstraint("issuer", "sub"),)
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    issuer: Mapped[str] = mapped_column(String(500))
+    sub: Mapped[str] = mapped_column(String(500))
+    email: Mapped[str] = mapped_column(String(320), default="")
+    display_name: Mapped[str] = mapped_column(String(200), default="")
+    home_organization: Mapped[str] = mapped_column(String(200), default="")
+    organization_name: Mapped[str] = mapped_column(String(200), default="")
+    # the library's PI record, when one was picked; group_name is its label at
+    # the time, or what the person typed under "other"
+    group_smid: Mapped[str] = mapped_column(String(100), default="")
+    group_name: Mapped[str] = mapped_column(String(300), default="")
+    profile_url: Mapped[str] = mapped_column(String(500), default="")
+    message: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="pending")
+    created_at: Mapped[datetime]
+    decided_by: Mapped[str] = mapped_column(String(200), default="")
+    decided_at: Mapped[datetime | None]
+    decision_note: Mapped[str] = mapped_column(Text, default="")
 
 
 class PolicySetting(Base):

@@ -48,6 +48,16 @@ class RateLimiter:
             True, limit - used - 1, int(window_s - (self._clock() % window_s))
         )
 
+    def peek(self, key: str, limit: int, window_s: int = DAY_S) -> Allowance:
+        """Whether ``key`` is within ``limit``, without counting a request:
+        for limits that count only failures, which a caller records with
+        ``check`` once it knows."""
+        if limit <= 0:
+            return Allowance(True, -1, 0)
+        used = self._counts.get((key, window_s, self._window(window_s)), 0)
+        reset_in = int(window_s - (self._clock() % window_s))
+        return Allowance(used < limit, max(0, limit - used), reset_in)
+
     def _forget_older_windows(self, window_s: int, current: int) -> None:
         stale = [k for k in self._counts if k[1] == window_s and k[2] < current]
         for key in stale:
