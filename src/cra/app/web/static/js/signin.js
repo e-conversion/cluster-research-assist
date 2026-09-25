@@ -114,7 +114,7 @@ export function renderSignIn(view, config) {
       contactLine(config, "Questions:"));
     body = tabbed([["Sign in", signIn], ["Request access", request]]);
   } else {
-    body = [passwordForm(), contactLine(config, "Accounts are created by the administrators. Contact")];
+    body = [passwordForm()];
   }
   view.replaceChildren(card(config, lede, ...body));
   hideChrome();
