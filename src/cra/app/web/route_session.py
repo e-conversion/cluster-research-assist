@@ -34,9 +34,10 @@ async def config() -> dict[str, Any]:
             "website": settings.cluster_website,
         },
         "auth": {
-            "provider": settings.auth_provider,
+            "institution": settings.oidc_enabled,
             "login_url": "auth/login",
             "logout_url": "auth/logout",
+            "contact": settings.auth_admin_contact,
         },
         "notice": policy["notice"],
         "provider": settings.llm_provider,

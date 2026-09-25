@@ -1,7 +1,7 @@
 import re
 
 import pytest
-from conftest import make_settings, session_user
+from conftest import PASSWORD, add_account, make_settings, session_user, sign_in
 from quart.testing.app import LifespanError
 
 from cra.app.web.factory import create_app
@@ -19,9 +19,10 @@ async def test_public_routes_answer_without_a_session(client):
     assert health["library"]["papers"] == 19
     config = await (await client.get("/api/config")).get_json()
     assert config["auth"] == {
-        "provider": "dev",
+        "institution": False,
         "login_url": "auth/login",
         "logout_url": "auth/logout",
+        "contact": "",
     }
     assert (await client.get("/")).status_code == 200
     assert (await client.get("/static/js/app.js")).status_code == 200
@@ -46,6 +47,12 @@ PUBLIC_ROUTES = {
     "/auth/login",
     "/auth/callback",
     "/auth/logout",
+    "/auth/password",
+    "/auth/set-password",
+    "/auth/password-link",
+    # these two also need the verified identity of a sign-in without an account
+    "/api/access-requests",
+    "/api/access-requests/me",
 }
 USER_ROUTES = {
     "/api/session",
@@ -67,12 +74,19 @@ USER_ROUTES = {
     "/api/tokens/<token_id>",
     "/api/me",
     "/api/me/export",
+    "/api/me/password",
     "/api/stats",
 }
 ADMIN_ROUTES = {
     "/admin",
     "/api/admin/people",
     "/api/admin/users/<user_id>",
+    "/api/admin/users/<user_id>/password-reset",
+    "/api/admin/local-users",
+    "/api/admin/access-requests",
+    "/api/admin/access-requests/<request_id>",
+    "/api/admin/access-requests/<request_id>/approve",
+    "/api/admin/access-requests/<request_id>/reject",
     "/api/admin/emails",
     "/api/admin/emails/<path:email>",
     "/api/admin/feedback",
@@ -91,12 +105,13 @@ def test_every_route_is_classified(app):
     assert routes == PUBLIC_ROUTES | USER_ROUTES | ADMIN_ROUTES
 
 
-async def test_anonymous_visitors_reach_every_public_route(client):
-    for rule in sorted(PUBLIC_ROUTES):
-        response = await client.open(
-            rule, method="POST" if rule.endswith("logout") else "GET"
-        )
-        assert response.status_code != 401, rule
+async def test_anonymous_visitors_reach_every_public_route(app, client):
+    for template in sorted(PUBLIC_ROUTES):
+        rule, method = as_request(app, template)
+        response = await client.open(rule, method=method, json={})
+        # the route may still say no; the guard in front of it must not
+        body = await response.get_json(silent=True) or {}
+        assert body.get("error") != "login_required", template
 
 
 def as_request(app, template: str) -> tuple[str, str]:
@@ -113,9 +128,9 @@ async def test_admin_routes_refuse_anonymous_and_ordinary_users(app, client, tem
     rule, method = as_request(app, template)
     anonymous = await client.open(rule, method=method)
     assert anonymous.status_code == 401
-    assert (await anonymous.get_json())["login_url"] == "/auth/login"
+    assert (await anonymous.get_json())["login_url"] == "/"
 
-    await client.get("/auth/login")
+    await sign_in(app, client)
     signed_in = await client.open(rule, method=method)
     assert signed_in.status_code == 403
     assert (await signed_in.get_json())["error"] == "admin_required"
@@ -124,50 +139,46 @@ async def test_admin_routes_refuse_anonymous_and_ordinary_users(app, client, tem
 async def test_a_browser_asking_for_a_page_is_sent_to_sign_in(client):
     response = await client.get("/admin", headers={"Accept": "text/html"})
     assert response.status_code == 302
-    assert response.headers["location"] == "/auth/login"
+    assert response.headers["location"] == "/"
 
 
-async def test_signing_in_raises_the_tier(client):
-    await client.get("/auth/login")
+async def test_signing_in_raises_the_tier(app, client):
+    await sign_in(app, client)
     body = await (await client.get("/api/session")).get_json()
     assert (body["role"], body["tier"], body["signed_in"]) == ("user", "internal", True)
     assert body["is_admin"] is False
 
 
-async def test_configured_admin_addresses_are_promoted_at_sign_in(tmp_path):
-    app = create_app(make_settings(tmp_path, auth_dev_user="ada", auth_admins=["Ada"]))
-    async with app.test_app():
-        client = app.test_client()
-        await client.get("/auth/login")
-        body = await (await client.get("/api/session")).get_json()
-        assert body["is_admin"] is True
-        assert (await client.get("/admin")).status_code == 200
+async def password_login(client, username="alice", password=PASSWORD):
+    return await client.post(
+        "/auth/password", json={"username": username, "password": password}
+    )
 
 
-async def test_dev_login_creates_the_user_and_signs_in(app, client):
-    response = await client.get("/auth/login")
-    assert response.status_code == 302
-    assert response.headers["location"] == "/"
+async def test_password_sign_in_sets_a_hardened_cookie_and_records_it(app, client):
+    user_id = await add_account(app, "alice")
+    response = await password_login(client)
+    assert response.status_code == 200
     cookie = response.headers["set-cookie"]
     assert "HttpOnly" in cookie
+    assert "SameSite=Lax" in cookie
     assert "Path=/" in cookie
-    session = await (await client.get("/api/session")).get_json()
-    assert session["user"] == "alice"
+    assert await session_user(client) == "alice"
     repo = app.extensions["cra"].repo
-    identity = await repo.get_identity("dev", "alice")
-    assert (await repo.get_user(identity.user_id)).last_login_at is not None
+    assert (await repo.get_user(user_id)).last_login_at is not None
 
 
-async def test_login_rotates_the_cookie(client):
-    first = cookie_value(await client.get("/auth/login"))
-    second = cookie_value(await client.get("/auth/login"))
+async def test_login_rotates_the_cookie(app, client):
+    await add_account(app, "alice")
+    first = cookie_value(await password_login(client))
+    second = cookie_value(await password_login(client))
     assert first != second
     client.set_cookie("localhost", COOKIE_NAME, first)
     assert await session_user(client) is None
 
 
-async def test_logout_ends_the_session(client):
-    await client.get("/auth/login")
+async def test_logout_ends_the_session(app, client):
+    await sign_in(app, client)
     response = await client.post("/auth/logout")
     assert (await response.get_json()) == {"ok": True, "redirect": "/"}
     assert "Max-Age=0" in response.headers["set-cookie"]
@@ -175,24 +186,12 @@ async def test_logout_ends_the_session(client):
 
 
 async def test_deactivated_user_is_locked_out(app, client):
-    await client.get("/auth/login")
+    await sign_in(app, client)
     repo = app.extensions["cra"].repo
-    identity = await repo.get_identity("dev", "alice")
-    await repo.set_user_active(identity.user_id, False)
+    user_id = (await repo.get_credential_by_username("alice")).user_id
+    await repo.set_user_active(user_id, False)
     assert await session_user(client) is None
-    assert (await client.get("/auth/login")).status_code == 403
-
-
-async def test_dev_provider_trusts_the_configured_proxy_header(tmp_path):
-    app = create_app(
-        make_settings(tmp_path, auth_dev_user="", auth_user_header="X-Forwarded-User")
-    )
-    async with app.test_app():
-        client = app.test_client()
-        assert (await client.get("/auth/login")).status_code == 400
-        response = await client.get("/auth/login", headers={"X-Forwarded-User": "bob"})
-        assert response.status_code == 302
-        assert (await (await client.get("/api/session")).get_json())["user"] == "bob"
+    assert (await password_login(client)).status_code == 403
 
 
 async def test_base_path_mounts_everything_under_the_prefix(tmp_path):
@@ -205,8 +204,11 @@ async def test_base_path_mounts_everything_under_the_prefix(tmp_path):
         assert (await client.get(f"{prefix}/api/health")).status_code == 200
         assert (await client.get(f"{prefix}/")).status_code == 200
         assert (await client.get(f"{prefix}/static/js/app.js")).status_code == 200
-        response = await client.get(f"{prefix}/auth/login")
-        assert response.headers["location"] == f"{prefix}/"
+        await add_account(app, "alice")
+        response = await client.post(
+            f"{prefix}/auth/password",
+            json={"username": "alice", "password": PASSWORD},
+        )
         assert f"Path={prefix}" in response.headers["set-cookie"]
         assert (await client.get(f"{prefix}/api/session")).status_code == 200
         assert (await (await client.get(f"{prefix}/api/session")).get_json())[
@@ -229,8 +231,8 @@ async def test_serving_refuses_an_outdated_schema(tmp_path):
             pass
 
 
-async def test_the_session_reports_the_tools_the_caller_may_use(client):
-    await client.get("/auth/login")
+async def test_the_session_reports_the_tools_the_caller_may_use(app, client):
+    await sign_in(app, client)
     body = await (await client.get("/api/session")).get_json()
     # every tool but semantic search, which needs an encoder this test has not
     # configured; the library's vectors alone still answer "papers like this one"
@@ -242,7 +244,7 @@ async def test_the_session_reports_the_tools_the_caller_may_use(client):
 
 async def test_the_session_hands_back_the_conversation_it_is_in(client, app):
     ctx = app.extensions["cra"]
-    await client.get("/auth/login")
+    await sign_in(app, client)
     body = await (await client.get("/api/session")).get_json()
     assert (body["messages"], body["turns"], body["conversation"]) == ([], 0, None)
 
@@ -269,37 +271,27 @@ async def test_the_session_hands_back_the_conversation_it_is_in(client, app):
     assert body["messages"][1]["meta"]["model"] == "m"
 
 
-async def two_people(tmp_path):
-    """An app where the proxy header decides who is signing in."""
-    return create_app(
-        make_settings(tmp_path, auth_dev_user="", auth_user_header="X-Forwarded-User")
-    )
-
-
 async def test_signing_in_as_someone_else_does_not_continue_their_conversation(
-    tmp_path,
+    app, client
 ):
     """Shared lab machine: A walks away signed in, B signs in on top."""
-    app = await two_people(tmp_path)
-    async with app.test_app():
-        ctx = app.extensions["cra"]
-        client = app.test_client()
-        await client.get("/auth/login", headers={"X-Forwarded-User": "ada"})
-        ada = (await ctx.repo.list_users())[0]
-        conversation = await ctx.repo.create_conversation(ada.id, "Ada's")
-        await ctx.repo.add_message(conversation.id, "user", "my secret question")
-        await client.post(f"/api/conversations/{conversation.id}/open")
-        assert (await (await client.get("/api/session")).get_json())["turns"] == 1
+    ctx = app.extensions["cra"]
+    await sign_in(app, client, "ada")
+    ada = (await ctx.repo.list_users())[0]
+    conversation = await ctx.repo.create_conversation(ada.id, "Ada's")
+    await ctx.repo.add_message(conversation.id, "user", "my secret question")
+    await client.post(f"/api/conversations/{conversation.id}/open")
+    assert (await (await client.get("/api/session")).get_json())["turns"] == 1
 
-        await client.get("/auth/login", headers={"X-Forwarded-User": "bob"})
-        session = await (await client.get("/api/session")).get_json()
-        assert session["user"] == "bob"
-        assert (session["conversation"], session["messages"]) == (None, [])
+    await sign_in(app, client, "bob")
+    session = await (await client.get("/api/session")).get_json()
+    assert session["user"] == "bob"
+    assert (session["conversation"], session["messages"]) == (None, [])
 
 
 async def test_a_session_naming_someone_elses_conversation_shows_nothing(app, client):
     ctx = app.extensions["cra"]
-    await client.get("/auth/login")
+    await sign_in(app, client)
     bob = await ctx.repo.create_user("bob")
     theirs = await ctx.repo.create_conversation(bob.id, "Private")
     await ctx.repo.add_message(theirs.id, "user", "secret")
@@ -352,8 +344,10 @@ async def test_hsts_is_sent_when_cookies_are_secure(tmp_path):
     ],
     ids=["foreign origin", "browser says cross-site", "urlencoded form", "text form"],
 )
-async def test_requests_a_foreign_page_could_make_are_refused(client, headers, data):
-    await client.get("/auth/login")
+async def test_requests_a_foreign_page_could_make_are_refused(
+    app, client, headers, data
+):
+    await sign_in(app, client)
     response = await client.post("/api/chat/reset", headers=headers, data=data)
     assert response.status_code == 403
     same_site = await client.post(
@@ -364,8 +358,8 @@ async def test_requests_a_foreign_page_could_make_are_refused(client, headers, d
     assert same_site.status_code == 200
 
 
-async def test_a_large_body_is_refused_before_it_is_read(client):
-    await client.get("/auth/login")
+async def test_a_large_body_is_refused_before_it_is_read(app, client):
+    await sign_in(app, client)
     response = await client.post(
         "/api/chat",
         headers={"Content-Type": "application/json"},

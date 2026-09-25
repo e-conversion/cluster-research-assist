@@ -1,7 +1,7 @@
 """Sending feedback, and reading it in the console."""
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 
 from cra.app.web.factory import create_app
 from cra.app.web.route_feedback import CATEGORIES, MAX_CHARS, MAX_MESSAGES
@@ -9,9 +9,7 @@ from cra.app.web.route_feedback import CATEGORIES, MAX_CHARS, MAX_MESSAGES
 
 @pytest.fixture
 async def admin_app(tmp_path):
-    app = create_app(
-        make_settings(tmp_path, auth_dev_user="root", auth_admins=["root"])
-    )
+    app = create_app(make_settings(tmp_path))
     async with app.test_app():
         yield app
 
@@ -19,7 +17,7 @@ async def admin_app(tmp_path):
 @pytest.fixture
 async def admin(admin_app):
     client = admin_app.test_client()
-    await client.get("/auth/login")
+    await sign_in(admin_app, client, "root-admin", role="admin")
     return client
 
 
@@ -52,7 +50,7 @@ async def test_feedback_is_stored_with_its_conversation(admin):
 
     (entry,) = (await json_of(await admin.get("/api/admin/feedback")))["feedback"]
     assert entry["text"] == "the answer cited a paper that does not exist"
-    assert entry["from"] == "root"
+    assert entry["from"] == "root-admin"
     assert entry["category"] == "Bug report"
     assert entry["model"] == "qwen3.8-27b"
     assert [m["role"] for m in entry["messages"]] == ["user", "assistant"]

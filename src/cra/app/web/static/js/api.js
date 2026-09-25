@@ -24,6 +24,10 @@ export const postJSON = (path, body) => fetch(path, {
   method: "POST", headers: { "content-type": "application/json", accept: "application/json" },
   body: JSON.stringify(body ?? {}),
 }).then(parse);
+export const putJSON = (path, body) => fetch(path, {
+  method: "PUT", headers: { "content-type": "application/json", accept: "application/json" },
+  body: JSON.stringify(body ?? {}),
+}).then(parse);
 export const del = (path) => fetch(path, { method: "DELETE", headers: { accept: "application/json" } }).then(parse);
 
 /**

@@ -6,14 +6,18 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cra.app.history.tables import (
+    AccessRequest,
     Conversation,
     Feedback,
     Identity,
+    LocalCredential,
     McpToken,
     Message,
+    PasswordToken,
     PolicySetting,
     RegisteredEmail,
     User,
@@ -100,6 +104,15 @@ class Repository:
         async with self._sessions() as s, s.begin():
             result = await s.execute(
                 update(User).where(User.id == user_id).values(is_active=active)
+            )
+            return result.rowcount == 1
+
+    async def set_user_email(self, user_id: str, email: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(email=normalise_email(email))
             )
             return result.rowcount == 1
 
@@ -205,6 +218,255 @@ class Repository:
                 .order_by(Identity.id)
             )
             return list(rows)
+
+    # password accounts
+
+    async def create_local_user(
+        self, username: str, display_name: str, email: str = "", role: str = "user"
+    ) -> User:
+        user = User(
+            display_name=display_name,
+            role=role,
+            email=normalise_email(email),
+            created_at=utcnow(),
+        )
+        async with self._sessions() as s, s.begin():
+            s.add(user)
+            await s.flush()
+            s.add(LocalCredential(user_id=user.id, username=username))
+        return user
+
+    async def get_credential(self, user_id: str) -> LocalCredential | None:
+        async with self._sessions() as s:
+            return await s.get(LocalCredential, user_id)
+
+    async def get_credential_by_username(self, username: str) -> LocalCredential | None:
+        async with self._sessions() as s:
+            return await s.scalar(
+                select(LocalCredential).where(LocalCredential.username == username)
+            )
+
+    async def usernames(self) -> dict[str, str]:
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(LocalCredential.user_id, LocalCredential.username)
+            )
+            return {row[0]: row[1] for row in rows}
+
+    async def set_password_hash(self, user_id: str, password_hash: str) -> bool:
+        # an empty hash matches no password: the account waits for its link
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(LocalCredential)
+                .where(LocalCredential.user_id == user_id)
+                .values(
+                    password_hash=password_hash,
+                    password_changed_at=utcnow() if password_hash else None,
+                )
+            )
+            return result.rowcount == 1
+
+    async def add_password_token(
+        self,
+        user_id: str,
+        token_hash: str,
+        purpose: str,
+        created_by: str,
+        expires_at: datetime,
+    ) -> PasswordToken:
+        # a new link replaces any the account has not used yet
+        row = PasswordToken(
+            token_hash=token_hash,
+            user_id=user_id,
+            purpose=purpose,
+            created_by=created_by,
+            created_at=utcnow(),
+            expires_at=expires_at,
+        )
+        async with self._sessions() as s, s.begin():
+            await s.execute(
+                delete(PasswordToken).where(
+                    PasswordToken.user_id == user_id, PasswordToken.used_at.is_(None)
+                )
+            )
+            s.add(row)
+        return row
+
+    async def get_password_token(self, token_hash: str) -> PasswordToken | None:
+        async with self._sessions() as s:
+            return await s.get(PasswordToken, token_hash)
+
+    async def redeem_password_token(
+        self, token_hash: str, password_hash: str
+    ) -> str | None:
+        """Spends a live link and stores the password it sets; returns the
+        account, or None.
+
+        Both happen in one transaction, and the spend is a conditional UPDATE:
+        two requests racing with one link cannot both get through, and an admin
+        reset running at the same moment cannot be undone by the old link.
+        """
+        now = utcnow()
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(PasswordToken)
+                .where(
+                    PasswordToken.token_hash == token_hash,
+                    PasswordToken.used_at.is_(None),
+                    PasswordToken.expires_at > now,
+                )
+                .values(used_at=now)
+            )
+            if result.rowcount != 1:
+                return None
+            user_id = await s.scalar(
+                select(PasswordToken.user_id).where(
+                    PasswordToken.token_hash == token_hash
+                )
+            )
+            await s.execute(
+                update(LocalCredential)
+                .where(LocalCredential.user_id == user_id)
+                .values(password_hash=password_hash, password_changed_at=now)
+            )
+            return user_id
+
+    # access requests
+
+    async def add_access_request(self, **values: Any) -> AccessRequest | None:
+        # None when this identity has already asked
+        row = AccessRequest(created_at=utcnow(), status="pending", **values)
+        try:
+            async with self._sessions() as s, s.begin():
+                s.add(row)
+        except IntegrityError:
+            return None
+        return row
+
+    async def get_access_request(self, request_id: str) -> AccessRequest | None:
+        async with self._sessions() as s:
+            return await s.get(AccessRequest, request_id)
+
+    async def access_request_of(self, issuer: str, sub: str) -> AccessRequest | None:
+        async with self._sessions() as s:
+            return await s.scalar(
+                select(AccessRequest).where(
+                    AccessRequest.issuer == issuer, AccessRequest.sub == sub
+                )
+            )
+
+    async def list_access_requests(self) -> list[AccessRequest]:
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(AccessRequest).order_by(AccessRequest.created_at.desc())
+            )
+            return list(rows)
+
+    async def count_pending_access_requests(self) -> int:
+        async with self._sessions() as s:
+            return int(
+                await s.scalar(
+                    select(func.count())
+                    .select_from(AccessRequest)
+                    .where(AccessRequest.status == "pending")
+                )
+            )
+
+    async def approve_access_request(
+        self, request_id: str, role: str, decided_by: str
+    ) -> User | None:
+        """None when there is no such pending request; ValueError when the
+        identity was bound some other way meanwhile.
+
+        The address also goes on the allow-list, bound to the account: ``sub``
+        is pairwise and changes with the client registration (test proxy to
+        production), and the address is what re-binds the person then.
+        """
+        try:
+            return await self._approve(request_id, role, decided_by)
+        except IntegrityError:
+            # another admin approved the same request a moment earlier
+            return None
+
+    async def _approve(
+        self, request_id: str, role: str, decided_by: str
+    ) -> User | None:
+        async with self._sessions() as s, s.begin():
+            request = await s.get(AccessRequest, request_id, with_for_update=True)
+            if request is None or request.status != "pending":
+                return None
+            bound = await s.scalar(
+                select(Identity.id).where(
+                    Identity.issuer == request.issuer, Identity.sub == request.sub
+                )
+            )
+            if bound is not None:
+                # signed in through an invitation after asking
+                raise ValueError("this identity already belongs to an account")
+            now = utcnow()
+            user = User(
+                display_name=request.display_name or request.email or "unnamed",
+                role=role,
+                email=request.email,
+                created_at=now,
+            )
+            s.add(user)
+            await s.flush()
+            s.add(
+                Identity(
+                    issuer=request.issuer,
+                    sub=request.sub,
+                    user_id=user.id,
+                    home_organization=request.home_organization,
+                    bound_at=now,
+                )
+            )
+            # without a home organisation the entry could be claimed from any
+            # identity provider in the federation that asserts the address
+            if (
+                request.email
+                and request.home_organization
+                and await s.get(RegisteredEmail, request.email) is None
+            ):
+                s.add(
+                    RegisteredEmail(
+                        email=request.email,
+                        user_id=user.id,
+                        role=role,
+                        home_organization=request.home_organization,
+                        created_by=decided_by,
+                        created_at=now,
+                    )
+                )
+            request.status = "approved"
+            request.decided_by = decided_by
+            request.decided_at = now
+        return user
+
+    async def reject_access_request(
+        self, request_id: str, decided_by: str, note: str
+    ) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(AccessRequest)
+                .where(
+                    AccessRequest.id == request_id, AccessRequest.status == "pending"
+                )
+                .values(
+                    status="rejected",
+                    decided_by=decided_by,
+                    decided_at=utcnow(),
+                    decision_note=note,
+                )
+            )
+            return result.rowcount == 1
+
+    async def delete_access_request(self, request_id: str) -> bool:
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                delete(AccessRequest).where(AccessRequest.id == request_id)
+            )
+            return result.rowcount == 1
 
     # policy overrides
 
@@ -520,6 +782,13 @@ class Repository:
     async def delete_session(self, session_id: str) -> None:
         async with self._sessions() as s, s.begin():
             await s.execute(delete(WebSession).where(WebSession.id == session_id))
+
+    async def delete_sessions_of(self, user_id: str, keep: str | None = None) -> None:
+        condition = WebSession.user_id == user_id
+        if keep is not None:
+            condition = condition & (WebSession.id != keep)
+        async with self._sessions() as s, s.begin():
+            await s.execute(delete(WebSession).where(condition))
 
     async def purge_expired_sessions(self) -> int:
         async with self._sessions() as s, s.begin():

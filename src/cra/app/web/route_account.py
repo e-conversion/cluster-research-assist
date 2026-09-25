@@ -1,5 +1,5 @@
-"""One's own account: what is stored about it, a copy of all of it, and
-deleting it.
+"""One's own account: what is stored about it, its password, a copy of all
+of it, and deleting it.
 
 Deleting removes the account, everything that cascades from it, and the
 invitation that let it in: signing in again needs a new invitation. Two
@@ -13,12 +13,15 @@ from typing import Any
 
 from quart import Blueprint, current_app, g
 
-from cra.app.auth import dev, tokens
+from cra.app.auth import local, tokens
 from cra.app.history.repository import utcnow
 from cra.app.web import auditlog
-from cra.app.web.route_auth import clear_cookie
+from cra.app.web.route_auth import body_of, clear_cookie
 
 bp = Blueprint("account", __name__)
+
+# a stolen session must not be a way to guess the current password
+PASSWORD_CHANGES_PER_ACCOUNT = (10, 15 * 60)
 
 
 def _ctx():
@@ -30,18 +33,11 @@ def _iso(when: datetime | None) -> str | None:
 
 
 async def configured_admin(ctx: Any, user_id: str) -> bool:
-    """Whether ``CRA_AUTH_ADMINS`` names this account: by an address it
-    claimed, or, with the dev provider, by its login name."""
+    """Whether ``CRA_AUTH_ADMINS`` names an address this account claimed."""
     configured = {a.strip().lower() for a in ctx.settings.auth_admins if a.strip()}
     if not configured:
         return False
-    names = set(await ctx.repo.emails_of(user_id))
-    names |= {
-        i.sub.lower()
-        for i in await ctx.repo.list_identities(user_id)
-        if i.issuer == dev.ISSUER
-    }
-    return bool(names & configured)
+    return bool(set(await ctx.repo.emails_of(user_id)) & configured)
 
 
 async def deletion_blocked(ctx: Any, principal: Any) -> tuple[int, str] | None:
@@ -63,14 +59,49 @@ async def me() -> dict[str, Any]:
     principal = g.principal
     user = await ctx.repo.get_user(principal.user_id)
     blocked = await deletion_blocked(ctx, principal)
+    credential = await ctx.repo.get_credential(user.id)
+    emails = await ctx.repo.emails_of(user.id)
+    if user.email and user.email not in emails:
+        emails.insert(0, user.email)
     return {
         "id": user.id,
         "name": user.display_name,
-        "emails": await ctx.repo.emails_of(user.id),
+        "username": credential.username if credential else None,
+        "emails": emails,
         "role": user.role,
         "created_at": _iso(user.created_at),
         "delete_blocked": blocked[1] if blocked else "",
     }
+
+
+@bp.put("/api/me/password")
+async def change_password() -> Any:
+    # whoever may have known the old password is signed out
+    ctx = _ctx()
+    allowance = ctx.limiter.check(
+        f"pw-change:{g.principal.user_id}", *PASSWORD_CHANGES_PER_ACCOUNT
+    )
+    if not allowance.allowed:
+        return {
+            "error": "Too many attempts.",
+            "retry_after": allowance.retry_after,
+        }, 429
+    body = await body_of()
+    try:
+        await local.change_password(
+            ctx.repo,
+            g.principal.user_id,
+            str(body.get("current", "")),
+            str(body.get("new", "")),
+        )
+    except local.CredentialError as exc:
+        return {"error": str(exc)}, 400
+    for session in await ctx.repo.sessions_of(g.principal.user_id):
+        if session.id != g.session.id:
+            await ctx.remote.forget(session.id)
+    await ctx.repo.delete_sessions_of(g.principal.user_id, keep=g.session.id)
+    auditlog.record("change_password")
+    return {"ok": True}
 
 
 @bp.get("/api/me/export")
@@ -81,6 +112,7 @@ async def export() -> Any:
     ctx = _ctx()
     repo = ctx.repo
     user = await repo.get_user(g.principal.user_id)
+    credential = await repo.get_credential(user.id)
     conversations = []
     for conversation in await repo.list_conversations(user.id, limit=None):
         conversations.append(
@@ -109,6 +141,8 @@ async def export() -> Any:
             "active": user.is_active,
             "created_at": _iso(user.created_at),
             "last_login_at": _iso(user.last_login_at),
+            "email": user.email,
+            "username": credential.username if credential else None,
         },
         "emails": await repo.emails_of(user.id),
         "identities": [

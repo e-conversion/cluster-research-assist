@@ -2,8 +2,10 @@ import os
 from pathlib import Path
 
 import pytest
+from argon2 import PasswordHasher
 from sqlalchemy import text
 
+from cra.app.auth import local
 from cra.app.history import migrate
 from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
@@ -28,6 +30,42 @@ def _clean_environment(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(autouse=True)
+def _cheap_hashing(monkeypatch):
+    """argon2 at its real cost would make every sign-in in the suite slow."""
+    monkeypatch.setattr(
+        local, "HASHER", PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+    )
+    monkeypatch.setattr(local, "_dummy_hash", None)
+
+
+PASSWORD = "correct horse battery"
+
+
+async def add_account(app, username: str, role: str = "user", **fields) -> str:
+    """A password account with ``PASSWORD``; returns its user id."""
+    repo = app.extensions["cra"].repo
+    user = await local.create_user(
+        repo, username, fields.get("name", username), fields.get("email", ""), role
+    )
+    await repo.set_password_hash(user.id, await local.hash_password(PASSWORD))
+    return user.id
+
+
+async def sign_in(
+    app, client, username: str = "alice", role: str = "user", name: str = ""
+):
+    """Signs ``client`` in with a password, creating the account if needed."""
+    repo = app.extensions["cra"].repo
+    if await repo.get_credential_by_username(username) is None:
+        await add_account(app, username, role, name=name or username)
+    response = await client.post(
+        "/auth/password", json={"username": username, "password": PASSWORD}
+    )
+    assert response.status_code == 200, await response.get_data(as_text=True)
+    return client
+
+
 async def session_user(client) -> str | None:
     """The display name the session reports, or None while not signed in."""
     response = await client.get("/api/session")
@@ -41,8 +79,6 @@ def make_settings(tmp_path: Path, **overrides) -> Settings:
         "library_path": TOY_LIBRARY,
         "history_url": f"sqlite+aiosqlite:///{tmp_path}/cra.sqlite",
         "history_auto_migrate": True,
-        "auth_provider": "dev",
-        "auth_dev_user": "alice",
         "cookie_secure": False,
         "log_dir": tmp_path / "logs",
     }

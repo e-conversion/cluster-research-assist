@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from cra import __version__
-from cra.config.settings import Settings, unknown_keys
+from cra.config.settings import RETIRED_KEYS, Settings, unknown_keys
 
 EXIT_CONFIG = 2
 
@@ -26,6 +26,9 @@ def load_settings(args: argparse.Namespace) -> Settings:
     unknown = unknown_keys(args.env_file)
     if unknown:
         sys.stderr.write("unknown configuration keys: " + ", ".join(unknown) + "\n")
+        for key in unknown:
+            if key in RETIRED_KEYS:
+                sys.stderr.write(f"  {key} was removed: {RETIRED_KEYS[key]}\n")
         sys.exit(EXIT_CONFIG)
     try:
         return Settings.load(args.env_file)
@@ -294,16 +297,108 @@ def cmd_users_list(args: argparse.Namespace) -> int:
                 f"email  {email.email:40} user={email.user_id or '-'}  "
                 f"org={email.home_organization or '*'}  by {email.created_by}"
             )
+        usernames = await repo.usernames()
         for user in await repo.list_users():
             state = "active" if user.is_active else "disabled"
-            identities = ", ".join(
+            sign_in = [f"password:{usernames[user.id]}"] if user.id in usernames else []
+            sign_in += [
                 f"{i.issuer}:{i.sub[:12]}" for i in await repo.list_identities(user.id)
+            ]
+            _out(
+                f"user   {user.id:20} {user.display_name:30} {user.role:6} "
+                f"{state:8} {', '.join(sign_in)}"
             )
-            _out(f"user   {user.id:20} {user.display_name:30} {state:8} {identities}")
         await engine.dispose()
 
     asyncio.run(run())
     return 0
+
+
+def _read_password(from_stdin: bool) -> str | None:
+    import getpass
+
+    if from_stdin:
+        return sys.stdin.readline().rstrip("\r\n")
+    first = getpass.getpass("password: ")
+    if getpass.getpass("again: ") != first:
+        sys.stderr.write("the two passwords differ\n")
+        return None
+    return first
+
+
+def _link_hint(path: str) -> None:
+    from cra.app.auth import local
+
+    hours = int(local.LINK_LIFETIME.total_seconds() // 3600)
+    _out(f"one-time link, valid for {hours} hours; prefix the site's address:")
+    _out(f"  {path}")
+
+
+def cmd_users_create(args: argparse.Namespace) -> int:
+    """A password account. An admin gets its password here, so that a fresh
+    instance has someone who can sign in; others get a link by default."""
+    from cra.app.auth import local
+
+    settings = load_settings(args)
+    engine, repo = _repo(settings)
+    role = "admin" if args.admin else "user"
+    use_password = (
+        args.password or args.password_stdin or (args.admin and not args.link)
+    )
+
+    async def create() -> None:
+        username = local.check_username(args.username)
+        password = None
+        if use_password:
+            password = _read_password(args.password_stdin)
+            if password is None:
+                raise local.CredentialError("no password given")
+            local.check_password(password, username)
+        user = await local.create_user(repo, username, args.name, args.email, role)
+        if password is not None:
+            await repo.set_password_hash(user.id, await local.hash_password(password))
+            _out(f"created {role} {username} ({user.id}); it can sign in now")
+        else:
+            value = await local.issue_link(repo, user.id, local.Purpose.SETUP, "cli")
+            _out(f"created {role} {username} ({user.id})")
+            _link_hint(local.link_path(settings.base_path, value))
+
+    async def run() -> int:
+        try:
+            await create()
+        except local.CredentialError as exc:
+            sys.stderr.write(f"{exc}\n")
+            return 1
+        finally:
+            await engine.dispose()
+        return 0
+
+    return asyncio.run(run())
+
+
+def cmd_users_password_link(args: argparse.Namespace) -> int:
+    from cra.app.auth import local
+
+    settings = load_settings(args)
+    engine, repo = _repo(settings)
+
+    async def run() -> int:
+        try:
+            credential = await repo.get_credential_by_username(
+                local.normalise_username(args.username)
+            )
+            if credential is None:
+                sys.stderr.write("no password account with that username\n")
+                return 1
+            value = await local.reset(repo, credential.user_id, "cli")
+            await repo.delete_sessions_of(credential.user_id)
+            await repo.revoke_tokens_of(credential.user_id)
+            _link_hint(local.link_path(settings.base_path, value))
+            return 0
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(run())
 
 
 def cmd_users_add_email(args: argparse.Namespace) -> int:
@@ -566,13 +661,45 @@ def build_parser() -> argparse.ArgumentParser:
     rev.add_argument("-m", "--message", required=True)
     rev.set_defaults(func=cmd_db_revision)
 
-    users = sub.add_parser("users", help="users and the registered-email allow-list")
+    users = sub.add_parser("users", help="accounts and the registered-email allow-list")
     users_sub = users.add_subparsers(
         dest="users_command", metavar="<command>", required=True
     )
     users_sub.add_parser(
-        "list", help="registered emails, users and identities"
+        "list", help="registered emails, users and how they sign in"
     ).set_defaults(func=cmd_users_list)
+    create = users_sub.add_parser(
+        "create",
+        help="create a password account; the first admin of a new instance "
+        "is made this way",
+    )
+    create.add_argument("username", help="what the person signs in with")
+    create.add_argument("--name", required=True, help="full name, as shown")
+    create.add_argument("--email", default="", help="contact address")
+    create.add_argument("--admin", action="store_true", help="make it an admin")
+    how = create.add_mutually_exclusive_group()
+    how.add_argument(
+        "--password",
+        action="store_true",
+        help="type the password now (the default for --admin)",
+    )
+    how.add_argument(
+        "--password-stdin",
+        action="store_true",
+        help="read the password from the first line of stdin",
+    )
+    how.add_argument(
+        "--link",
+        action="store_true",
+        help="print a one-time set-password link (the default otherwise)",
+    )
+    create.set_defaults(func=cmd_users_create)
+    reset = users_sub.add_parser(
+        "password-link",
+        help="clear a password account's password and print a link to set a new one",
+    )
+    reset.add_argument("username")
+    reset.set_defaults(func=cmd_users_password_link)
     add = users_sub.add_parser("add-email", help="allow an email address to sign in")
     add.add_argument("email")
     add.add_argument("--by", default="cli", help="who registered it (for the record)")

@@ -26,6 +26,8 @@ class Claims:
     given_name: str = ""
     family_name: str = ""
     home_organization: str = ""
+    # the institution's name for people, where schacHomeOrganization is its domain
+    organization_name: str = ""
 
     @property
     def display_name(self) -> str:

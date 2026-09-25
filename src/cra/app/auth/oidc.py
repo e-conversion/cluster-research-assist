@@ -12,6 +12,7 @@ import hashlib
 import logging
 import secrets
 import time
+from dataclasses import asdict
 from typing import Any
 from urllib.parse import urlencode
 
@@ -32,6 +33,9 @@ log = logging.getLogger(__name__)
 CLOCK_LEEWAY_S = 60
 JWKS_MIN_REFRESH_S = 60
 SIGNING_ALGORITHMS = ["RS256", "PS256", "ES256"]
+# denials that a verified identity may answer by asking for an account; a
+# mismatched organisation or a disabled account may not
+REQUESTABLE = frozenset({LoginDenied.NOT_REGISTERED, LoginDenied.NO_EMAIL})
 
 
 def code_challenge(verifier: str) -> str:
@@ -41,8 +45,6 @@ def code_challenge(verifier: str) -> str:
 
 
 class OidcProvider:
-    name = "oidc"
-
     def __init__(
         self, settings: Settings, repo: Repository, http: httpx.AsyncClient
     ) -> None:
@@ -64,20 +66,21 @@ class OidcProvider:
             self._issuer + "/.well-known/openid-configuration"
         )
         response.raise_for_status()
-        self._discovery = response.json()
-        if self._discovery.get("issuer") != self._issuer:
+        # kept only once it has passed, or a rejected document would be used
+        # by the next sign-in
+        discovery = response.json()
+        if discovery.get("issuer") != self._issuer:
             raise ValueError(
-                f"discovery issuer {self._discovery.get('issuer')!r} != configured {self._issuer!r}"
+                f"discovery issuer {discovery.get('issuer')!r} != configured {self._issuer!r}"
             )
         for key in ("authorization_endpoint", "token_endpoint", "jwks_uri"):
-            if key not in self._discovery:
+            if key not in discovery:
                 raise ValueError(f"discovery document lacks {key}")
+        self._discovery = discovery
 
-    async def login(
-        self,
-        session: SessionState,
-        headers: dict[str, str],
-    ) -> str:
+    async def login(self, session: SessionState) -> str:
+        if not self._discovery:
+            await self.start()
         verifier = secrets.token_urlsafe(48)
         pending = {
             "state": secrets.token_urlsafe(24),
@@ -119,6 +122,8 @@ class OidcProvider:
             return LoginOutcome(denied=LoginDenied.FAILED)
         outcome = await resolve_login(self._repo, claims, self._organizations)
         outcome.grants_admin = outcome.bound and outcome.email in self._admins
+        if outcome.denied in REQUESTABLE:
+            outcome.identity = asdict(claims)
         return outcome
 
     def logout_url(self, post_logout_uri: str) -> str | None:
@@ -160,6 +165,7 @@ class OidcProvider:
             given_name=payload.get("given_name", ""),
             family_name=payload.get("family_name", ""),
             home_organization=payload.get("schac_home_organization", ""),
+            organization_name=payload.get("organization_name", ""),
         )
 
     async def _load_jwks(self) -> None:

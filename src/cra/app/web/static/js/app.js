@@ -6,7 +6,7 @@ import { initDialogs, toast } from "./settings.js";
 import { initHistory } from "./history.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration-graph.js";
-import { logo } from "./brand.js";
+import { isAccessRequest, isPasswordLink, renderAccessRequest, renderSetPassword, renderSignIn } from "./signin.js";
 
 export const store = {
   config: null,
@@ -30,28 +30,6 @@ function renderIdentity() {
   const s = store.session || {};
   document.getElementById("sign-out").hidden = !s.signed_in;
   document.getElementById("admin-link").hidden = !s.is_admin;
-}
-
-// The sign-in page follows the system theme; the choice between light and
-// dark is offered in Settings, once there is someone to remember it for.
-function renderSignIn(view, config) {
-  const card = document.createElement("div");
-  card.className = "signin";
-  const title = document.createElement("h1");
-  title.textContent = config.title;
-  const lede = document.createElement("p");
-  lede.className = "lede";
-  lede.textContent = `Ask about the research in ${config.cluster.name}: its papers, its groups and who works with whom.`;
-  const signIn = document.createElement("a");
-  signIn.className = "btn primary block";
-  signIn.href = config.auth.login_url;
-  signIn.textContent = "Sign in with your institution";
-  const note = document.createElement("p");
-  note.className = "muted small";
-  note.textContent = "Access is by invitation.";
-  card.append(logo(), title, lede, signIn, note);
-  view.replaceChildren(card);
-  for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
 
 // the message may echo whatever the server (or a proxy) sent: text, never markup
@@ -79,11 +57,17 @@ async function boot() {
     bar.textContent = config.notice;
     bar.hidden = false;
   }
+  // a set-password link works whoever is signed in in this browser
+  if (isPasswordLink()) { await renderSetPassword(view, config); return; }
   let session;
   try {
     session = await getJSON("api/session");
   } catch (e) {
-    if (e instanceof ApiError && e.status === 401) { renderSignIn(view, config); return; }
+    if (e instanceof ApiError && e.status === 401) {
+      if (isAccessRequest()) await renderAccessRequest(view, config);
+      else renderSignIn(view, config);
+      return;
+    }
     renderUnreachable(view, e);
     return;
   }

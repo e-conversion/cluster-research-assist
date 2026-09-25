@@ -1,9 +1,10 @@
 // The Settings dialog: appearance, MCP tokens and the account itself.
 // Token labels are user input, so every row is built from elements and text,
 // never from an HTML string.
-import { getJSON, postJSON, del } from "./api.js";
+import { getJSON, postJSON, putJSON, del } from "./api.js";
 import { syncControls } from "./theme.js";
 import { toast } from "./toast.js";
+import { copyText } from "./clipboard.js";
 
 const CONFIRM_WORD = "delete";
 const el = (id) => document.getElementById(id);
@@ -121,11 +122,9 @@ function forgetMinted() {
 async function copy(button) {
   const source = el(button.dataset.copy);
   const isInput = source.tagName === "INPUT";
-  try {
-    await navigator.clipboard.writeText(isInput ? source.value : source.textContent);
+  if (await copyText(isInput ? source.value : source.textContent)) {
     toast("Copied");
-  } catch {
-    // no clipboard outside a secure context: leave it selected for Ctrl+C
+  } else {
     if (isInput) {
       source.select();
     } else {
@@ -142,6 +141,7 @@ async function copy(button) {
 
 function renderAccount(me) {
   const facts = [["Name", me.name], ["Email", me.emails.join(", ") || "—"], ["Role", me.role], ["Since", day(me.created_at)]];
+  if (me.username) facts.splice(1, 0, ["Username", me.username]);
   el("account-facts").replaceChildren(...facts.flatMap(([term, value]) => {
     const dt = document.createElement("dt");
     dt.textContent = term;
@@ -149,11 +149,37 @@ function renderAccount(me) {
     dd.textContent = value;
     return [dt, dd];
   }));
+  // only a password account has a password to change
+  el("account-password").hidden = !me.username;
+  el("account-username").value = me.username || "";
+  forgetPasswords();
   showError("account-delete-blocked", me.delete_blocked);
   el("account-delete-form").hidden = Boolean(me.delete_blocked);
   el("account-delete-confirm").value = "";
   el("account-delete").disabled = true;
   showError("account-delete-error", "");
+}
+
+function forgetPasswords() {
+  for (const id of ["password-current", "password-new", "password-again"]) el(id).value = "";
+  showError("password-error", "");
+}
+
+async function changePassword() {
+  const current = el("password-current").value;
+  const next = el("password-new").value;
+  if (next !== el("password-again").value) { showError("password-error", "The two new passwords differ."); return; }
+  const button = el("password-change");
+  button.disabled = true;
+  try {
+    await putJSON("api/me/password", { current, new: next });
+    forgetPasswords();
+    toast("Password changed");
+  } catch (e) {
+    showError("password-error", e.message);
+  } finally {
+    button.disabled = false;
+  }
 }
 
 async function deleteAccount() {
@@ -227,5 +253,9 @@ export function initSettings(s) {
     el("account-delete").disabled = e.target.value.trim().toLowerCase() !== CONFIRM_WORD;
   });
   el("account-delete").addEventListener("click", deleteAccount);
-  el("dlg-settings").addEventListener("close", forgetMinted);
+  el("password-change").addEventListener("click", changePassword);
+  for (const id of ["password-current", "password-new", "password-again"]) {
+    el(id).addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); changePassword(); } });
+  }
+  el("dlg-settings").addEventListener("close", () => { forgetMinted(); forgetPasswords(); });
 }

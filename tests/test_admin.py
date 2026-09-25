@@ -1,7 +1,7 @@
 """The admin console API."""
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 
 from cra.app.policy import KEYS, Policy, PolicyError
 from cra.app.web.factory import create_app
@@ -9,20 +9,16 @@ from cra.app.web.factory import create_app
 
 @pytest.fixture
 async def admin_app(tmp_path):
-    app = create_app(
-        make_settings(
-            tmp_path, auth_dev_user="root", auth_admins=["root", "future@tum.de"]
-        )
-    )
+    app = create_app(make_settings(tmp_path, auth_admins=["future@tum.de"]))
     async with app.test_app():
         yield app
 
 
 @pytest.fixture
 async def admin(admin_app):
-    client = admin_app.test_client()
-    await client.get("/auth/login")
-    return client
+    return await sign_in(
+        admin_app, admin_app.test_client(), "ops", role="admin", name="root"
+    )
 
 
 async def json_of(response):
@@ -49,7 +45,7 @@ async def test_everyone_who_can_sign_in_is_in_one_list(admin, admin_app):
     assert [(p["email"], p["role"]) for p in by_kind["invitation"]] == [
         ("ada@tum.de", "admin")
     ]
-    # a configured admin who has not signed in yet is visible; root already has
+    # a configured admin who has not signed in yet is visible
     # an account, so it appears once, as that account
     assert [p["email"] for p in by_kind["configured"]] == ["future@tum.de"]
 
@@ -225,14 +221,9 @@ async def updatable(tmp_path):
 
     root = tmp_path / "library"
     init_root(root, write_library(tmp_path / "bundle"))
-    app = create_app(
-        make_settings(
-            tmp_path, library_path=root, auth_dev_user="root", auth_admins=["root"]
-        )
-    )
+    app = create_app(make_settings(tmp_path, library_path=root))
     async with app.test_app():
-        client = app.test_client()
-        await client.get("/auth/login")
+        client = await sign_in(app, app.test_client(), "ops", role="admin")
         yield app, client, root
 
 

@@ -8,7 +8,7 @@ conversation history; an admin additionally reaches the console.
 
 from dataclasses import dataclass, field
 from enum import Enum, StrEnum
-from typing import Any, Protocol
+from typing import Any
 
 from cra.core.tools.tiers import Tier
 
@@ -61,6 +61,9 @@ class LoginOutcome:
     # promote the account: only ever set on the login that bound the identity,
     # so an email claim on a later login cannot hand out admin
     grants_admin: bool = False
+    # the verified claims of an identity that has no account, kept so the
+    # person can ask for one without signing in again
+    identity: dict[str, str] | None = None
 
 
 @dataclass
@@ -70,23 +73,3 @@ class SessionState:
     id: str
     user_id: str | None
     data: dict[str, Any] = field(default_factory=dict)
-
-
-class AuthProvider(Protocol):
-    name: str
-
-    async def start(self) -> None:
-        """Startup work such as fetching a discovery document."""
-
-    async def login(
-        self, session: SessionState, headers: dict[str, str]
-    ) -> str | LoginOutcome:
-        """Either a URL to redirect the browser to, or an immediate outcome."""
-
-    async def callback(
-        self, session: SessionState, args: dict[str, str]
-    ) -> LoginOutcome:
-        """Finish a login the browser was redirected back from."""
-
-    def logout_url(self, post_logout_uri: str) -> str | None:
-        """An end-session URL at the identity provider, if it advertises one."""

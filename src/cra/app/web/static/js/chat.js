@@ -2,6 +2,7 @@
 import { streamChat, postJSON } from "./api.js";
 import { logo } from "./brand.js";
 import { StreamRenderer } from "./markdown.js";
+import { copyText } from "./clipboard.js";
 import { renderSettingsRow, toast } from "./settings.js";
 import { refreshSession } from "./app.js";
 
@@ -50,10 +51,9 @@ function copyButton(getText) {
   b.title = "Copy answer as markdown";
   b.append(svgUse("i-copy"));
   b.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(getText());
+    if (await copyText(getText())) {
       b.replaceChildren(svgUse("i-check")); b.classList.add("ok");
-    } catch { b.title = "copy failed"; }
+    } else { b.title = "copy failed"; }
     setTimeout(() => { b.replaceChildren(svgUse("i-copy")); b.classList.remove("ok"); }, 1500);
   });
   return b;

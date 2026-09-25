@@ -4,7 +4,7 @@ import asyncio
 import json
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 from fakes import FakeOpenAI, text_chunk, tool_chunk
 
 from cra.app.web import route_chat
@@ -33,7 +33,7 @@ async def app(tmp_path):
 @pytest.fixture
 async def client(app):
     client = app.test_client()
-    await client.get("/auth/login")
+    await sign_in(app, client)
     return client
 
 

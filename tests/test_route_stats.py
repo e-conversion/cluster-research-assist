@@ -1,14 +1,14 @@
 """Stats for nerds: totals over the stored answers."""
 
 import pytest
-from conftest import make_settings
+from conftest import make_settings, sign_in
 
 from cra.app.web.factory import create_app
 
 
 @pytest.fixture
 async def app(tmp_path):
-    app = create_app(make_settings(tmp_path, auth_dev_user="ada"))
+    app = create_app(make_settings(tmp_path))
     async with app.test_app():
         yield app
 
@@ -16,7 +16,7 @@ async def app(tmp_path):
 @pytest.fixture
 async def client(app):
     client = app.test_client()
-    await client.get("/auth/login")
+    await sign_in(app, client, "ada")
     return client
 
 
