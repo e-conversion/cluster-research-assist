@@ -197,10 +197,12 @@ in the process, tied to that browser session -- signing out or a restart ends
 it, and neither ever reaches the database.
 
 A source may also carry a key the deployment holds itself
-(`CRA_MCP_NOMAD_TOKEN`): an account that has no token of its own is connected
-with it on its first request, so the source works without anyone registering.
-It is read-only by construction -- the host withholds every tool that is not
-declared read-only -- and it never reaches the browser.
+(`CRA_MCP_NOMAD_TOKEN`), handed out only to the accounts
+`CRA_MCP_NOMAD_TOKEN_FOR` names (a user id or a local username): those are
+connected with it on their first request, so the source works without anyone
+registering. Everybody else registers their own key. The shared key is
+read-only by construction -- the host withholds every tool that is not declared
+read-only — and it never reaches the browser.
 
 Whatever that token unlocks upstream is exactly what the model is offered:
 the tools are namespaced (`elab_*`, `dt_*`, `nomad_*`) so they cannot collide

@@ -60,15 +60,15 @@ async def restore(ctx: Any, session: SessionState | None, user_id: str | None) -
     """What this session should already be connected to.
 
     Two kinds come back on a first request: the account's own tokens (with
-    CRA_SOURCE_TOKEN_KEY set) and, for the sources this deployment holds a key
-    for, the shared one. The account's own token wins — a source that is
-    already live is left alone.
+    CRA_SOURCE_TOKEN_KEY set) and, for the accounts a source names as its
+    shared-key holders, the deployment's key for that source. The account's own
+    token wins — a source that is already live is left alone.
     """
     if session is None:
         return
     if ctx.vault.enabled and user_id is not None:
         await _restore_own(ctx, session, user_id)
-    await _connect_shared(ctx, session)
+    await _connect_shared(ctx, session, user_id)
 
 
 async def _restore_own(ctx: Any, session: SessionState, user_id: str) -> None:
@@ -98,15 +98,20 @@ async def _restore_own(ctx: Any, session: SessionState, user_id: str) -> None:
             )
 
 
-async def _connect_shared(ctx: Any, session: SessionState) -> None:
-    """Connect the sources this deployment holds a key for.
+async def _connect_shared(ctx: Any, session: SessionState, user_id: str | None) -> None:
+    """Connect the sources this deployment holds a key for, for the accounts
+    that source names. Everybody else registers their own token.
 
     Read-only by construction: the host withholds every tool that is not
     declared read-only, so a shared key never writes. Nobody sees the key.
     """
+    if user_id is None:
+        return
     status = ctx.remote.status(session.id)
     for kind, source in ctx.remote.sources.items():
-        if not source.shared_token:
+        if not source.shared_token or not source.shared_token_for:
+            continue
+        if not await _holds_shared_key(ctx, source, user_id):
             continue
         live = status.get(kind)
         if live is None or live["active"]:
@@ -119,3 +124,16 @@ async def _connect_shared(ctx: Any, session: SessionState) -> None:
                 "shared source did not connect",
                 extra={"fields": {"source": kind, "error": result.get("error")}},
             )
+
+
+async def _holds_shared_key(ctx: Any, source: Any, user_id: str) -> bool:
+    """Is this account one the source names?
+
+    A name is either a user id or a local username; an account that signs in
+    through an identity provider has no username here, so a deployment that
+    wants to name such an account has to use its user id.
+    """
+    if user_id in source.shared_token_for:
+        return True
+    credential = await ctx.repo.get_credential(user_id)
+    return credential is not None and credential.username in source.shared_token_for
