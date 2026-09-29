@@ -22,6 +22,11 @@ class Source:
     register_url: str
     default_base_url: str
     profiles: tuple[tuple[str, str], ...] = ()
+    # A key this deployment holds for everybody: whoever has no token of their
+    # own is connected with it. It never reaches the browser, and the tools it
+    # unlocks are the read-only ones — a steered model must not be able to write
+    # with somebody else's account.
+    shared_token: str = ""
 
     @property
     def prefix(self) -> str:
@@ -78,5 +83,15 @@ def configured(settings: Settings) -> dict[str, Source]:
             url=settings.mcp_datatagger_url,
             register_url=settings.mcp_datatagger_register_url,
             default_base_url=settings.mcp_datatagger_base_url,
+        )
+    if settings.mcp_nomad_url:
+        found["nomad"] = Source(
+            kind="nomad",
+            label="NOMAD",
+            key_label="NOMAD API key",
+            url=settings.mcp_nomad_url,
+            register_url=settings.mcp_nomad_register_url,
+            default_base_url=settings.mcp_nomad_base_url,
+            shared_token=settings.mcp_nomad_token.get_secret_value(),
         )
     return found

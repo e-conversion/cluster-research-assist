@@ -141,6 +141,13 @@ class Settings(BaseSettings):
     mcp_datatagger_url: str = ""
     mcp_datatagger_register_url: str = ""
     mcp_datatagger_base_url: str = ""
+    mcp_nomad_url: str = ""
+    mcp_nomad_register_url: str = ""
+    mcp_nomad_base_url: str = ""
+    # A deployment key for this source: an account that has no token of its own
+    # is connected with it, read-only (see remote_write_tools). It stays on the
+    # server and never reaches the browser. Empty leaves the source opt-in.
+    mcp_nomad_token: SecretStr = SecretStr("")
     mcp_pool_idle_s: float = Field(default=600, gt=0)
     # offer remote tools that change data (eLN writes) to the model; off, only
     # tools declared or named read-only are listed

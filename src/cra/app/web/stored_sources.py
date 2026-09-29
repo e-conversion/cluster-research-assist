@@ -57,8 +57,21 @@ async def remember(ctx: Any, user_id: str, kind: str, token: str) -> None:
 
 
 async def restore(ctx: Any, session: SessionState | None, user_id: str | None) -> None:
-    if not ctx.vault.enabled or session is None or user_id is None:
+    """What this session should already be connected to.
+
+    Two kinds come back on a first request: the account's own tokens (with
+    CRA_SOURCE_TOKEN_KEY set) and, for the sources this deployment holds a key
+    for, the shared one. The account's own token wins — a source that is
+    already live is left alone.
+    """
+    if session is None:
         return
+    if ctx.vault.enabled and user_id is not None:
+        await _restore_own(ctx, session, user_id)
+    await _connect_shared(ctx, session)
+
+
+async def _restore_own(ctx: Any, session: SessionState, user_id: str) -> None:
     status = ctx.remote.status(session.id)
     for row in await ctx.repo.source_connections_of(user_id):
         live = status.get(row.kind)
@@ -82,4 +95,27 @@ async def restore(ctx: Any, session: SessionState | None, user_id: str | None) -
             log.info(
                 "stored source did not reconnect",
                 extra={"fields": {"user": user_id, "source": row.kind}},
+            )
+
+
+async def _connect_shared(ctx: Any, session: SessionState) -> None:
+    """Connect the sources this deployment holds a key for.
+
+    Read-only by construction: the host withholds every tool that is not
+    declared read-only, so a shared key never writes. Nobody sees the key.
+    """
+    status = ctx.remote.status(session.id)
+    for kind, source in ctx.remote.sources.items():
+        if not source.shared_token:
+            continue
+        live = status.get(kind)
+        if live is None or live["active"]:
+            continue
+        if not ctx.vault.first_attempt(session.id, kind):
+            continue
+        result = await ctx.remote.connect(session.id, kind, source.shared_token)
+        if not result["active"]:
+            log.info(
+                "shared source did not connect",
+                extra={"fields": {"source": kind, "error": result.get("error")}},
             )

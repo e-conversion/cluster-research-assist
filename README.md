@@ -186,24 +186,31 @@ long it took -- never the arguments, which are someone else's query.
 Point a client at `https://<host><base path>/mcp` with
 `Authorization: Bearer <token>`.
 
-## Connecting your own eLabFTW or DataTagger
+## Connecting your own eLabFTW, DataTagger or NOMAD
 
 The assistant can also work with the user's *own* data, through the MCP servers
-that already sit in front of eLabFTW and DataTagger. A user registers once from
-the chat: the dialog asks for the address of their instance and their API key,
-the key is passed to the registration service, and the personal token it mints
-is what the assistant uses. The key is never stored and the token lives in the
-process, tied to that browser session -- signing out or a restart ends it, and
-neither ever reaches the database.
+that already sit in front of eLabFTW, DataTagger and NOMAD. A user registers
+once from the chat: the dialog asks for the address of their instance and their
+API key, the key is passed to the registration service, and the personal token
+it mints is what the assistant uses. The key is never stored and the token lives
+in the process, tied to that browser session -- signing out or a restart ends
+it, and neither ever reaches the database.
+
+A source may also carry a key the deployment holds itself
+(`CRA_MCP_NOMAD_TOKEN`): an account that has no token of its own is connected
+with it on its first request, so the source works without anyone registering.
+It is read-only by construction -- the host withholds every tool that is not
+declared read-only -- and it never reaches the browser.
 
 Whatever that token unlocks upstream is exactly what the model is offered:
-the tools are namespaced (`elab_*`, `dt_*`) so they cannot collide with the
-library's own, and the session is pooled, so a whole conversation costs one
-handshake instead of one per tool call. A source that stops answering is
+the tools are namespaced (`elab_*`, `dt_*`, `nomad_*`) so they cannot collide
+with the library's own, and the session is pooled, so a whole conversation costs
+one handshake instead of one per tool call. A source that stops answering is
 replaced by a single entry saying so rather than taking the chat down.
 
-Both are opt-in per deployment: without `CRA_MCP_ELAB_URL` or
-`CRA_MCP_DATATAGGER_URL` the connector interface does not appear at all.
+Each is opt-in per deployment: without `CRA_MCP_ELAB_URL`,
+`CRA_MCP_DATATAGGER_URL` or `CRA_MCP_NOMAD_URL` the connector interface does not
+appear for it at all.
 
 ## Configuration and settings
 

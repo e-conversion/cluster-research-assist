@@ -254,7 +254,7 @@ function renderStats(s) {
   const u = s.usage;
   const tools = store.session.tools;
   const inventory = [`${tools.local} local`]
-    .concat(tools.elab ? [`${tools.elab} eLabFTW`] : [], tools.dt ? [`${tools.dt} DataTagger`] : []).join(" · ");
+    .concat(sourceCounts(store, tools)).join(" · ");
   const kpi = (n, l) => `<div class="kpi"><div class="n">${escapeHtml(n)}</div><div class="l">${escapeHtml(l)}</div></div>`;
   const row = (cells, num = []) => `<tr>${cells.map((c, i) => `<td class="${num.includes(i) ? "num" : ""}">${escapeHtml(c ?? "—")}</td>`).join("")}</tr>`;
   return `
@@ -418,12 +418,14 @@ function modelPicker(store) {
   inventory.className = "hint";
   inventory.textContent =
     "Tools: " +
-    [`${tools.local} local`]
-      .concat(
-        tools.elab ? [`${tools.elab} eLabFTW`] : [],
-        tools.dt ? [`${tools.dt} DataTagger`] : [],
-      )
-      .join(" \u00b7 ");
+    [`${tools.local} local`].concat(sourceCounts(store, tools)).join(" \u00b7 ");
   menu.append(inventory);
   return picker;
+}
+
+/** "<n> <label>" per connected source, in the order the server lists them. */
+function sourceCounts(store, tools) {
+  return Object.entries(store.config.sources || {})
+    .filter(([kind]) => tools[kind])
+    .map(([kind, src]) => `${tools[kind]} ${src.label}`);
 }
