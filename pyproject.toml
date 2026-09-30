@@ -33,7 +33,7 @@ dependencies = [
     "numpy",
     "rank-bm25",
     "networkx",
-    "mcp",
+    "mcp>=2.2,<3",
     "sqlalchemy[asyncio]",
     "aiosqlite",
     "alembic",
