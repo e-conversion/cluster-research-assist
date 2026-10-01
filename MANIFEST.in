@@ -20,3 +20,6 @@ prune journal
 global-exclude *.py[cod]
 global-exclude .DS_Store
 prune **/__pycache__
+
+# screenshots for the README, not for the package
+prune docs

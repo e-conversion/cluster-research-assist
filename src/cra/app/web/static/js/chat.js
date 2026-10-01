@@ -8,6 +8,13 @@ import { refreshSession } from "./app.js";
 
 const SEND_ICON = "➤";
 const STOP_ICON = "■";
+// Scrolled further than this from the end, the reader is shown the way back.
+const LATEST_AWAY_PX = 160;
+
+// A touch-only device types on a screen keyboard: Return there starts a new
+// line, as in every messaging app, and the keyboard stays shut unless asked for.
+const touchOnly = matchMedia("(hover: none) and (pointer: coarse)");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -264,10 +271,15 @@ export function chatView(store) {
       ta.placeholder = store.config.placeholder;
       const send = el("button", "btn primary send", SEND_ICON);
       send.type = "button";
-      send.title = "Send (Enter)";
       box.append(ta, send);
       const settingsRow = el("div", "settings-row");
-      composer.append(box, settingsRow);
+      const latest = el("button", "to-latest");
+      latest.type = "button";
+      latest.title = "Scroll to the newest";
+      latest.setAttribute("aria-label", latest.title);
+      latest.append(svgUse("i-down"));
+      latest.hidden = true;
+      composer.append(latest, box, settingsRow);
       wrap.append(composer);
       root.append(list, wrap);
       container.append(root);
@@ -275,22 +287,30 @@ export function chatView(store) {
       let renderedCount = -1;
       // Follow the stream until the reader scrolls up; resume when they return to the bottom.
       let autoScroll = true;
-      const atBottom = () => (document.documentElement.scrollHeight - window.scrollY - window.innerHeight) < 6;
+      const fromBottom = () => document.documentElement.scrollHeight - window.scrollY - window.innerHeight;
+      const atBottom = () => fromBottom() < 6;
       const onIntent = (ev) => {
         if (ev.type === "wheel" && ev.deltaY >= 0) return;
         if (ev.type === "keydown" && !["ArrowUp", "PageUp", "Home"].includes(ev.key)) return;
         autoScroll = false;
       };
-      const onScroll = () => { if (atBottom()) autoScroll = true; };
+      const syncLatest = () => { latest.hidden = fromBottom() < LATEST_AWAY_PX; };
+      const onScroll = () => { if (atBottom()) autoScroll = true; syncLatest(); };
       addEventListener("wheel", onIntent, { passive: true });
       addEventListener("touchmove", onIntent, { passive: true });
       addEventListener("keydown", onIntent);
       addEventListener("scroll", onScroll, { passive: true });
+      addEventListener("resize", syncLatest, { passive: true });
       let scrollRaf = 0;
       const scrollDown = () => {
-        if (!autoScroll || scrollRaf) return;
+        if (!autoScroll) { syncLatest(); return; }
+        if (scrollRaf) return;
         scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; if (autoScroll) window.scrollTo(0, document.documentElement.scrollHeight); });
       };
+      latest.addEventListener("click", () => {
+        autoScroll = true;
+        window.scrollTo({ top: document.documentElement.scrollHeight, behavior: reduceMotion.matches ? "auto" : "smooth" });
+      });
 
       function renderEmpty() {
         const e = el("div", "landing");
@@ -346,12 +366,14 @@ export function chatView(store) {
         }
         renderedCount = msgs.length;
         if (store.streaming) list.append(el("div", "note info", "A response is still being generated…"));
+        syncLatest();
       }
 
       function setMode(streaming) {
         send.textContent = streaming ? STOP_ICON : SEND_ICON;
         send.classList.toggle("stop", streaming);
-        send.title = streaming ? "Stop generating" : "Send (Enter)";
+        send.title = streaming ? "Stop generating" : touchOnly.matches ? "Send" : "Send (Enter)";
+        send.setAttribute("aria-label", send.title);
         ta.disabled = streaming;
       }
 
@@ -365,6 +387,8 @@ export function chatView(store) {
         if (!text || store.streaming) return;
         if (!store.session.messages.length && !list.querySelector(".msg")) list.replaceChildren();
         ta.value = ""; grow();
+        // the screen keyboard would cover the answer as it streams in
+        if (touchOnly.matches) ta.blur();
         appendUser(text);
         autoScroll = true;
         const a = new AssistantMessage(list);
@@ -401,13 +425,17 @@ export function chatView(store) {
           try { await waitForIdle(); } catch { /* keep the DOM as is */ }
           store.update({ streaming: false, stop: null });
           setMode(false);
-          ta.focus();
+          if (!touchOnly.matches) ta.focus();
         }
       }
 
       send.addEventListener("click", () => { if (store.streaming) store.stop?.(); else submit(ta.value); });
       ta.addEventListener("keydown", (ev) => {
-        if (ev.key === "Enter" && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); submit(ta.value); }
+        if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return;
+        // ⌘/Ctrl+Enter sends everywhere, also from a keyboard attached to a tablet
+        if (touchOnly.matches && !ev.metaKey && !ev.ctrlKey) return;
+        ev.preventDefault();
+        submit(ta.value);
       });
       ta.addEventListener("input", grow);
 
@@ -420,12 +448,13 @@ export function chatView(store) {
       renderSettingsRow(store, settingsRow);
       renderHistory();
       setMode(store.streaming);
-      ta.focus();
+      if (!touchOnly.matches) ta.focus();
 
       return () => {
         unsub();
         removeEventListener("scroll", onScroll); removeEventListener("wheel", onIntent);
         removeEventListener("touchmove", onIntent); removeEventListener("keydown", onIntent);
+        removeEventListener("resize", syncLatest);
       };
     },
   };

@@ -3,7 +3,7 @@
 <html lang="en" data-brand-version="{{ brand.version }}">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>{{ title }}</title>
 {{ b.head() }}
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,6 +29,9 @@
   <symbol id="i-rerun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></g></symbol>
   <symbol id="i-modify" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="M14.5 6.5l3 3"/></g></symbol>
   <symbol id="i-new" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4.2 3.4c-.4.3-.8 0-.8-.5V5.5Z"/><path d="M12 6.5v6M9 9.5h6"/></g></symbol>
+  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></g></symbol>
 </svg>
 <header class="top">
@@ -36,9 +39,9 @@
     {%- if brand.has_wide_logo %}{{ b.logo("wide") }}{% else %}{{ b.logo("square") }}<span class="brand-name">{{ title }}</span>{% endif -%}
   </a>
   <nav class="nav" id="nav">
-    <a href="#/chat" data-route="chat"><svg class="ico"><use href="#i-chat"/></svg><span>Chat</span></a>
-    <a href="#/publication-map" data-route="publication-map"><svg class="ico"><use href="#i-map"/></svg><span>Publication Map</span></a>
-    <a href="#/collaboration-graph" data-route="collaboration-graph"><svg class="ico"><use href="#i-graph"/></svg><span>Collaboration Graph</span></a>
+    <a href="#/chat" data-route="chat" aria-label="Chat"><svg class="ico"><use href="#i-chat"/></svg><span>Chat</span></a>
+    <a href="#/publication-map" data-route="publication-map" aria-label="Publication Map"><svg class="ico"><use href="#i-map"/></svg><span>Publication Map</span></a>
+    <a href="#/collaboration-graph" data-route="collaboration-graph" aria-label="Collaboration Graph"><svg class="ico"><use href="#i-graph"/></svg><span>Collaboration Graph</span></a>
   </nav>
   <div class="top-actions">
     <button class="act" id="new-chat" title="Start a new conversation"><svg class="ico"><use href="#i-new"/></svg><span>New chat</span></button>

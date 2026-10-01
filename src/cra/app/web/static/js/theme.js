@@ -36,7 +36,7 @@ export function syncControls(mode = currentTheme()) {
   }
 }
 
-/** Same-origin iframes (the maps) run their own theme-boot; hand them a change made here. */
+/** Same-origin iframes (the pipeline map) run their own theme-boot; hand them a change made here. */
 export function propagateTheme(iframe) {
   try {
     const root = iframe.contentDocument?.documentElement;

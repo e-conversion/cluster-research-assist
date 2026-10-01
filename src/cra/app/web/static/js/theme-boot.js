@@ -23,4 +23,17 @@
   }
   apply();
   system.addEventListener("change", apply);
+
+  // A phone's browser tints its toolbar to match the page's own header, also
+  // when the page's theme differs from the system's. The colour is the brand's,
+  // so it is read once the stylesheets are in, and again after every switch.
+  var tint = document.createElement("meta");
+  tint.name = "theme-color";
+  document.head.appendChild(tint);
+  function retint() {
+    var panel = getComputedStyle(root).getPropertyValue("--panel").trim();
+    if (panel) tint.content = panel;
+  }
+  window.addEventListener("load", retint);
+  new MutationObserver(retint).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
 })();

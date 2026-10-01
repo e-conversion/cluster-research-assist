@@ -2,21 +2,12 @@
 import { getJSON, postJSON } from "../api.js";
 import { escapeHtml } from "../markdown.js";
 import { toast } from "../toast.js";
+import { expandable, loadScript } from "./viz.js";
 
 const DECK_URL = "https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js";
 // pinned build; bump both together
 const DECK_INTEGRITY = "sha384-tEG529toczQRv/bqd2PyHy5vTO49FMjQri0c1oB44gSkYiNouZz8L9yNTVx0YGl+";
-let deckLoading = null;
-function loadDeck() {
-  if (window.deck) return Promise.resolve();
-  if (!deckLoading) deckLoading = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = DECK_URL; s.integrity = DECK_INTEGRITY; s.crossOrigin = "anonymous";
-    s.onload = resolve; s.onerror = () => reject(new Error("deck.gl failed to load"));
-    document.head.append(s);
-  });
-  return deckLoading;
-}
+const loadDeck = () => loadScript(DECK_URL, DECK_INTEGRITY, "deck");
 
 const cache = new Map(); // clusters -> payload (server memoises too; this saves the round-trip)
 
@@ -26,6 +17,12 @@ const LABEL = { w: 345, h: 22, size: 11.5, chars: 60, offset: 9 };
 const FIRST_TITLES_AT = 0.75, LAST_TITLES_AT = 8, TITLE_STEP = 0.5, FADE = 0.5;
 // Cluster names are full at the fitted view and gone this many zoom levels in.
 const CLUSTER_FADE_START = 0.4, CLUSTER_FADE_LEN = 1.2;
+// A cluster name's box: the padding around its text, and the step in zoom at
+// which a name that would cover another one is tried again.
+const NAME = { padX: 9, padY: 5, step: 0.25 };
+// After a release the view keeps moving this long, as a touch screen leads one to expect.
+const INERTIA_MS = 300;
+const GLIDE_MS = 450;
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const truncate = (t) => (t.length > LABEL.chars ? t.slice(0, LABEL.chars - 1).trimEnd() + "…" : t);
@@ -61,7 +58,7 @@ function clusterMarks(points, legend) {
       const d = Math.hypot(p.x - cx, p.y - cy);
       if (d < bd) { bd = d; best = p; }
     }
-    return { cluster, x: best.x, y: best.y, cx, cy, color: colour.get(cluster) || [128, 128, 128] };
+    return { cluster, n: s.n, x: best.x, y: best.y, cx, cy, color: colour.get(cluster) || [128, 128, 128] };
   });
 }
 
@@ -103,6 +100,44 @@ function planTitles(points, marks, fitZoom) {
   return at;
 }
 
+/**
+ * Decide, per cluster, where and from which zoom its name shows. Biggest
+ * cluster first, a name goes on its cloud, or one label height above or below
+ * it, wherever its box clears every name placed before it for as long as names
+ * show at all. One that fits nowhere waits for the zoom at which it does: on a
+ * phone the clouds sit too close for every name at the fitted view, and the
+ * legend lists them all. Returns a Map cluster -> { z, dy } (dy in pixels);
+ * names that never fit are absent.
+ */
+function planNames(marks, fitZoom, size) {
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = `600 ${size}px ${fontFamily()}`;
+  const boxes = [...marks].sort((a, b) => b.n - a.n).map((m) => ({
+    m, w: measure.measureText(m.cluster).width + 2 * NAME.padX + 4, h: size + 2 * NAME.padY + 4,
+  }));
+  const zooms = [];
+  for (let z = fitZoom; z <= fitZoom + CLUSTER_FADE_START + CLUSTER_FADE_LEN; z += NAME.step) zooms.push(z);
+  // Shifted boxes can close in on each other as the clouds spread apart, so a
+  // place must stay clear at every later zoom, not only the first.
+  const clear = (b, dy, from) => shown.every((o) => zooms.slice(from).every((z) => {
+    const k = 2 ** z;
+    return Math.abs((b.m.x - o.m.x) * k) >= (b.w + o.w) / 2
+      || Math.abs((b.m.y - o.m.y) * k + dy - o.dy) >= (b.h + o.h) / 2;
+  }));
+  const at = new Map();
+  const shown = [];
+  zooms.forEach((z, i) => {
+    for (const b of boxes) {
+      if (at.has(b.m.cluster)) continue;
+      const dy = [0, -b.h, b.h].find((shift) => clear(b, shift, i));
+      if (dy === undefined) continue;
+      at.set(b.m.cluster, { z, dy });
+      shown.push({ ...b, dy });
+    }
+  });
+  return at;
+}
+
 export function libraryMapView(store) {
   return {
     mount(container) {
@@ -113,7 +148,7 @@ export function libraryMapView(store) {
         <div class="page">
           <h1>Publication Map</h1>
           <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
-            labeled with their top title keywords. Hover over a point for its citation.</p>
+            labeled with their top title keywords. Hover over a point for its citation; click or tap it for the details.</p>
           <div class="map-row">
             <p class="row-hint">Adjust number of clusters</p>
             <div class="map-toolbar">
@@ -123,35 +158,45 @@ export function libraryMapView(store) {
           <div class="map-row">
             <p class="row-hint">Locate ${escapeHtml(article(ours))} ${escapeHtml(ours)} publication.</p>
             <div class="map-toolbar">
-              <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
+              <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" enterkeyhint="search" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
             </div>
           </div>
           <div class="map-row">
             <p class="row-hint">Locate an external work based on the DOI.</p>
             <div class="map-toolbar">
-              <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
+              <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" inputmode="url" enterkeyhint="go" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
               <button class="btn primary" id="doi-go" type="button">Place on the map</button>
             </div>
           </div>
           <div class="lookup-card" id="lookup-card" hidden></div>
           <div class="legend" id="legend"></div>
-          <div class="map-frame"><canvas id="deck-canvas"></canvas><div class="map-status" id="map-status">Loading…</div></div>
+          <div class="viz-frame map-frame"><canvas id="deck-canvas"></canvas><div class="map-status" id="map-status">Loading…</div>
+            <div class="map-card" id="map-card" hidden></div></div>
         </div>`;
       const $ = (id) => container.querySelector("#" + id);
       const status = $("map-status");
       const wrap = container.querySelector(".map-frame");
+      const mapCard = $("map-card");
       let deckInst = null;
       let data = [];
       let marks = [];
       let titleAt = new Map();
+      let nameAt = new Map();
       let fitZoom = 0;
       let zoom = 0;
       let hits = [];
       let placed = null;   // the response for a DOI brought in from outside
+      let selected = null; // the point whose details the card shows
       let busy = false;
       let disposed = false;
+      // A touch screen has no hover: a tap pins the card instead, and a
+      // tooltip left behind where the finger lifted would only repeat it.
+      const noHover = matchMedia("(hover: none)");
+      const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
       function frameSize() { return [wrap.clientWidth || 700, wrap.clientHeight || 540]; }
+      // smaller names on a phone, so more of them fit beside each other
+      const nameSize = () => (frameSize()[0] < 520 ? 12.5 : 14);
 
       function extent() {
         const xs = data.map((d) => d.x), ys = data.map((d) => d.y);
@@ -162,6 +207,13 @@ export function libraryMapView(store) {
         const { minx, maxx, miny, maxy } = extent();
         const [W, H] = frameSize();
         return Math.log2(0.85 * Math.min(W / Math.max(maxx - minx, 1e-6), H / Math.max(maxy - miny, 1e-6)));
+      }
+
+      /** Everything that depends on the frame's size: the fitted zoom and the label plans. */
+      function plan() {
+        fitZoom = baseZoom();
+        titleAt = planTitles(data, marks, fitZoom);
+        nameAt = planNames(marks, fitZoom, nameSize());
       }
 
       function fit(matches) {
@@ -207,6 +259,9 @@ export function libraryMapView(store) {
         const font = fontFamily();
         const depth = zoom - fitZoom;
         const clusterAlpha = clamp01(1 - (depth - CLUSTER_FADE_START) / CLUSTER_FADE_LEN);
+        // full at the zoom the plan gave it, faded in over the step before
+        const nameAlpha = (d) => Math.min(clusterAlpha, clamp01(1 + (zoom - (nameAt.get(d.cluster)?.z ?? Infinity)) / NAME.step));
+        const named = marks.filter((d) => nameAlpha(d) > 0);
         // A handful of search hits are always named; beyond that the plan decides.
         const pinned = new Set(hits.length <= 12 ? hits.map((d) => d.doi) : []);
         const titleAlpha = (d) => (pinned.has(d.doi) ? 1 : clamp01((zoom - (titleAt.get(d.doi) ?? Infinity)) / FADE));
@@ -225,6 +280,15 @@ export function libraryMapView(store) {
           getRadius: 12, radiusUnits: "pixels", radiusMinPixels: 12, radiusMaxPixels: 12, pickable: false,
           updateTriggers: { getLineColor: ink },
         }));
+        if (selected) {
+          const accent = tokenRGB("--accent");
+          L.push(new ScatterplotLayer({
+            id: "selected", data: [selected], getPosition: (d) => [d.x, d.y],
+            filled: false, stroked: true, getLineColor: accent, lineWidthUnits: "pixels", getLineWidth: 2.5,
+            getRadius: 10, radiusUnits: "pixels", radiusMinPixels: 10, radiusMaxPixels: 10, pickable: false,
+            updateTriggers: { getLineColor: accent },
+          }));
+        }
         if (titled.length) L.push(new TextLayer({
           id: "titles", data: titled, pickable: false, characterSet: "auto", fontFamily: font,
           getPosition: (d) => [d.x, d.y], getText: (d) => truncate(d.cite || d.title),
@@ -235,15 +299,16 @@ export function libraryMapView(store) {
           getBackgroundColor: (d) => [...panel, Math.round(200 * titleAlpha(d))],
           updateTriggers: { getColor: [zoom, muted], getBackgroundColor: [zoom, panel] },
         }));
-        if (clusterAlpha > 0) L.push(new TextLayer({
-          id: "cluster-names", data: marks, pickable: false, characterSet: "auto", fontFamily: font, fontWeight: 600,
+        if (named.length) L.push(new TextLayer({
+          id: "cluster-names", data: named, pickable: false, characterSet: "auto", fontFamily: font, fontWeight: 600,
           getPosition: (d) => [d.x, d.y], getText: (d) => d.cluster,
-          getSize: 14, sizeUnits: "pixels", getTextAnchor: "middle", getAlignmentBaseline: "center",
-          getColor: [...ink, Math.round(255 * clusterAlpha)],
-          background: true, backgroundPadding: [9, 5],
-          getBackgroundColor: [...panel, Math.round(225 * clusterAlpha)],
-          getBorderColor: (d) => [...d.color, Math.round(255 * clusterAlpha)], getBorderWidth: 1.5,
-          updateTriggers: { getBorderColor: clusterAlpha },
+          getSize: nameSize(), sizeUnits: "pixels", getTextAnchor: "middle", getAlignmentBaseline: "center",
+          getPixelOffset: (d) => [0, nameAt.get(d.cluster).dy],
+          getColor: (d) => [...ink, Math.round(255 * nameAlpha(d))],
+          background: true, backgroundPadding: [NAME.padX, NAME.padY],
+          getBackgroundColor: (d) => [...panel, Math.round(225 * nameAlpha(d))],
+          getBorderColor: (d) => [...d.color, Math.round(255 * nameAlpha(d))], getBorderWidth: 1.5,
+          updateTriggers: { getColor: [zoom, ink], getBackgroundColor: [zoom, panel], getBorderColor: zoom, getPixelOffset: nameAt },
         }));
         if (placed) {
           const { LineLayer } = window.deck;
@@ -309,12 +374,12 @@ export function libraryMapView(store) {
       function draw() {
         const { found, viewState } = fit(matchesFor($("paper-search").value));
         hits = found;
-        zoom = viewState.zoom;
-        const { Deck, OrthographicView } = window.deck;
+        const { Deck, OrthographicView, LinearInterpolator } = window.deck;
         if (!deckInst) {
+          zoom = viewState.zoom;
           deckInst = new Deck({
             canvas: $("deck-canvas"), views: new OrthographicView({}),
-            controller: { scrollZoom: true, dragPan: true, doubleClickZoom: true },
+            controller: { scrollZoom: true, dragPan: true, doubleClickZoom: true, touchZoom: true, inertia: INERTIA_MS },
             initialViewState: viewState, layers: layers(),
             onViewStateChange: ({ viewState: vs }) => {
               // Label visibility is a function of zoom; a hundredth of a level is
@@ -322,7 +387,8 @@ export function libraryMapView(store) {
               const q = Math.round(vs.zoom * 100) / 100;
               if (q !== zoom) { zoom = q; relayer(); }
             },
-            getTooltip: ({ object }) => object && {
+            onClick: ({ object }) => select(object || null),
+            getTooltip: ({ object }) => object && object !== selected && !noHover.matches && {
               html: object.placed
                 ? `<b>${escapeHtml(object.cite)}</b><br/>not in the library · placed among its nearest neighbours`
                 : `<b>${escapeHtml(object.cite || object.title)}</b><br/>${escapeHtml(object.title)}<br/>${escapeHtml(String(object.year || ""))} · ${escapeHtml(String(object.cluster || ""))}`,
@@ -330,8 +396,31 @@ export function libraryMapView(store) {
             },
           });
         } else {
-          deckInst.setProps({ layers: layers(), initialViewState: viewState });
+          // glide to a search hit or a placed DOI rather than jump there
+          const glide = reduceMotion.matches ? {} : { transitionDuration: GLIDE_MS, transitionInterpolator: new LinearInterpolator(["target", "zoom"]) };
+          deckInst.setProps({ layers: layers(), initialViewState: { ...viewState, ...glide } });
         }
+      }
+
+      /** Pin a point's details in the card, or clear them with null. */
+      function select(object) {
+        selected = object;
+        mapCard.hidden = !object;
+        if (object) {
+          const meta = object.placed
+            ? "Not in the library · placed among its nearest neighbours"
+            : [object.year, object.cluster].filter(Boolean).join(" · ");
+          const doi = String(object.doi || "");
+          const title = object.title && object.title !== object.cite && object.title !== doi
+            ? `<div class="title">${escapeHtml(object.title)}</div>` : "";
+          const link = doi.startsWith("10.")
+            ? `<a href="https://doi.org/${escapeHtml(encodeURI(doi))}" target="_blank" rel="noopener noreferrer">doi.org/${escapeHtml(doi)}</a>` : "";
+          mapCard.innerHTML = `<button type="button" class="close" aria-label="Close">✕</button>
+            <div class="cite">${escapeHtml(object.cite || object.title)}</div>${title}
+            <div class="meta">${escapeHtml(String(meta))}</div>${link}`;
+          mapCard.querySelector(".close").addEventListener("click", () => select(null));
+        }
+        relayer();
       }
 
       function renderLegend(legend) {
@@ -349,6 +438,8 @@ export function libraryMapView(store) {
           if (disposed) return;
           if (!payload.available) { status.textContent = payload.hint || "Library map not available."; status.hidden = false; return; }
           await loadDeck();
+          // the cluster names are measured in the page's font
+          await document.fonts?.ready;
           if (disposed) return;
           data = payload.points;
           // One haystack per paper, built once: doing it per keystroke would
@@ -364,7 +455,9 @@ export function libraryMapView(store) {
           }
           renderLegend(payload.legend);
           marks = clusterMarks(data, payload.legend);
-          titleAt = planTitles(data, marks, baseZoom());
+          plan();
+          // a new clustering renames the clusters; the card follows its paper
+          if (selected && !selected.placed) select(data.find((d) => d.doi === selected.doi) || null);
           status.hidden = true;
           draw();
         } catch (e) { status.textContent = e.message; status.hidden = false; }
@@ -404,6 +497,7 @@ export function libraryMapView(store) {
       function clearLookup() {
         placed = null;
         card.hidden = true;
+        if (selected?.placed) select(null);
         if (data.length) draw();
       }
 
@@ -414,6 +508,8 @@ export function libraryMapView(store) {
         const button = $("doi-go");
         button.disabled = true;
         button.textContent = "Looking up…";
+        // the on-screen keyboard would cover the map the paper lands on
+        if (noHover.matches) $("doi-input").blur();
         try {
           const found = await postJSON("api/publication-map/lookup", { doi: raw });
           if (disposed) return;
@@ -456,15 +552,17 @@ export function libraryMapView(store) {
       let searchTimer = 0;
       $("paper-search").addEventListener("input", () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => data.length && draw(), 200); });
       $("paper-search").addEventListener("change", () => data.length && draw());
+      // the search key on an on-screen keyboard closes it, so the hits are in view
+      $("paper-search").addEventListener("keydown", (e) => { if (e.key === "Enter" && noHover.matches) e.target.blur(); });
 
       // The fitted zoom depends on the frame, and the label colours on the theme.
       const sizer = new ResizeObserver(() => {
         if (!data.length) return;
-        fitZoom = baseZoom();
-        titleAt = planTitles(data, marks, fitZoom);
+        plan();
         relayer();
       });
       sizer.observe(wrap);
+      const unexpand = expandable(wrap);
       const themed = new MutationObserver(relayer);
       themed.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
       const scheme = matchMedia("(prefers-color-scheme: dark)");
@@ -474,6 +572,7 @@ export function libraryMapView(store) {
 
       return () => {
         disposed = true;
+        unexpand();
         sizer.disconnect(); themed.disconnect(); scheme.removeEventListener("change", relayer);
         if (deckInst) { deckInst.finalize(); deckInst = null; }
       };

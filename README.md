@@ -6,6 +6,19 @@ a `.env` file, serves a web assistant and an outward MCP endpoint, and talks to
 the external MCP servers a cluster has. Atlas, the e-conversion deployment,
 is one configuration of it.
 
+![The chat on a desktop, light and dark theme split along the diagonal](docs/screenshots/desktop.png)
+
+<p align="center">
+  <img src="docs/screenshots/tablet.png" height="420" alt="The publication map on a tablet, light and dark theme">
+  &nbsp;
+  <img src="docs/screenshots/phone.png" height="420" alt="The collaboration graph on a phone, light and dark theme">
+</p>
+
+The same interface on a desktop, a tablet and a phone, in the light theme
+above the diagonal and the dark one below it. On a touch screen the maps pan
+with one finger and zoom with two, a tapped paper or person keeps its details
+on screen, and either map can take the whole window.
+
 ## Install
 
 ```bash
