@@ -1,7 +1,6 @@
 """Password accounts: signing in, one-time links, changing and resetting."""
 
 import asyncio
-import io
 from datetime import timedelta
 
 import pytest
@@ -14,7 +13,6 @@ from cra.app.web.route_auth import (
     PASSWORD_TRIES_PER_USERNAME,
     WRONG_PASSWORD,
 )
-from cra.cli import main
 
 NEW_PASSWORD = "a different long passphrase"
 
@@ -57,9 +55,6 @@ async def redeem(client, link_or_token: str, password: str = NEW_PASSWORD):
         "/auth/set-password",
         json={"token": token_of(link_or_token), "password": password},
     )
-
-
-# signing in
 
 
 @pytest.mark.parametrize(
@@ -149,9 +144,6 @@ async def test_a_body_that_is_not_an_object_is_refused_not_a_crash(client):
     assert response.status_code == 401
 
 
-# usernames and passwords
-
-
 @pytest.mark.parametrize(
     "username",
     ["a", "-leading-dash", "has space", "ümlaut", "x" * 65, "admin", "Root"],
@@ -170,9 +162,6 @@ def test_unusable_usernames_are_refused(username):
 def test_weak_passwords_are_refused(password):
     with pytest.raises(local.CredentialError):
         local.check_password(password, "grace.hopper")
-
-
-# the console and one-time links
 
 
 async def test_an_account_created_in_the_console_signs_in_after_its_link(app):
@@ -287,9 +276,6 @@ async def test_an_institutional_account_has_no_password_to_reset(app, repo):
     assert response.status_code == 400
 
 
-# changing one's own password
-
-
 async def test_changing_the_password_signs_out_every_other_session(app):
     here = await sign_in(app, app.test_client(), "alice")
     elsewhere = await sign_in(app, app.test_client(), "alice")
@@ -323,55 +309,3 @@ async def test_a_bad_password_change_is_refused(app, current, new, message):
 async def test_the_account_page_names_the_username(app):
     client = await sign_in(app, app.test_client(), "alice")
     assert (await (await client.get("/api/me")).get_json())["username"] == "alice"
-
-
-# the command line
-
-
-@pytest.fixture
-def env(tmp_path):
-    path = tmp_path / ".env"
-    path.write_text(
-        f"CRA_LIBRARY_PATH=/c\nCRA_HISTORY_URL=sqlite+aiosqlite:///{tmp_path}/cra.sqlite\n"
-    )
-    assert main(["--env-file", str(path), "db", "upgrade"]) == 0
-    return path
-
-
-def cli_verify(env, username, password) -> bool:
-    from cra.app.history.engine import make_engine, make_session_factory
-    from cra.app.history.repository import Repository
-
-    async def run() -> bool:
-        engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
-        verified = await local.verify(
-            Repository(make_session_factory(engine)), username, password
-        )
-        await engine.dispose()
-        return verified.ok
-
-    return asyncio.run(run())
-
-
-def test_the_first_admin_is_created_on_the_command_line(env, monkeypatch, capsys):
-    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
-    cli = ["--env-file", str(env), "users", "create", "grace", "--name", "Grace H"]
-    assert main([*cli, "--admin", "--password-stdin"]) == 0
-    assert "it can sign in now" in capsys.readouterr().out
-    assert cli_verify(env, "grace", PASSWORD)
-
-
-def test_the_command_line_refuses_a_guessable_admin_name(env, monkeypatch, capsys):
-    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
-    cli = ["--env-file", str(env), "users", "create", "admin", "--name", "A"]
-    assert main([*cli, "--admin", "--password-stdin"]) == 1
-    assert "too easy to guess" in capsys.readouterr().err
-
-
-def test_a_forgotten_password_gets_a_link_on_the_command_line(env, monkeypatch, capsys):
-    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
-    base = ["--env-file", str(env), "users"]
-    main([*base, "create", "grace", "--name", "Grace H", "--password-stdin"])
-    assert main([*base, "password-link", "grace"]) == 0
-    assert "/#/set-password/" in capsys.readouterr().out
-    assert not cli_verify(env, "grace", PASSWORD)

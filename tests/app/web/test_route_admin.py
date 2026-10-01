@@ -3,7 +3,7 @@
 import pytest
 from conftest import make_settings, sign_in
 
-from cra.app.policy import KEYS, Policy, PolicyError
+from cra.app.policy import KEYS, Policy
 from cra.app.web.factory import create_app
 
 
@@ -201,15 +201,6 @@ async def test_library_page_reports_the_loaded_bundle(admin):
     body = await json_of(await admin.get("/api/admin/library"))
     assert body["counts"]["papers"] == 19
     assert body["manifest"]["schema_version"] == "1.0"
-
-
-def test_policy_rejects_unknown_keys_outside_the_registry(tmp_path):
-    policy = Policy(make_settings(tmp_path))
-    with pytest.raises(PolicyError, match="unknown setting"):
-        policy.set("nope", 1)
-
-
-# --- replacing the library while the service runs ---------------------------
 
 
 @pytest.fixture

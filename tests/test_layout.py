@@ -1,6 +1,6 @@
 """Repository layout rules from the design document: unique basenames, no
-catch-all module names, and the import layering that keeps the library tools
-extractable."""
+catch-all module names, tests laid out like the source, and the import layering
+that keeps the library tools extractable."""
 
 import ast
 from collections import defaultdict
@@ -52,6 +52,23 @@ def test_no_catch_all_module_names():
         if p.stem in BANNED
     ]
     assert not offenders, offenders
+
+
+def test_every_test_file_sits_where_its_module_does():
+    """tests/app/web/test_factory.py tests src/cra/app/web/factory.py, so a
+    module's tests are found from its path alone."""
+    tests = REPO / "tests"
+    orphans = [
+        str(path.relative_to(REPO))
+        for path in tests.rglob("test_*.py")
+        if path != Path(__file__).resolve()
+        and not (
+            SRC
+            / path.parent.relative_to(tests)
+            / f"{path.stem.removeprefix('test_')}.py"
+        ).exists()
+    ]
+    assert not orphans, orphans
 
 
 @pytest.mark.parametrize(("package", "forbidden"), CONTRACTS.items())

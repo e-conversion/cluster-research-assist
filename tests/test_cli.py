@@ -1,8 +1,11 @@
 import asyncio
+import io
 
 import pytest
+from conftest import PASSWORD
 
 from cra import __version__
+from cra.app.auth import local
 from cra.cli import main
 
 
@@ -104,3 +107,52 @@ def test_a_token_issued_on_the_command_line_can_be_listed_and_revoked(tmp_path, 
     assert main([*cli, "revoke", token_id]) == 0
     assert main([*cli, "list", user_id]) == 0
     assert "revoked" in capsys.readouterr().out
+
+
+@pytest.fixture
+def env(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text(
+        f"CRA_LIBRARY_PATH=/c\nCRA_HISTORY_URL=sqlite+aiosqlite:///{tmp_path}/cra.sqlite\n"
+    )
+    assert main(["--env-file", str(path), "db", "upgrade"]) == 0
+    return path
+
+
+def cli_verify(env, username, password) -> bool:
+    from cra.app.history.engine import make_engine, make_session_factory
+    from cra.app.history.repository import Repository
+
+    async def run() -> bool:
+        engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
+        verified = await local.verify(
+            Repository(make_session_factory(engine)), username, password
+        )
+        await engine.dispose()
+        return verified.ok
+
+    return asyncio.run(run())
+
+
+def test_the_first_admin_is_created_on_the_command_line(env, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+    cli = ["--env-file", str(env), "users", "create", "grace", "--name", "Grace H"]
+    assert main([*cli, "--admin", "--password-stdin"]) == 0
+    assert "it can sign in now" in capsys.readouterr().out
+    assert cli_verify(env, "grace", PASSWORD)
+
+
+def test_the_command_line_refuses_a_guessable_admin_name(env, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+    cli = ["--env-file", str(env), "users", "create", "admin", "--name", "A"]
+    assert main([*cli, "--admin", "--password-stdin"]) == 1
+    assert "too easy to guess" in capsys.readouterr().err
+
+
+def test_a_forgotten_password_gets_a_link_on_the_command_line(env, monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+    base = ["--env-file", str(env), "users"]
+    main([*base, "create", "grace", "--name", "Grace H", "--password-stdin"])
+    assert main([*base, "password-link", "grace"]) == 0
+    assert "/#/set-password/" in capsys.readouterr().out
+    assert not cli_verify(env, "grace", PASSWORD)

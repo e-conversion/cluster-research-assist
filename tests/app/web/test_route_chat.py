@@ -10,6 +10,7 @@ from fakes import FakeOpenAI, text_chunk, tool_chunk
 from cra.app.web import route_chat
 from cra.app.web.factory import create_app
 from cra.app.web.route_chat import _frame, paced
+from cra.core.tools.tiers import Tier
 
 
 def events_of(body: str) -> list[dict]:
@@ -155,3 +156,26 @@ async def test_closing_the_paced_stream_stops_the_source():
 def test_a_keepalive_is_a_comment_not_an_event():
     assert _frame({"type": "keepalive"}) == ": keepalive\n\n"
     assert _frame({"type": "done", "answer": "x"}).startswith("event: done\ndata: ")
+
+
+SESSION = "session-1"
+
+
+async def test_a_turn_offers_both_tool_sets_and_routes_by_name(connected_app):
+    """The model sees one list; the name decides which side runs the call."""
+    ctx = connected_app.extensions["cra"]
+    await ctx.remote.connect(SESSION, "elab", "good")
+    turn = route_chat._Turn(
+        ctx=ctx,
+        session_id=SESSION,
+        conversation_id="c1",
+        chosen={"model": "m", "params": {"max_tool_rounds": "1"}},
+        history=[],
+        question="q",
+        tier=Tier.INTERNAL,
+        cancel=None,
+    )
+    tool_ctx = ctx.tool_context(Tier.INTERNAL)
+    assert "echo: hi" in await turn.call("elab_echo", {"text": "hi"}, tool_ctx)
+    local = await turn.call("library_status", {}, tool_ctx)
+    assert local["counts"]["papers"] == 19

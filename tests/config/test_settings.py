@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from cra.config.settings import Settings, unknown_keys
 
-REPO = Path(__file__).resolve().parent.parent
+REPO = Path(__file__).resolve().parents[2]
 
 
 def write_env(path: Path, **keys: str) -> Path:

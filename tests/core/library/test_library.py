@@ -1,14 +1,12 @@
 import json
-from pathlib import Path
 
 import pytest
+from conftest import TOY_LIBRARY
 from library_builder import write_library
 
 from cra.core.library import manifest
 from cra.core.library.library import Library, LibraryError
 from cra.core.library.records import normalise_doi
-
-TOY = Path(__file__).resolve().parent / "data" / "library"
 
 
 @pytest.fixture
@@ -189,9 +187,9 @@ def test_normalise_doi(raw, expected):
     assert normalise_doi(raw) == expected
 
 
-@pytest.mark.skipif(not TOY.exists(), reason="toy bundle not built yet")
+@pytest.mark.skipif(not TOY_LIBRARY.exists(), reason="toy bundle not built yet")
 def test_toy_bundle_loads_and_matches_its_manifest():
-    library = Library.load(TOY)
+    library = Library.load(TOY_LIBRARY)
     assert library.counts["papers"] >= 12
     assert library.embeddings.vectors.shape[1] == 384
     assert len(library.pis) == 8
@@ -206,14 +204,14 @@ def test_building_the_map_reproduces_the_committed_toy_bundle():
     pytest.importorskip("umap")
     from cra.core.library.derive import build_map
 
-    library = Library.load(TOY)
+    library = Library.load(TOY_LIBRARY)
     payload = build_map(
         library.embeddings.dois,
         library.embeddings.vectors,
         {doi: paper.title for doi, paper in library.papers.items()},
         model=library.embeddings.model,
     )
-    committed = json.loads((TOY / "publication_map.json").read_text())
+    committed = json.loads((TOY_LIBRARY / "publication_map.json").read_text())
     assert payload["dois"] == committed["dois"]
     assert payload["clusters"].keys() == committed["clusters"].keys()
     assert payload["x"] == pytest.approx(committed["x"], abs=1e-3)

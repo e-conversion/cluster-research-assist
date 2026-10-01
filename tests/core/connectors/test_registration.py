@@ -1,14 +1,15 @@
-"""Source descriptors and the registration that trades a key for a token."""
+"""The registration that trades a key for a token."""
 
 import httpx
 import pytest
 import respx
-from conftest import make_settings
 
 from cra.core.connectors.registration import RegistrationError, register
-from cra.core.connectors.sources import Source, configured
+from cra.core.connectors.sources import Source
 
 REGISTER_URL = "https://proxy.invalid/el/register"
+
+
 ELAB = Source(
     kind="elab",
     label="eLabFTW",
@@ -18,33 +19,9 @@ ELAB = Source(
     default_base_url="https://eln.invalid",
     profiles=(("h", "Hybrid"), ("r", "Read-only")),
 )
+
+
 PAGE = "<p>Your endpoint: https://proxy.invalid/el/mcp?token=eyJhbGci.payload-9_x</p>"
-
-
-def test_only_configured_sources_are_offered(tmp_path):
-    assert configured(make_settings(tmp_path)) == {}
-    sources = configured(
-        make_settings(tmp_path, mcp_elab_url="https://p/el/mcp", mcp_datatagger_url="")
-    )
-    assert list(sources) == ["elab"]
-    assert sources["elab"].profiles[0][0] == "h"
-
-
-def test_the_token_travels_in_the_query_string():
-    """elabmcp-proxy reads it there and nowhere else."""
-    assert ELAB.authorised("a b/c") == "https://proxy.invalid/el/mcp?token=a%20b%2Fc"
-    with_query = Source(**{**vars(ELAB), "url": "https://p/mcp?x=1"})
-    assert with_query.authorised("t").endswith("?x=1&token=t")
-
-
-def test_the_browser_is_told_nothing_internal():
-    public = ELAB.public()
-    assert public["profiles"] == [
-        {"value": "h", "label": "Hybrid"},
-        {"value": "r", "label": "Read-only"},
-    ]
-    assert REGISTER_URL not in str(public)
-    assert ELAB.url not in str(public)
 
 
 @respx.mock

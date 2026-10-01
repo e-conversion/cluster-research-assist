@@ -4,7 +4,6 @@ from typing import Annotated
 
 import pytest
 from conftest import make_settings
-from fakes import FakeEncoder
 from library_builder import write_library
 from pydantic import Field
 
@@ -20,16 +19,6 @@ from cra.core.tools.registry import (
     tool,
 )
 from cra.core.tools.tiers import Tier
-
-
-@pytest.fixture
-def indexes(tmp_path):
-    return Indexes.build(Library.load(write_library(tmp_path / "lib")), FakeEncoder())
-
-
-@pytest.fixture
-def ctx(indexes, tmp_path):
-    return ToolContext(indexes=indexes, settings=make_settings(tmp_path))
 
 
 def test_the_schema_comes_from_the_signature():
@@ -270,3 +259,27 @@ def test_the_schema_does_not_switch_endpoints_into_strict_mode(bounded):
     spec = next(iter(bounded))
     assert "additionalProperties" not in spec.parameters
     assert spec.parameters["properties"]["limit"]["maximum"] == 50
+
+
+def test_a_library_without_extras_registers_fewer_tools(tmp_path, settings):
+    bare = Indexes.build(
+        Library.load(
+            write_library(
+                tmp_path / "bare",
+                fulltexts=False,
+                pis=False,
+                graph=False,
+                proposal=False,
+            )
+        )
+    )
+    names = {spec.name for spec in load(settings, bare)}
+    assert names == {
+        "search_papers",
+        "get_paper_by_doi",
+        "list_papers",
+        "count_papers",
+        "get_similar_papers",
+        "library_status",
+        "search_nomad",
+    }

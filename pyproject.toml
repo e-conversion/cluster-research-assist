@@ -69,12 +69,14 @@ version_file = "src/cra/_version.py"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# the shared helpers (conftest, fakes, library_builder) import by bare name
+pythonpath = ["tests"]
 filterwarnings = ["error"]
 addopts = [
     "--cov",
     "--cov-append",
     "--cov-report=",
-    "--import-mode=append",
+    "--import-mode=importlib",
     "-m", "not llm and not postgres and not slow",
 ]
 asyncio_mode = "auto"
@@ -88,6 +90,9 @@ markers = [
 [tool.mypy]
 follow_imports = "skip"
 ignore_missing_imports = true
+# a conftest.py per test directory: named from these roots, they stay distinct
+explicit_package_bases = true
+mypy_path = ["src", "tests"]
 
 [tool.ruff]
 line-length = 88

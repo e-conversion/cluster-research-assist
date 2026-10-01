@@ -266,13 +266,17 @@ only then does it receive the secrets and run. It is a required status check,
 so a pull request cannot be merged before that.
 `developer/set_branch_protection.sh` configures the required checks.
 
+Tests mirror the package: the tests of `src/cra/app/web/factory.py` are
+`tests/app/web/test_factory.py`. Shared fixtures are in `tests/conftest.py`,
+stand-ins for models and services in `tests/fakes.py`.
+
 Conventions: conventional commits, no `os.environ` reads outside
 `cra.config.settings`, no module-level per-user state, no two files with the
-same basename, logging never `print`. `tests/test_layout.py` enforces the
-layout rules and the import layering: `cra.core` (library, retrieval,
-connectors, tools) never imports `cra.assistant` (llm, chat, mcpclient) or
-`cra.app` (web, auth, history, mcpserver, viz), and `cra.assistant` never
-imports `cra.app`.
+same basename, logging never `print`. `tests/test_layout.py` enforces
+the layout rules, the test tree and the import layering: `cra.core` (library,
+retrieval, connectors, tools) never imports `cra.assistant` (llm, chat,
+mcpclient) or `cra.app` (web, auth, history, mcpserver, viz), and
+`cra.assistant` never imports `cra.app`.
 
 ## License
 

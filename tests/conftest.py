@@ -74,6 +74,10 @@ async def session_user(client) -> str | None:
     return (await response.get_json())["user"]
 
 
+async def call_tool(registry, ctx, tool_name: str, /, **arguments):
+    return await registry.call(tool_name, arguments, ctx)
+
+
 def make_settings(tmp_path: Path, **overrides) -> Settings:
     values = {
         "library_path": TOY_LIBRARY,
