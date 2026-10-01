@@ -2,7 +2,7 @@ import pytest
 from library_builder import write_library
 
 from cra.core.library.library import Library
-from cra.core.retrieval.lexical import LexicalIndex
+from cra.core.retrieval.lexical import BM25, LexicalIndex
 
 
 @pytest.fixture
@@ -47,3 +47,27 @@ def test_a_query_that_matches_nothing_returns_nothing(index, query):
 
 def test_the_limit_is_respected(index):
     assert len(index.search("perovskite copper battery", limit=2)) <= 2
+
+
+def test_a_word_in_most_documents_still_counts_a_little():
+    """Its idf is negative; the floor keeps it positive but below a rare word."""
+    scores = BM25([["the", "cell"], ["the", "anode"], ["the", "film"], ["film"]])
+    common, rare = scores.scores(["the"]), scores.scores(["anode"])
+    assert 0 < common[1] < rare[1]
+    assert common[3] == 0
+
+
+def test_the_same_count_weighs_more_in_a_shorter_document():
+    corpus = [
+        ["anode"],
+        ["anode", "film", "cell", "oxide"],
+        ["film"],
+        ["cell"],
+        ["oxide"],
+    ]
+    scores = BM25(corpus).scores(["anode"])
+    assert scores[0] > scores[1] > scores[2] == 0
+
+
+def test_an_empty_corpus_scores_nothing():
+    assert len(BM25([]).scores(["anode"])) == 0

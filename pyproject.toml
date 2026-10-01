@@ -31,7 +31,6 @@ dependencies = [
     "httpx",
     "openai",
     "numpy",
-    "rank-bm25",
     "networkx",
     "mcp",
     "sqlalchemy[asyncio]",
