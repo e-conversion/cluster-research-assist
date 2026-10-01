@@ -23,9 +23,10 @@ class Source:
     default_base_url: str
     profiles: tuple[tuple[str, str], ...] = ()
     # A key this deployment holds: the accounts named in `shared_token_for`
-    # are connected with it. It never reaches the browser, and the tools it
-    # unlocks are the read-only ones — a steered model must not be able to write
-    # with somebody else's account. An empty list of names hands it to nobody.
+    # are connected with it. It never reaches the browser, and with
+    # remote_write_tools off (the default) the tools it unlocks are the
+    # read-only ones -- a steered model must not write with somebody else's
+    # account. An empty list of names hands it to nobody.
     shared_token: str = ""
     shared_token_for: tuple[str, ...] = ()
 

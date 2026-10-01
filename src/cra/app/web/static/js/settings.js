@@ -423,7 +423,6 @@ function modelPicker(store) {
   return picker;
 }
 
-/** "<n> <label>" per connected source, in the order the server lists them. */
 function sourceCounts(store, tools) {
   return Object.entries(store.config.sources || {})
     .filter(([kind]) => tools[kind])
