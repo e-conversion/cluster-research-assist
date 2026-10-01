@@ -273,7 +273,9 @@ stand-ins for models and services in `tests/fakes.py`.
 
 Conventions: conventional commits, no `os.environ` reads outside
 `cra.config.settings`, no module-level per-user state, no two files with the
-same basename, logging never `print`. `tests/test_layout.py` enforces
+same basename, logging never `print`. Dependencies stay few: where a package
+would serve only one function, that function is written here instead, as the
+model client, BM25 and the query encoder are. `tests/test_layout.py` enforces
 the layout rules, the test tree and the import layering: `cra.core` (library,
 retrieval, connectors, tools) never imports `cra.assistant` (llm, chat,
 mcpclient) or `cra.app` (web, auth, history, mcpserver, viz), and
