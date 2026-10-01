@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # the query encoder's weights ship in the wheel
+          lfs: true
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

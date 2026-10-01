@@ -12,7 +12,10 @@ is one configuration of it.
 pip install .
 ```
 
-Requires Python 3.11 or newer.
+Requires Python 3.11 or newer. The query encoder's weights are a Git LFS
+object, so a source checkout needs `git lfs install` before cloning (or
+`git lfs pull` after). Without them semantic search is off and everything else
+works.
 
 ## Run
 
@@ -57,18 +60,16 @@ cra library manifest       # refresh checksums and counts
 ## Semantic search
 
 The library ships the paper vectors, so ranking needs no model. Only the query
-has to be encoded, and that one forward pass runs on onnxruntime rather than
-torch, which keeps a CUDA-capable tensor library out of an image that would
-never use it:
-
-```bash
-cra encoder fetch           # 127 MB into CRA_ENCODER_PATH
-```
+has to be encoded, by BAAI/bge-small-en-v1.5, whose weights ship with the
+package: 67 MB in half precision, which holds every one of its weights exactly.
+The forward pass is written in numpy, about ten milliseconds for a query,
+so neither an inference runtime nor a tokenizer library is installed.
+`developer/make_encoder.py` rebuilds the weights from the published model.
 
 The model must be the one the library was built with; a mismatch is refused,
 because two models' vectors are not comparable even when the widths agree.
-Leaving `CRA_ENCODER_PATH` empty turns semantic search off and leaves keyword
-search, the publication map and everything else working.
+`CRA_QUERY_ENCODER=false` turns semantic search off and saves the encoder's
+memory; keyword search, the publication map and everything else keep working.
 
 ## Placing a DOI on the map
 

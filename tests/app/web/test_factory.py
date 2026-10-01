@@ -5,6 +5,7 @@ from conftest import PASSWORD, add_account, make_settings, sign_in
 from quart.testing.app import LifespanError
 
 from cra.app.web.factory import create_app
+from cra.core.retrieval.encoder import EncoderError, shipped
 
 
 async def test_public_routes_answer_without_a_session(client):
@@ -66,6 +67,18 @@ async def test_serving_refuses_an_outdated_schema(tmp_path):
     with pytest.raises(LifespanError, match="cra db upgrade"):
         async with app.test_app():
             pass
+
+
+@pytest.mark.parametrize("enabled", [True, False])
+async def test_the_shipped_encoder_serves_unless_switched_off(tmp_path, enabled):
+    if enabled:
+        try:
+            shipped()
+        except EncoderError as exc:
+            pytest.skip(str(exc))
+    app = create_app(make_settings(tmp_path, query_encoder=enabled))
+    async with app.test_app():
+        assert app.extensions["cra"].indexes.semantic_ready is enabled
 
 
 async def test_every_response_carries_the_security_headers(client):

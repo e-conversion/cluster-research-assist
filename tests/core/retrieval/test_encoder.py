@@ -1,5 +1,4 @@
-import os
-from pathlib import Path
+import shutil
 
 import numpy as np
 import pytest
@@ -8,9 +7,16 @@ from fakes import FakeEncoder
 
 from cra.core.library.library import Library
 from cra.core.retrieval.dense import DenseIndex
-from cra.core.retrieval.encoder import Encoder, EncoderError, OnnxEncoder
-
-ENCODER_PATH = os.environ.get("CRA_TEST_ENCODER_PATH", "")
+from cra.core.retrieval.encoder import (
+    LFS_POINTER,
+    MODEL_DIR,
+    VOCAB_FILE,
+    WEIGHTS_FILE,
+    BertEncoder,
+    Encoder,
+    EncoderError,
+    shipped,
+)
 
 
 def test_the_fake_encoder_satisfies_the_protocol():
@@ -28,25 +34,43 @@ def test_the_fake_encoder_is_deterministic_and_text_dependent():
     assert not encoder.encode("").any()
 
 
-@pytest.mark.parametrize("missing", ["model.onnx", "tokenizer.json"])
-def test_an_incomplete_encoder_directory_says_what_to_run(tmp_path, missing):
-    for name in ("model.onnx", "tokenizer.json"):
-        if name != missing:
-            (tmp_path / name).write_bytes(b"x")
-    with pytest.raises(EncoderError, match="cra encoder fetch"):
-        OnnxEncoder.load(tmp_path)
+@pytest.mark.parametrize(
+    ("weights", "message"),
+    [(None, "missing"), (LFS_POINTER + b" spec/v1\noid sha256:0\n", "git lfs pull")],
+    ids=["no weights", "an LFS pointer"],
+)
+def test_weights_that_are_not_there_say_why(tmp_path, weights, message):
+    shutil.copy(MODEL_DIR / VOCAB_FILE, tmp_path / VOCAB_FILE)
+    if weights is not None:
+        (tmp_path / WEIGHTS_FILE).write_bytes(weights)
+    with pytest.raises(EncoderError, match=message):
+        BertEncoder.load(tmp_path)
 
 
-@pytest.mark.slow
-@pytest.mark.skipif(not ENCODER_PATH, reason="CRA_TEST_ENCODER_PATH not set")
-def test_the_real_encoder_ranks_the_paper_a_query_describes():
-    """The one test that loads the model: `cra encoder fetch` then set
-    CRA_TEST_ENCODER_PATH."""
-    encoder = OnnxEncoder.load(Path(ENCODER_PATH))
+@pytest.fixture(scope="module")
+def encoder():
+    try:
+        return shipped()
+    except EncoderError as exc:
+        pytest.skip(str(exc))
+
+
+def test_the_shipped_encoder_reproduces_the_librarys_vectors(encoder):
+    """The toy library's vectors came from sentence-transformers on torch, so
+    agreement here checks the tokenizer, the forward pass and the weights at
+    once. Built from the title and abstract, as developer/make_toy_library.py
+    does."""
     library = Library.load(TOY_LIBRARY)
-    assert encoder.dimension == library.embeddings.vectors.shape[1]
     assert encoder.name == library.embeddings.model
+    for doi, row in library.embeddings.index.items():
+        paper = library.papers[doi]
+        text = f"{paper.title.strip()}. {paper.abstract.strip()}".strip(". ")
+        stored = library.embeddings.vectors[row]
+        assert float(encoder.encode(text) @ stored) > 0.9999, doi
 
+
+def test_the_shipped_encoder_ranks_the_paper_a_query_describes(encoder):
+    library = Library.load(TOY_LIBRARY)
     vector = encoder.encode("long-range electrostatics in machine learning potentials")
     assert float(np.linalg.norm(vector)) == pytest.approx(1.0, abs=1e-5)
 

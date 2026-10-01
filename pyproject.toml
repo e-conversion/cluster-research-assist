@@ -39,9 +39,6 @@ dependencies = [
     "joserfc",
     "argon2-cffi",
     "cryptography",
-    "onnxruntime",
-    "tokenizers",
-    "huggingface_hub",
 ]
 
 [project.optional-dependencies]
@@ -61,6 +58,7 @@ cra = [
     "app/web/templates/**/*",
     "app/web/brand/**/*",
     "app/history/migrations/**/*",
+    "core/retrieval/bge-small-en-v1.5/*",
 ]
 
 [tool.setuptools_scm]

@@ -162,9 +162,8 @@ class Settings(BaseSettings):
     # how long a source that throttled us is left alone
     doi_lookup_cooldown_s: int = Field(default=300, ge=0)
 
-    # query encoder
-    encoder_path: Path | None = None
-    encoder_model: str = "BAAI/bge-small-en-v1.5"
+    # the packaged query encoder; off saves its ~130 MB and semantic search
+    query_encoder: bool = True
 
     # logging
     log_dir: Path = Path("logs")

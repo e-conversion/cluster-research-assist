@@ -8,6 +8,7 @@ recursive-include src/cra/app/web/static *
 recursive-include src/cra/app/web/templates *
 recursive-include src/cra/app/web/brand *
 recursive-include src/cra/app/history/migrations *
+recursive-include src/cra/core/retrieval/bge-small-en-v1.5 *
 recursive-include tests *.py *.txt
 recursive-include tests/data *
 recursive-include developer *

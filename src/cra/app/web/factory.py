@@ -60,7 +60,7 @@ from cra.config.settings import Settings
 from cra.core.connectors.doi_lookup import LookupGuard
 from cra.core.connectors.sources import configured as configured_sources
 from cra.core.library.library import Library
-from cra.core.retrieval.encoder import OnnxEncoder
+from cra.core.retrieval.encoder import Encoder, EncoderError, shipped
 from cra.core.retrieval.indexes import Indexes
 from cra.core.tools.registry import Registry, ToolContext
 from cra.core.tools.registry import load as load_tools
@@ -427,14 +427,14 @@ def _wants_html() -> bool:
     return "text/html" in accept and "application/json" not in accept
 
 
-def _encoder(settings: Settings) -> Any:
-    """The query encoder, when one is configured. Without it the library still
+def _encoder(settings: Settings) -> Encoder | None:
+    """The query encoder, unless switched off. Without it the library still
     serves everything but meaning-based search."""
-    if not settings.encoder_path:
+    if not settings.query_encoder:
         return None
     try:
-        return OnnxEncoder.load(settings.encoder_path)
-    except Exception:
+        return shipped()
+    except EncoderError:
         log.exception("the query encoder did not load; semantic search is off")
         return None
 
