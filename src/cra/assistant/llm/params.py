@@ -12,19 +12,6 @@ from typing import Any
 
 from cra.config.settings import Settings
 
-# OpenRouter takes these in extra_body rather than as request fields
-EXTRA_BODY_KEYS = frozenset(
-    {
-        "provider",
-        "reasoning",
-        "verbosity",
-        "web_search_options",
-        "models",
-        "transforms",
-        "route",
-    }
-)
-
 ROUTES = (
     {"value": "price", "label": "cheapest"},
     {"value": "throughput", "label": "fastest"},
@@ -200,14 +187,6 @@ def request_fields(
     if values["reasoning_effort"]:
         fields["reasoning"] = {"effort": values["reasoning_effort"]}
     return fields
-
-
-def split(fields: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    """Into (extra_body, plain keyword arguments). The SDK rejects an unknown
-    top-level field, and the gateway ignores one it does not know in the body."""
-    body = {k: v for k, v in fields.items() if k in EXTRA_BODY_KEYS}
-    rest = {k: v for k, v in fields.items() if k not in EXTRA_BODY_KEYS}
-    return body, rest
 
 
 def is_openrouter(settings: Settings) -> bool:

@@ -3,7 +3,6 @@
 import asyncio
 import contextlib
 import hashlib
-from types import SimpleNamespace
 
 import httpx
 import numpy as np
@@ -37,60 +36,38 @@ class FakeEncoder:
         return vector / norm if norm else vector
 
 
-class Chunk:
-    """A streamed piece shaped like the SDK's, built by the helpers below."""
-
-    def __init__(self, choices, usage=None):
-        self.choices = choices
-        self.usage = usage
-
-
-class Delta:
-    def __init__(self, **fields):
-        self.content = fields.get("content")
-        self.tool_calls = fields.get("tool_calls")
-        self.reasoning = fields.get("reasoning")
-        self.reasoning_content = fields.get("reasoning_content")
+def _chunk(delta: dict, usage: dict | None = None) -> dict:
+    """A streamed piece as the endpoint sends it, built by the helpers below."""
+    chunk: dict = {"choices": [{"index": 0, "delta": delta}] if delta else []}
+    if usage is not None:
+        chunk["usage"] = usage
+    return chunk
 
 
-class Choice:
-    def __init__(self, delta):
-        self.delta = delta
-        self.finish_reason = None
+def text_chunk(text: str) -> dict:
+    return _chunk({"content": text})
 
 
-class Usage:
-    def __init__(self, prompt, completion, total):
-        self.prompt_tokens = prompt
-        self.completion_tokens = completion
-        self.total_tokens = total
+def reasoning_chunk(text: str, inline: bool = False) -> dict:
+    return _chunk({"reasoning" if inline else "reasoning_content": text})
 
 
-class ToolCallFragment:
-    def __init__(self, index=None, id=None, name=None, arguments=""):
-        if index is not None:
-            self.index = index
-        self.id = id
-        self.function = SimpleNamespace(name=name, arguments=arguments)
+def tool_chunk(index=None, id=None, name=None, arguments="") -> dict:
+    fragment: dict = {"id": id, "function": {"name": name, "arguments": arguments}}
+    if index is not None:
+        fragment["index"] = index
+    return _chunk({"tool_calls": [fragment]})
 
 
-def text_chunk(text: str) -> Chunk:
-    return Chunk([Choice(Delta(content=text))])
-
-
-def reasoning_chunk(text: str, inline: bool = False) -> Chunk:
-    key = "reasoning_content" if not inline else "reasoning"
-    return Chunk([Choice(Delta(**{key: text}))])
-
-
-def tool_chunk(index=None, id=None, name=None, arguments="") -> Chunk:
-    return Chunk(
-        [Choice(Delta(tool_calls=[ToolCallFragment(index, id, name, arguments)]))]
+def usage_chunk(prompt: int, completion: int, total: int) -> dict:
+    return _chunk(
+        {},
+        {
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": total,
+        },
     )
-
-
-def usage_chunk(prompt: int, completion: int, total: int) -> Chunk:
-    return Chunk([], Usage(prompt, completion, total))
 
 
 class FakeStream:
@@ -98,18 +75,15 @@ class FakeStream:
         self._chunks = list(chunks)
         self.closed = False
 
-    def __aiter__(self):
-        async def generate():
-            for chunk in self._chunks:
-                yield chunk
-
-        return generate()
+    async def __aiter__(self):
+        for chunk in self._chunks:
+            yield chunk
 
     async def close(self):
         self.closed = True
 
 
-class FakeOpenAI:
+class FakeChatClient:
     """One chunk list per model round, consumed in order.
 
     An entry that is an exception is raised by the call instead, which is how a
@@ -121,12 +95,11 @@ class FakeOpenAI:
         self._fail_stream_options = fail_stream_options
         self.calls: list[dict] = []
         self.streams: list[FakeStream] = []
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
-    async def _create(self, **kwargs):
-        if "stream_options" in kwargs and self._fail_stream_options is not None:
+    async def stream(self, request: dict) -> FakeStream:
+        if "stream_options" in request and self._fail_stream_options is not None:
             raise self._fail_stream_options
-        self.calls.append(kwargs)
+        self.calls.append(request)
         if not self._rounds:
             raise AssertionError("more rounds were requested than were scripted")
         script = self._rounds.pop(0)

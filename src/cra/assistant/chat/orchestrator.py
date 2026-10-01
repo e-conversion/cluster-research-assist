@@ -12,7 +12,6 @@ on the evidence already gathered rather than a note saying the limit was hit.
 """
 
 import asyncio
-import inspect
 import json
 import logging
 import time
@@ -109,7 +108,7 @@ class ThinkSplitter:
         return out
 
 
-def accumulate(calls: dict[int, dict[str, str]], fragment: Any) -> None:
+def accumulate(calls: dict[int, dict[str, str]], fragment: dict[str, Any]) -> None:
     """Merge one streamed piece of a tool call into what is being assembled.
 
     Endpoints differ: some send a whole call at once, some spread the arguments
@@ -117,22 +116,18 @@ def accumulate(calls: dict[int, dict[str, str]], fragment: Any) -> None:
     id or a name starts a new call and anything else continues the last, because
     a name is never split.
     """
-    index = getattr(fragment, "index", None)
-    function = getattr(fragment, "function", None)
+    index = fragment.get("index")
+    function = fragment.get("function") or {}
     if index is None:
-        starts = bool(
-            getattr(fragment, "id", None)
-            or (function is not None and getattr(function, "name", None))
-        )
+        starts = bool(fragment.get("id") or function.get("name"))
         index = len(calls) if starts or not calls else max(calls)
     slot = calls.setdefault(index, {"id": "", "name": "", "arguments": ""})
-    if getattr(fragment, "id", None):
-        slot["id"] = fragment.id
-    if function is not None:
-        if getattr(function, "name", None):
-            slot["name"] = function.name
-        if getattr(function, "arguments", None):
-            slot["arguments"] += function.arguments
+    if fragment.get("id"):
+        slot["id"] = fragment["id"]
+    if function.get("name"):
+        slot["name"] = function["name"]
+    if function.get("arguments"):
+        slot["arguments"] += function["arguments"]
 
 
 @dataclass
@@ -177,15 +172,15 @@ class RoundResult:
     cancelled: bool = False
 
 
-def _count_usage(totals: dict[str, int], usage: Any) -> None:
-    if usage is None:
+def _count_usage(totals: dict[str, int], usage: dict[str, Any] | None) -> None:
+    if not usage:
         return
-    for key, attribute in (
+    for key, field_name in (
         ("prompt", "prompt_tokens"),
         ("completion", "completion_tokens"),
         ("total", "total_tokens"),
     ):
-        totals[key] += int(getattr(usage, attribute, 0) or 0)
+        totals[key] += int(usage.get(field_name) or 0)
 
 
 async def run_turn(
@@ -199,10 +194,11 @@ async def run_turn(
     base_url: str = "",
     max_rounds: int = 10,
     cancel: asyncio.Event | None = None,
-    extra_body: dict[str, Any] | None = None,
     fields: dict[str, Any] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
-    """Stream one answer. Never raises: a failure becomes the final event."""
+    """Stream one answer. Never raises: a failure becomes the final event.
+    ``fields`` go into every request as they are: sampling, routing,
+    reasoning."""
     progress = Progress()
     try:
         async for event in _rounds(
@@ -215,7 +211,6 @@ async def run_turn(
             base_url,
             max_rounds,
             cancel,
-            extra_body,
             fields or {},
             progress,
         ):
@@ -240,7 +235,6 @@ async def _rounds(
     base_url: str,
     max_rounds: int,
     cancel: asyncio.Event | None,
-    extra_body: dict[str, Any] | None,
     fields: dict[str, Any],
     progress: Progress,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -267,7 +261,7 @@ async def _rounds(
 
         result = RoundResult()
         async for event in _one_round(
-            client, model, conversation, base_url, tools, extra_body, fields,
+            client, model, conversation, base_url, tools, fields,
             progress, stopped, result,
         ):  # fmt: skip
             yield event
@@ -379,7 +373,7 @@ async def _rounds(
     conversation.append({"role": "user", "content": ANSWER_NOW})
     result = RoundResult()
     async for event in _one_round(
-        client, model, conversation, base_url, tools, extra_body,
+        client, model, conversation, base_url, tools,
         {**fields, "tool_choice": "none"}, progress, stopped, result,
     ):  # fmt: skip
         yield event
@@ -395,7 +389,6 @@ async def _one_round(
     conversation: list[dict[str, Any]],
     base_url: str,
     tools: list[dict[str, Any]],
-    extra_body: dict[str, Any] | None,
     fields: dict[str, Any],
     progress: Progress,
     stopped: Callable[[], bool],
@@ -406,48 +399,35 @@ async def _one_round(
     pieces: list[str] = []
     splitter = ThinkSplitter()
     started = time.perf_counter()
-    stream = await open_stream(
-        client,
-        model=model,
-        messages=conversation,
-        base_url=base_url,
-        tools=tools,
-        extra_body=extra_body,
-        **fields,
-    )
+    request: dict[str, Any] = {"model": model, "messages": conversation, **fields}
+    if tools:
+        request["tools"] = tools
+    stream = await open_stream(client, request, base_url)
     try:
         async for chunk in stream:
             if stopped():
                 out.text = "".join(pieces)
                 out.cancelled = True
                 return
-            _count_usage(progress.usage, getattr(chunk, "usage", None))
-            if not getattr(chunk, "choices", None):
-                continue
-            delta = chunk.choices[0].delta
-            if delta is None:
-                continue
-            reasoning = getattr(delta, "reasoning_content", None) or getattr(
-                delta, "reasoning", None
-            )
+            _count_usage(progress.usage, chunk.get("usage"))
+            choices = chunk.get("choices") or [{}]
+            delta = choices[0].get("delta") or {}
+            reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning:
                 yield {"type": "reasoning_delta", "text": reasoning}
-            if content := getattr(delta, "content", None):
+            if content := delta.get("content"):
                 for channel, piece in splitter.feed(content):
                     if channel == "text":
                         pieces.append(piece)
                     yield {"type": f"{channel}_delta", "text": piece}
-            for fragment in getattr(delta, "tool_calls", None) or []:
+            for fragment in delta.get("tool_calls") or []:
                 accumulate(out.calls, fragment)
         for channel, piece in splitter.flush():
             if channel == "text":
                 pieces.append(piece)
             yield {"type": f"{channel}_delta", "text": piece}
     finally:
-        if close := getattr(stream, "close", None):
-            closing = close()
-            if inspect.isawaitable(closing):
-                await closing
+        await stream.close()
     out.text = "".join(pieces)
     log.info(
         "model round",

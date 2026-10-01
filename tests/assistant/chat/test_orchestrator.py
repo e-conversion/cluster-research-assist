@@ -2,10 +2,8 @@
 
 import asyncio
 
-import httpx
-import openai
 import pytest
-from fakes import FakeOpenAI, reasoning_chunk, text_chunk, tool_chunk, usage_chunk
+from fakes import FakeChatClient, reasoning_chunk, text_chunk, tool_chunk, usage_chunk
 
 from cra.assistant.chat.orchestrator import (
     ANSWER_NOW,
@@ -14,6 +12,7 @@ from cra.assistant.chat.orchestrator import (
     framed,
     run_turn,
 )
+from cra.assistant.llm.client import LLMError
 
 
 async def collect(client, **overrides):
@@ -33,7 +32,7 @@ def kinds(events):
 
 
 async def test_a_plain_answer_streams_and_ends_once():
-    client = FakeOpenAI([[text_chunk("Hel"), text_chunk("lo")]])
+    client = FakeChatClient([[text_chunk("Hel"), text_chunk("lo")]])
     events = await collect(client)
     assert kinds(events) == ["round", "text_delta", "text_delta", "done"]
     assert events[-1]["answer"] == "Hello"
@@ -43,7 +42,7 @@ async def test_a_plain_answer_streams_and_ends_once():
 
 
 async def test_the_system_prompt_leads_the_conversation():
-    client = FakeOpenAI([[text_chunk("ok")]])
+    client = FakeChatClient([[text_chunk("ok")]])
     await collect(client)
     sent = client.calls[0]["messages"]
     assert sent[0] == {"role": "system", "content": "SYS"}
@@ -57,7 +56,7 @@ async def test_a_tool_is_called_and_its_result_goes_back():
         calls.append((name, arguments))
         return {"papers": 2}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="c1", name="search_papers", arguments='{"query": "x"}')],
             [text_chunk("Two papers.")],
@@ -98,7 +97,7 @@ async def test_what_the_model_says_between_tool_calls_is_not_the_answer():
     async def call_tool(name, arguments):
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [
                 text_chunk("Let me check the library."),
@@ -119,7 +118,7 @@ async def test_a_tool_that_answers_with_an_error_is_marked_as_such():
     async def call_tool(name, arguments):
         return {"error": "nope"}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [[tool_chunk(0, id="c1", name="t", arguments="{}")], [text_chunk("sorry")]]
     )
     events = await collect(client, call_tool=call_tool)
@@ -133,7 +132,7 @@ async def test_arguments_that_are_not_json_become_no_arguments():
         seen.append(arguments)
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [[tool_chunk(0, id="c", name="t", arguments="{not json")], [text_chunk("done")]]
     )
     await collect(client, call_tool=call_tool)
@@ -147,7 +146,7 @@ async def test_fragments_without_an_index_are_assembled():
         seen.append((name, arguments))
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [
                 tool_chunk(id="a", name="first", arguments='{"x"'),
@@ -162,14 +161,16 @@ async def test_fragments_without_an_index_are_assembled():
 
 
 async def test_reasoning_never_reaches_the_answer():
-    client = FakeOpenAI([[reasoning_chunk("thinking"), text_chunk("the answer")]])
+    client = FakeChatClient([[reasoning_chunk("thinking"), text_chunk("the answer")]])
     events = await collect(client)
     assert kinds(events) == ["round", "reasoning_delta", "text_delta", "done"]
     assert events[-1]["answer"] == "the answer"
 
 
 async def test_inline_thinking_is_separated_from_the_answer():
-    client = FakeOpenAI([[text_chunk("<think>hmm</think>"), text_chunk("the answer")]])
+    client = FakeChatClient(
+        [[text_chunk("<think>hmm</think>"), text_chunk("the answer")]]
+    )
     events = await collect(client)
     assert [e["text"] for e in events if e["type"] == "reasoning_delta"] == ["hmm"]
     assert events[-1]["answer"] == "the answer"
@@ -185,7 +186,7 @@ async def test_inline_thinking_is_separated_from_the_answer():
     ids=["split open tag", "split close tag", "split both"],
 )
 async def test_a_thinking_tag_split_across_chunks_still_works(pieces):
-    client = FakeOpenAI([[text_chunk(p) for p in pieces]])
+    client = FakeChatClient([[text_chunk(p) for p in pieces]])
     events = await collect(client)
     assert events[-1]["answer"] == "b"
     assert "".join(e["text"] for e in events if e["type"] == "reasoning_delta") == "a"
@@ -199,21 +200,15 @@ def test_the_splitter_holds_back_only_what_could_be_a_tag():
 
 
 async def test_token_counts_are_summed_when_the_endpoint_sends_them():
-    client = FakeOpenAI([[text_chunk("hi"), usage_chunk(10, 5, 15)]])
+    client = FakeChatClient([[text_chunk("hi"), usage_chunk(10, 5, 15)]])
     events = await collect(client)
     assert events[-1]["usage"] == {"prompt": 10, "completion": 5, "total": 15}
 
 
 async def test_an_endpoint_that_refuses_token_counts_is_asked_only_once():
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [[text_chunk("a")], [text_chunk("b")]],
-        fail_stream_options=openai.APIStatusError(
-            "no",
-            response=httpx.Response(
-                500, request=httpx.Request("POST", "https://gateway.test")
-            ),
-            body=None,
-        ),
+        fail_stream_options=LLMError("HTTP 500: no", status=500),
     )
     await collect(client, base_url="https://gateway.test/v1")
     await collect(client, base_url="https://gateway.test/v1")
@@ -230,7 +225,7 @@ async def test_the_tool_round_limit_ends_with_an_answer_from_what_it_has():
         ran.append(arguments["q"])
         return {"n": len(ran)}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             *(
                 [tool_chunk(0, id=f"c{n}", name="t", arguments=f'{{"q": {n}}}')]
@@ -258,7 +253,7 @@ async def test_the_final_answer_falls_back_to_a_notice_when_the_model_says_nothi
     async def call_tool(name, arguments):
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [[tool_chunk(0, id="c", name="t", arguments='{"q": 1}')], []],
     )
     events = await collect(client, call_tool=call_tool, max_rounds=1)
@@ -273,7 +268,7 @@ async def test_two_fruitless_rounds_end_the_search_early():
     async def call_tool(name, arguments):
         return {"error": "'topic' is required"}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="a", name="find_experts", arguments="{}")],
             [tool_chunk(0, id="b", name="find_experts", arguments="{}")],
@@ -291,7 +286,7 @@ async def test_a_round_with_one_useful_call_resets_the_fruitless_count():
     async def call_tool(name, arguments):
         return {"error": "no"} if arguments.get("bad") else {"ok": 1}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="a", name="t", arguments='{"bad": 1}')],
             [tool_chunk(0, id="b", name="t", arguments='{"good": 1}')],
@@ -305,7 +300,7 @@ async def test_a_round_with_one_useful_call_resets_the_fruitless_count():
 
 
 async def test_a_failing_endpoint_becomes_an_error_event_not_an_exception():
-    client = FakeOpenAI([RuntimeError("upstream is down")])
+    client = FakeChatClient([RuntimeError("upstream is down")])
     events = await collect(client)
     assert kinds(events) == ["round", "error"]
     assert events[-1]["error_type"] == "RuntimeError"
@@ -316,7 +311,7 @@ async def test_a_failure_keeps_the_work_already_done():
     async def call_tool(name, arguments):
         return {"ok": 1}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [[tool_chunk(0, id="c", name="t", arguments="{}")], RuntimeError("gone")]
     )
     events = await collect(client, call_tool=call_tool)
@@ -334,7 +329,7 @@ async def test_cancelling_stops_the_turn_and_keeps_the_partial_answer():
         cancel.set()
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [
                 text_chunk("part of an answer"),
@@ -358,7 +353,7 @@ async def test_a_repeated_call_is_answered_rather_than_run_again():
         return {"results": []}
 
     same = tool_chunk(0, id="c", name="search_pis", arguments='{"query": "x"}')
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="c1", name="search_pis", arguments='{"query": "x"}')],
             [same],
@@ -382,7 +377,7 @@ async def test_a_repeated_failed_call_gets_its_error_again_not_a_result():
         ran.append(arguments)
         return {"error": "'topic' is required"}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="a", name="find_experts", arguments="{}")],
             [
@@ -409,7 +404,7 @@ async def test_tool_call_ids_are_unique_for_the_whole_turn():
     async def call_tool(name, arguments):
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="call_0", name="t", arguments='{"q": 1}')],
             [tool_chunk(0, id="call_0", name="t", arguments='{"q": 2}')],
@@ -433,7 +428,7 @@ async def test_the_same_tool_with_different_arguments_still_runs():
         ran.append(arguments["query"])
         return {}
 
-    client = FakeOpenAI(
+    client = FakeChatClient(
         [
             [tool_chunk(0, id="a", name="search_pis", arguments='{"query": "one"}')],
             [tool_chunk(0, id="b", name="search_pis", arguments='{"query": "two"}')],

@@ -8,7 +8,7 @@ should lose an answer over a title.
 
 import logging
 
-from cra.assistant.llm.client import make_client
+from cra.assistant.llm.client import ChatClient
 from cra.assistant.llm.params import is_openrouter
 from cra.config.settings import Settings
 
@@ -39,32 +39,30 @@ def tidy(raw: str) -> str:
     return title[:MAX_CHARS]
 
 
-async def suggest(settings: Settings, model: str, question: str, answer: str) -> str:
+async def suggest(
+    client: ChatClient, settings: Settings, model: str, question: str, answer: str
+) -> str:
     """A title, or the empty string if the model would not give one."""
     if not settings.llm_api_key.get_secret_value():
         return ""
-    client = make_client(settings)
-    extra_body = (
-        {"reasoning": {"effort": "minimal"}} if is_openrouter(settings) else None
-    )
+    request = {
+        "model": model,
+        "max_tokens": MAX_TOKENS,
+        "messages": [
+            {"role": "system", "content": INSTRUCTION},
+            {
+                "role": "user",
+                "content": f"Question: {question[:1000]}\n\nAnswer: {answer[:1000]}",
+            },
+        ],
+    }
+    # another gateway may reject the field
+    if is_openrouter(settings):
+        request["reasoning"] = {"effort": "minimal"}
     try:
-        response = await client.chat.completions.create(
-            model=model,
-            max_tokens=MAX_TOKENS,
-            timeout=TIMEOUT_S,
-            extra_body=extra_body,
-            messages=[
-                {"role": "system", "content": INSTRUCTION},
-                {
-                    "role": "user",
-                    "content": f"Question: {question[:1000]}\n\nAnswer: {answer[:1000]}",
-                },
-            ],
-        )
+        response = await client.complete(request, timeout_s=TIMEOUT_S)
     except Exception:
         log.warning("no title from the model", exc_info=True)
         return ""
-    choices = getattr(response, "choices", None) or []
-    if not choices:
-        return ""
-    return tidy(getattr(choices[0].message, "content", "") or "")
+    choices = response.get("choices") or [{}]
+    return tidy((choices[0].get("message") or {}).get("content") or "")

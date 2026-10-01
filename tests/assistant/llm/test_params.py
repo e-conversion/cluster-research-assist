@@ -13,9 +13,6 @@ def test_the_request_fields_sent_to_a_plain_gateway(tmp_path):
     assert fields == {"top_p": 0.9, "max_tokens": 8192}, (
         "OpenRouter-only fields stay away"
     )
-    body, rest = params_.split(fields)
-    assert body == {}
-    assert rest == fields
 
 
 def test_openrouter_always_gets_the_privacy_routing(tmp_path):
@@ -31,9 +28,7 @@ def test_openrouter_always_gets_the_privacy_routing(tmp_path):
         "quantizations": ["fp8", "fp16", "bf16", "fp32", "unknown"],
     }
     assert fields["reasoning"] == {"effort": "low"}
-    body, rest = params_.split(fields)
-    assert set(body) == {"provider", "reasoning"}
-    assert set(rest) == {"max_tokens"}
+    assert set(fields) == {"provider", "reasoning", "max_tokens"}
 
 
 def test_openrouter_routing_can_be_narrowed_or_opened(tmp_path):

@@ -129,7 +129,7 @@ async def test_the_first_turn_names_the_conversation(app, client, monkeypatch):
     from cra.app.web import route_chat
     from cra.assistant.chat import title as title_
 
-    async def suggest(settings, model, question, answer):
+    async def suggest(client, settings, model, question, answer):
         return "Battery ageing models"
 
     monkeypatch.setattr(route_chat.title_, "suggest", suggest)
@@ -158,7 +158,7 @@ async def test_a_later_turn_leaves_the_name_alone(app, client, monkeypatch):
 
     asked = []
 
-    async def suggest(settings, model, question, answer):
+    async def suggest(client, settings, model, question, answer):
         asked.append(question)
         return "new"
 

@@ -29,7 +29,6 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "httpx",
-    "openai",
     "numpy",
     "networkx",
     "mcp",

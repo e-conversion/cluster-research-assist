@@ -10,21 +10,14 @@ class Answering:
     """A client that returns one non-streamed completion."""
 
     def __init__(self, content):
-        from types import SimpleNamespace
-
         self.content = content
         self.calls: list[dict] = []
-        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
-    async def _create(self, **kwargs):
-        from types import SimpleNamespace
-
-        self.calls.append(kwargs)
+    async def complete(self, request, timeout_s=None):
+        self.calls.append(request)
         if isinstance(self.content, Exception):
             raise self.content
-        return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content=self.content))]
-        )
+        return {"choices": [{"message": {"content": self.content}}]}
 
 
 @pytest.fixture
@@ -49,10 +42,11 @@ def test_a_model_answer_becomes_a_title(raw, expected):
     assert title_.tidy(raw) == expected
 
 
-async def test_the_model_is_asked_briefly(settings, monkeypatch):
+async def test_the_model_is_asked_briefly(settings):
     client = Answering("Perovskite stability under light")
-    monkeypatch.setattr(title_, "make_client", lambda _settings: client)
-    suggested = await title_.suggest(settings, "m", "which papers?", "These two.")
+    suggested = await title_.suggest(
+        client, settings, "m", "which papers?", "These two."
+    )
     assert suggested == "Perovskite stability under light"
     sent = client.calls[0]
     assert sent["max_tokens"] == title_.MAX_TOKENS
@@ -60,15 +54,15 @@ async def test_the_model_is_asked_briefly(settings, monkeypatch):
     assert "which papers?" in sent["messages"][1]["content"]
 
 
-async def test_a_failure_leaves_the_fallback(settings, monkeypatch):
-    monkeypatch.setattr(
-        title_, "make_client", lambda _s: Answering(RuntimeError("down"))
-    )
-    assert await title_.suggest(settings, "m", "q", "a") == ""
+async def test_a_failure_leaves_the_fallback(settings):
+    client = Answering(RuntimeError("down"))
+    assert await title_.suggest(client, settings, "m", "q", "a") == ""
 
 
 async def test_without_an_api_key_nothing_is_asked(tmp_path):
-    assert await title_.suggest(make_settings(tmp_path), "m", "q", "a") == ""
+    client = Answering("A title")
+    assert await title_.suggest(client, make_settings(tmp_path), "m", "q", "a") == ""
+    assert client.calls == []
 
 
 def test_the_fallback_is_the_question_itself():
@@ -79,19 +73,18 @@ def test_the_fallback_is_the_question_itself():
     assert len(title_.fallback("x" * 500)) == title_.FALLBACK_CHARS
 
 
-async def test_the_least_thinking_is_asked_for_where_it_can_be(tmp_path, monkeypatch):
+async def test_the_least_thinking_is_asked_for_where_it_can_be(tmp_path):
     """Measured on a reasoning model: 14 seconds without it, under one with."""
     client = Answering("A title")
-    monkeypatch.setattr(title_, "make_client", lambda _s: client)
     openrouter = make_settings(
         tmp_path,
         llm_api_key="k",
         llm_provider="openrouter",
         llm_base_url="https://openrouter.ai/api/v1",
     )
-    await title_.suggest(openrouter, "m", "q", "a")
-    assert client.calls[0]["extra_body"] == {"reasoning": {"effort": "minimal"}}
+    await title_.suggest(client, openrouter, "m", "q", "a")
+    assert client.calls[0]["reasoning"] == {"effort": "minimal"}
 
     plain = make_settings(tmp_path, llm_api_key="k", llm_provider="gwdg")
-    await title_.suggest(plain, "m", "q", "a")
-    assert client.calls[1]["extra_body"] is None, "another gateway may reject the field"
+    await title_.suggest(client, plain, "m", "q", "a")
+    assert "reasoning" not in client.calls[1], "another gateway may reject the field"

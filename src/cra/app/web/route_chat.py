@@ -15,7 +15,7 @@ from cra.app.web.route_preferences import selection
 from cra.assistant.chat import title as title_
 from cra.assistant.chat.orchestrator import run_turn
 from cra.assistant.llm import params as params_
-from cra.assistant.llm.client import make_client
+from cra.assistant.llm.client import ChatClient
 
 log = logging.getLogger(__name__)
 
@@ -213,10 +213,8 @@ class _Turn:
             *ctx.registry.schemas(self.tier),
             *await ctx.remote.schemas(self.session_id),
         ]
-        fields = params_.request_fields(ctx.settings, self.chosen["params"])
-        extra_body, plain = params_.split(fields)
         async for event in run_turn(
-            make_client(ctx.settings),
+            ChatClient(ctx.settings, ctx.http),
             model=self.chosen["model"],
             messages=[*self.history, {"role": "user", "content": self.question}],
             system_prompt=ctx.system_prompt,
@@ -225,8 +223,7 @@ class _Turn:
             base_url=ctx.settings.llm_base_url,
             max_rounds=int(self.chosen["params"]["max_tool_rounds"] or 10),
             cancel=self.cancel,
-            extra_body=extra_body or None,
-            fields=plain,
+            fields=params_.request_fields(ctx.settings, self.chosen["params"]),
         ):
             yield event
 
@@ -260,7 +257,11 @@ class _Turn:
 
     async def name(self, answer: str) -> None:
         suggested = await title_.suggest(
-            self.ctx.settings, self.chosen["model"], self.question, answer
+            ChatClient(self.ctx.settings, self.ctx.http),
+            self.ctx.settings,
+            self.chosen["model"],
+            self.question,
+            answer,
         )
         if suggested:
             await self.ctx.repo.rename_conversation(self.conversation_id, suggested)

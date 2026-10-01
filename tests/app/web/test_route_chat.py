@@ -5,7 +5,7 @@ import json
 
 import pytest
 from conftest import make_settings, sign_in
-from fakes import FakeOpenAI, text_chunk, tool_chunk
+from fakes import FakeChatClient, text_chunk, tool_chunk
 
 from cra.app.web import route_chat
 from cra.app.web.factory import create_app
@@ -43,11 +43,11 @@ def scripted(monkeypatch):
     """The model answers from a script; the title comes for free."""
 
     def script(rounds):
-        fake = FakeOpenAI(rounds)
-        monkeypatch.setattr(route_chat, "make_client", lambda _settings: fake)
+        fake = FakeChatClient(rounds)
+        monkeypatch.setattr(route_chat, "ChatClient", lambda _settings, _http: fake)
         return fake
 
-    async def suggest(settings, model, question, answer):
+    async def suggest(client, settings, model, question, answer):
         return "A short title"
 
     monkeypatch.setattr(route_chat.title_, "suggest", suggest)
@@ -66,13 +66,13 @@ async def test_an_answer_streams_as_events_and_lands_in_the_history(
     # Quart cancels a response after RESPONSE_TIMEOUT; an answer with tool
     # rounds outlives the default minute, so the route has to opt out of it.
     app.config["RESPONSE_TIMEOUT"] = 0.2
-    create = fake.chat.completions.create
+    stream = fake.stream
 
-    async def slowly(**kwargs):
+    async def slowly(request):
         await asyncio.sleep(0.15)
-        return await create(**kwargs)
+        return await stream(request)
 
-    fake.chat.completions.create = slowly
+    fake.stream = slowly
 
     response = await client.post("/api/chat", json={"prompt": "How many papers?"})
     assert response.status_code == 200
