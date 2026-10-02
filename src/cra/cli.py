@@ -528,6 +528,46 @@ def cmd_users_connect_source(args: argparse.Namespace) -> int:
     return asyncio.run(run())
 
 
+def cmd_feedback_export(args: argparse.Namespace) -> int:
+    from cra.app import feedback_export
+
+    engine, repo = _repo(load_settings(args))
+
+    async def run() -> list[dict]:
+        try:
+            return await feedback_export.records(repo, args.since)
+        finally:
+            await engine.dispose()
+
+    entries = asyncio.run(run())
+    text = (
+        feedback_export.to_csv(entries)
+        if args.format == "csv"
+        else feedback_export.to_json(entries) + "\n"
+    )
+    if args.output:
+        args.output.write_text(text, encoding="utf-8")
+        sys.stderr.write(f"{len(entries)} entries written to {args.output}\n")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def _date(value: str):
+    """Naive UTC, as the database stores it; an offset, if given, is applied."""
+    from datetime import UTC, datetime
+
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{value!r} is not a date such as 2026-10-07 or 2026-10-07T14:00"
+        ) from None
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(UTC).replace(tzinfo=None)
+    return moment
+
+
 def cmd_policy_list(args: argparse.Namespace) -> int:
     from cra.app.policy import Policy
 
@@ -852,6 +892,21 @@ def build_parser() -> argparse.ArgumentParser:
     revoke = token_sub.add_parser("revoke", help="end a token")
     revoke.add_argument("token_id")
     revoke.set_defaults(func=cmd_token_revoke)
+
+    feedback = sub.add_parser("feedback", help="what people reported").add_subparsers(
+        dest="feedback_command", metavar="<command>", required=True
+    )
+    export = feedback.add_parser(
+        "export", help="every feedback entry, oldest first, as JSON or CSV"
+    )
+    export.add_argument(
+        "--since", type=_date, help="only entries from then on (UTC), e.g. 2026-10-07"
+    )
+    export.add_argument("--format", choices=("json", "csv"), default="json")
+    export.add_argument(
+        "-o", "--output", type=Path, help="write to this file instead of stdout"
+    )
+    export.set_defaults(func=cmd_feedback_export)
 
     policy = sub.add_parser("policy", help="operational settings admins may change")
     policy_sub = policy.add_subparsers(

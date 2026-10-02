@@ -658,17 +658,19 @@ class Repository:
         return row
 
     async def list_feedback(
-        self, limit: int = 200
+        self, limit: int | None = 200, since: datetime | None = None
     ) -> list[tuple[Feedback, str | None]]:
         """Newest first, each with the name of whoever sent it."""
+        query = (
+            select(Feedback, User.display_name)
+            .join(User, User.id == Feedback.user_id, isouter=True)
+            .order_by(Feedback.created_at.desc(), Feedback.id.desc())
+            .limit(limit)
+        )
+        if since is not None:
+            query = query.where(Feedback.created_at >= since)
         async with self._sessions() as s:
-            rows = await s.execute(
-                select(Feedback, User.display_name)
-                .join(User, User.id == Feedback.user_id, isouter=True)
-                .order_by(Feedback.created_at.desc(), Feedback.id.desc())
-                .limit(limit)
-            )
-            return [(row[0], row[1]) for row in rows]
+            return [(row[0], row[1]) for row in await s.execute(query)]
 
     async def delete_feedback(self, feedback_id: int) -> bool:
         async with self._sessions() as s, s.begin():
@@ -677,7 +679,7 @@ class Repository:
 
     async def count_feedback(self) -> int:
         async with self._sessions() as s:
-            return len(list(await s.scalars(select(Feedback.id))))
+            return int(await s.scalar(select(func.count()).select_from(Feedback)))
 
     async def feedback_of(self, user_id: str) -> list[Feedback]:
         async with self._sessions() as s:

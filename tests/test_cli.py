@@ -238,3 +238,41 @@ def test_the_accounts_are_listed_as_json_for_scripts(env, monkeypatch, capsys):
     assert main(["--env-file", str(env), "users", "list", "--json"]) == 0
     (listed,) = json.loads(capsys.readouterr().out)
     assert (listed["username"], listed["active"]) == ("ada@uni.de", True)
+
+
+def test_feedback_is_exported_from_a_date_on(env, monkeypatch, capsys):
+    import json
+    from datetime import UTC, datetime
+
+    from cra.app.history.engine import make_engine, make_session_factory
+    from cra.app.history.repository import Repository
+
+    create_accounts(env, monkeypatch, "ada@uni.de")
+
+    async def seed() -> None:
+        engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
+        repo = Repository(make_session_factory(engine))
+        credential = await repo.get_credential_by_username("ada@uni.de")
+        assert credential is not None
+        for text in ("before", "after"):
+            row = await repo.add_feedback(
+                user_id=credential.user_id,
+                category="Bug report",
+                text=text,
+                model="m",
+                messages=[],
+            )
+            if text == "before":
+                async with make_session_factory(engine)() as s, s.begin():
+                    stored = await s.get(type(row), row.id)
+                    stored.created_at = datetime(2026, 1, 1, tzinfo=UTC).replace(
+                        tzinfo=None
+                    )
+        await engine.dispose()
+
+    asyncio.run(seed())
+    capsys.readouterr()
+    cli = ["--env-file", str(env), "feedback", "export", "--since", "2026-06-01"]
+    assert main(cli) == 0
+    (entry,) = json.loads(capsys.readouterr().out)
+    assert (entry["text"], entry["username"]) == ("after", "ada@uni.de")

@@ -325,7 +325,9 @@ async function loadPolicy() {
 }
 
 async function loadFeedback() {
-  const { feedback } = await getJSON("api/admin/feedback");
+  const { feedback, total } = await getJSON("api/admin/feedback");
+  $("feedback-count").textContent =
+    total > feedback.length ? `${total} in all, the newest ${feedback.length} shown.` : `${total} in all.`;
   const body = $("feedback");
   body.replaceChildren();
   if (!feedback.length) {

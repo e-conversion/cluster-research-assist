@@ -1,5 +1,8 @@
 """Sending feedback, and reading it in the console."""
 
+import csv
+import io
+
 import pytest
 from conftest import make_settings, sign_in
 
@@ -92,6 +95,41 @@ async def test_feedback_is_listed_newest_first_and_can_be_deleted(admin):
     assert (
         await admin.delete(f"/api/admin/feedback/{listed[1]['id']}")
     ).status_code == 404
+
+
+async def test_the_export_names_each_note_by_username(admin):
+    await send(
+        admin,
+        messages=[
+            {"role": "user", "content": "who works on MOFs?"},
+            {"role": "assistant", "content": "nobody"},
+        ],
+    )
+    response = await admin.get("/api/admin/feedback/export?format=csv")
+    assert "attachment" in response.headers["Content-Disposition"]
+    (row,) = list(csv.DictReader(io.StringIO(await response.get_data(as_text=True))))
+    assert (row["username"], row["question"], row["answer"]) == (
+        "root-admin",
+        "who works on MOFs?",
+        "nobody",
+    )
+
+
+async def test_the_export_holds_more_than_the_console_shows(admin, admin_app):
+    repo = admin_app.extensions["cra"].repo
+    user_id = (await repo.get_credential_by_username("root-admin")).user_id
+    for n in range(205):
+        await repo.add_feedback(
+            user_id=user_id,
+            category="General feedback",
+            text=str(n),
+            model="",
+            messages=[],
+        )
+    listed = await json_of(await admin.get("/api/admin/feedback"))
+    assert (len(listed["feedback"]), listed["total"]) == (200, 205)
+    exported = await json_of(await admin.get("/api/admin/feedback/export?format=json"))
+    assert [e["text"] for e in exported] == [str(n) for n in range(205)]
 
 
 async def test_feedback_goes_when_the_account_goes(admin, admin_app):

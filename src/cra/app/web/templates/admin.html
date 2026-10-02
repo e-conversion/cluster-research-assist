@@ -91,7 +91,9 @@
 
   <section id="tab-feedback" role="tabpanel" hidden>
     <p class="desc">Bug reports and notes people sent, newest first. The conversation each was sent
-    from is attached; open a row to read it.</p>
+    from is attached; open a row to read it. <span id="feedback-count"></span>
+    Download all: <a href="api/admin/feedback/export?format=csv" download>CSV</a> ·
+    <a href="api/admin/feedback/export?format=json" download>JSON</a></p>
     <table><thead><tr><th>From</th><th>Kind</th><th>Note</th><th>When</th><th></th></tr></thead>
     <tbody id="feedback"></tbody></table>
   </section>

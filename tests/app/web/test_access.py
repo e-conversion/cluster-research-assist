@@ -65,6 +65,7 @@ ADMIN_ROUTES = {
     "/api/admin/emails",
     "/api/admin/emails/<path:email>",
     "/api/admin/feedback",
+    "/api/admin/feedback/export",
     "/api/admin/feedback/<int:feedback_id>",
     "/api/admin/policy",
     "/api/admin/policy/<key>",

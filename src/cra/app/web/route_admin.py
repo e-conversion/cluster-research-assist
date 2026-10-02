@@ -7,11 +7,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from quart import Blueprint, current_app, g, request
+from quart import Blueprint, Response, current_app, g, request
 
+from cra.app import feedback_export
 from cra.app.auth import local
 from cra.app.auth.principal import Role
-from cra.app.history.repository import valid_email
+from cra.app.history.repository import utcnow, valid_email
 from cra.app.policy import KEYS, PolicyError
 from cra.app.web import auditlog
 from cra.app.web.access import requires_admin
@@ -237,6 +238,7 @@ async def remove_email(email: str) -> Any:
 async def feedback() -> dict[str, Any]:
     rows = await _ctx().repo.list_feedback()
     return {
+        "total": await _ctx().repo.count_feedback(),
         "feedback": [
             {
                 "id": row.id,
@@ -248,8 +250,30 @@ async def feedback() -> dict[str, Any]:
                 "messages": row.messages,
             }
             for row, name in rows
-        ]
+        ],
     }
+
+
+@bp.get("/api/admin/feedback/export")
+@requires_admin
+async def export_feedback() -> Any:
+    kind = request.args.get("format", "csv")
+    if kind not in ("csv", "json"):
+        return _bad("format is csv or json")
+    entries = await feedback_export.records(_ctx().repo)
+    body = (
+        feedback_export.to_csv(entries)
+        if kind == "csv"
+        else feedback_export.to_json(entries)
+    )
+    stamp = utcnow().strftime("%Y%m%dT%H%MZ")
+    return Response(
+        body,
+        content_type="text/csv; charset=utf-8" if kind == "csv" else "application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="feedback-{stamp}.{kind}"'
+        },
+    )
 
 
 @bp.delete("/api/admin/feedback/<int:feedback_id>")
