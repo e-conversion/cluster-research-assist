@@ -12,6 +12,7 @@ import argparse
 import asyncio
 import json
 import random
+import re
 import time
 
 from hypercorn.asyncio import serve
@@ -48,7 +49,7 @@ def _next_call(messages, tools):
     question = next(
         (m["content"] for m in reversed(messages) if m.get("role") == "user"), ""
     )
-    lab = "lab" in question.lower()
+    lab = re.search(r"\blab\b", question, re.IGNORECASE) is not None
     plan = [("search_papers", {"query": question[:60], "limit": 10})]
     if lab and "elab_list_experiments" in names:
         plan.append(("elab_list_experiments", {"query": "TGA"}))

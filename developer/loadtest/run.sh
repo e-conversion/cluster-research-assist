@@ -3,7 +3,9 @@
 # mock model and lab sources, `cra serve` on the given library, the workshop
 # accounts made with atlas's script, then the driver. Usage:
 #   developer/loadtest/run.sh <library root> <work dir> [driver args…]
-# Nothing here costs tokens. Stop the database with: docker rm -f cra-loadtest-pg
+# Nothing here costs tokens. LOADTEST_DOWN=elab (or dt) leaves that source
+# unstarted, to see the chat carry on without it. Stop the database with:
+# docker rm -f cra-loadtest-pg
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -42,8 +44,8 @@ ENV
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT
 "$py" "$here/mock_llm.py" --port 8790 > mock_llm.log 2>&1 & pids+=($!)
-"$py" "$here/mock_sources.py" elab --port 8801 > mock_elab.log 2>&1 & pids+=($!)
-"$py" "$here/mock_sources.py" dt --port 8802 > mock_dt.log 2>&1 & pids+=($!)
+[[ ${LOADTEST_DOWN:-} == elab ]] || { "$py" "$here/mock_sources.py" elab --port 8801 > mock_elab.log 2>&1 & pids+=($!); }
+[[ ${LOADTEST_DOWN:-} == dt ]] || { "$py" "$here/mock_sources.py" dt --port 8802 > mock_dt.log 2>&1 & pids+=($!); }
 "$cra" --env-file load.env db upgrade >/dev/null
 "$cra" --env-file load.env serve > serve.log 2>&1 & cra_pid=$!; pids+=($cra_pid)
 until curl -fs -o /dev/null http://127.0.0.1:8766/; do sleep 1; done
