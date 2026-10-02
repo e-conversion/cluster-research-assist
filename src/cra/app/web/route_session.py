@@ -60,14 +60,22 @@ async def config() -> dict[str, Any]:
 
 
 def _mcp(settings) -> dict[str, Any] | None:
-    """Where the outward endpoint is, relative to the page, so the browser
-    resolves it against the address it actually used: behind the proxy this
-    process does not know its own scheme."""
+    """Where the outward endpoint is. Relative to the page, so the browser
+    resolves it against the address it actually used, since behind the proxy
+    this process does not know its own scheme; absolute when the deployment
+    says what it is called, because a client signing in must name exactly
+    that address."""
     if not settings.mcp_server_enabled:
         return None
+    public = settings.public_url
     return {
         "path": settings.mcp_server_path.lstrip("/"),
+        "url": public + settings.base_path + settings.mcp_server_path
+        if public
+        else None,
         "token_required": settings.mcp_server_require_token,
+        # clients can sign in instead of being given a token
+        "sign_in": settings.mcp_oauth_enabled,
         "token_days": {
             "default": tokens.DEFAULT_DAYS,
             "choices": list(tokens.EXPIRY_CHOICES),

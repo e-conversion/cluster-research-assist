@@ -17,6 +17,8 @@ from cra.app.history.tables import (
     LocalCredential,
     McpToken,
     Message,
+    OAuthClient,
+    OAuthRequest,
     PasswordToken,
     PolicySetting,
     RegisteredEmail,
@@ -689,7 +691,15 @@ class Repository:
     # MCP tokens
 
     async def create_token(
-        self, user_id: str, label: str, token_hash: str, expires_at: datetime
+        self,
+        user_id: str,
+        label: str,
+        token_hash: str,
+        expires_at: datetime,
+        *,
+        client_id: str | None = None,
+        refresh_hash: str | None = None,
+        access_expires_at: datetime | None = None,
     ) -> McpToken:
         row = McpToken(
             user_id=user_id,
@@ -697,6 +707,9 @@ class Repository:
             token_hash=token_hash,
             created_at=utcnow(),
             expires_at=expires_at,
+            client_id=client_id,
+            refresh_hash=refresh_hash,
+            access_expires_at=access_expires_at,
         )
         async with self._sessions() as s, s.begin():
             s.add(row)
@@ -713,6 +726,50 @@ class Repository:
                 )
             ).first()
             return (row[0], bool(row[1])) if row else None
+
+    async def get_token_by_refresh_hash(
+        self, refresh_hash: str
+    ) -> tuple[McpToken, bool] | None:
+        """The grant and whether its owner's account is active."""
+        async with self._sessions() as s:
+            row = (
+                await s.execute(
+                    select(McpToken, User.is_active)
+                    .join(User, User.id == McpToken.user_id)
+                    .where(McpToken.refresh_hash == refresh_hash)
+                )
+            ).first()
+            return (row[0], bool(row[1])) if row else None
+
+    async def renew_grant(
+        self,
+        token_id: str,
+        old_refresh_hash: str,
+        *,
+        token_hash: str,
+        refresh_hash: str,
+        access_expires_at: datetime,
+        expires_at: datetime,
+    ) -> bool:
+        """Replaces both values of a live grant. Conditional on the refresh
+        value it is renewed with, so of two clients racing with one refresh
+        token only the first gets new ones."""
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(McpToken)
+                .where(
+                    McpToken.id == token_id,
+                    McpToken.refresh_hash == old_refresh_hash,
+                    McpToken.revoked_at.is_(None),
+                )
+                .values(
+                    token_hash=token_hash,
+                    refresh_hash=refresh_hash,
+                    access_expires_at=access_expires_at,
+                    expires_at=expires_at,
+                )
+            )
+            return result.rowcount == 1
 
     async def get_token(self, token_id: str) -> McpToken | None:
         async with self._sessions() as s:
@@ -764,6 +821,92 @@ class Repository:
                 .where(McpToken.id == token_id)
                 .values(last_used_at=when)
             )
+
+    # OAuth: clients that registered themselves, and sign-ins in progress
+
+    async def add_oauth_client(self, client_id: str, info: dict[str, Any]) -> None:
+        async with self._sessions() as s, s.begin():
+            s.add(OAuthClient(id=client_id, info=info, created_at=utcnow()))
+
+    async def put_oauth_client(self, client_id: str, info: dict[str, Any]) -> None:
+        """Adds or replaces a client described by a document it publishes;
+        ``created_at`` is then when the document was last read."""
+        async with self._sessions() as s, s.begin():
+            await s.merge(OAuthClient(id=client_id, info=info, created_at=utcnow()))
+
+    async def get_oauth_client(self, client_id: str) -> OAuthClient | None:
+        async with self._sessions() as s:
+            return await s.get(OAuthClient, client_id)
+
+    async def add_oauth_request(
+        self,
+        request_hash: str,
+        client_id: str,
+        params: dict[str, Any],
+        expires_at: datetime,
+    ) -> None:
+        async with self._sessions() as s, s.begin():
+            # every new request sweeps away the ones nobody finished
+            await s.execute(
+                delete(OAuthRequest).where(OAuthRequest.expires_at <= utcnow())
+            )
+            s.add(
+                OAuthRequest(
+                    id=request_hash,
+                    client_id=client_id,
+                    params=params,
+                    expires_at=expires_at,
+                )
+            )
+
+    async def get_oauth_request(self, request_hash: str) -> OAuthRequest | None:
+        """A request still waiting for its person's answer."""
+        async with self._sessions() as s:
+            return await s.scalar(
+                select(OAuthRequest).where(
+                    OAuthRequest.id == request_hash,
+                    OAuthRequest.code_hash.is_(None),
+                    OAuthRequest.expires_at > utcnow(),
+                )
+            )
+
+    async def approve_oauth_request(
+        self, request_hash: str, user_id: str, code_hash: str, expires_at: datetime
+    ) -> bool:
+        """Attaches the person and the code; only once, and only in time."""
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                update(OAuthRequest)
+                .where(
+                    OAuthRequest.id == request_hash,
+                    OAuthRequest.code_hash.is_(None),
+                    OAuthRequest.expires_at > utcnow(),
+                )
+                .values(user_id=user_id, code_hash=code_hash, expires_at=expires_at)
+            )
+            return result.rowcount == 1
+
+    async def delete_oauth_request(self, request_hash: str) -> None:
+        async with self._sessions() as s, s.begin():
+            await s.execute(delete(OAuthRequest).where(OAuthRequest.id == request_hash))
+
+    async def get_oauth_code(self, code_hash: str) -> OAuthRequest | None:
+        async with self._sessions() as s:
+            return await s.scalar(
+                select(OAuthRequest).where(
+                    OAuthRequest.code_hash == code_hash,
+                    OAuthRequest.expires_at > utcnow(),
+                )
+            )
+
+    async def take_oauth_code(self, code_hash: str) -> bool:
+        """Removes the code; true only for the one caller that removed it, so
+        a code is redeemed at most once."""
+        async with self._sessions() as s, s.begin():
+            result = await s.execute(
+                delete(OAuthRequest).where(OAuthRequest.code_hash == code_hash)
+            )
+            return result.rowcount == 1
 
     # web sessions
 

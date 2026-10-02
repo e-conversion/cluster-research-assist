@@ -1,0 +1,23 @@
+{% import "_brand.html" as b with context -%}
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connect {{ client }} · {{ title }}</title>
+{{ b.head() }}</head>
+<body><main class="view"><div class="signin consent">{{ b.logo() }}
+<h1>Connect {{ client }}?</h1>
+<p class="lede">{{ client }} wants to search {{ cluster }}’s library as <b>{{ user }}</b>.</p>
+<ul class="consent-list">
+  <li class="yes">Search papers and their abstracts, the groups, and who works with whom</li>
+  <li class="no">No full texts or internal documents, and it cannot change anything</li>
+</ul>
+<p class="consent-return">Afterwards you go back to <b>{{ return_host }}</b>.
+  Allow only if that is the app you just came from.</p>
+<div class="consent-actions" id="consent" data-request="{{ handle }}">
+  <button type="button" class="btn" data-approve="false">Cancel</button>
+  <button type="button" class="btn primary" data-approve="true">Allow</button>
+</div>
+<p class="error" id="consent-error" hidden></p>
+<p class="muted small">You can disconnect it at any time under Settings → Connect apps.</p>
+</div></main>
+<script type="module" src="{{ home }}static/js/oauth-consent.js"></script>
+</body></html>

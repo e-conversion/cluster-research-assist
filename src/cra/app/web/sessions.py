@@ -15,10 +15,10 @@ from cra.app.history.repository import Repository, utcnow
 COOKIE_NAME = "cra_session"
 # last_seen_at is written at most this often to keep reads cheap
 TOUCH_INTERVAL = timedelta(minutes=5)
-# what a login keeps from the session it replaces: the user's own choices,
-# never anything that points at data (the conversation belongs to whoever
-# was signed in before)
-KEPT_ON_LOGIN = ("model", "params")
+# what a login keeps from the session it replaces: the user's own choices and
+# the page to return to, never anything that points at data (the conversation
+# belongs to whoever was signed in before)
+KEPT_ON_LOGIN = ("model", "params", "return_to")
 
 
 def hash_cookie(value: str) -> str:

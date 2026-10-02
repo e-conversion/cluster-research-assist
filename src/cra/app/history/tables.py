@@ -223,6 +223,49 @@ class McpToken(Base):
     expires_at: Mapped[datetime]
     last_used_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
+    # Set for a token a client got by signing its person in (OAuth). Such a
+    # token is a grant: its access value lives until access_expires_at and is
+    # replaced, together with the refresh value, whenever the client renews
+    # it; expires_at moves forward with every renewal.
+    client_id: Mapped[str | None] = mapped_column(
+        ForeignKey("oauth_clients.id", ondelete="CASCADE")
+    )
+    refresh_hash: Mapped[str | None] = mapped_column(String(64))
+    access_expires_at: Mapped[datetime | None]
+
+    __table_args__ = (Index("ix_mcp_tokens_refresh_hash", "refresh_hash", unique=True),)
+
+
+class OAuthClient(Base):
+    """An MCP client that registered itself (RFC 7591) so people can sign in
+    through it. Registration is open, as the protocol has it: a client gets
+    nothing until a person approves it on the consent page, which shows where
+    it will send them."""
+
+    __tablename__ = "oauth_clients"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    info: Mapped[dict[str, Any]]
+    created_at: Mapped[datetime]
+
+
+class OAuthRequest(Base):
+    """A sign-in a client asked for. It waits first for its person's answer on
+    the consent page, then, approved, for the client to redeem the code. Both
+    the request handle (``id``) and the code are kept as sha256 hashes."""
+
+    __tablename__ = "oauth_requests"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    client_id: Mapped[str] = mapped_column(
+        ForeignKey("oauth_clients.id", ondelete="CASCADE")
+    )
+    params: Mapped[dict[str, Any]]
+    user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE")
+    )
+    code_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime]
 
 
 class WebSession(Base):

@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import os
 from pathlib import Path
 
@@ -72,6 +74,26 @@ async def session_user(client) -> str | None:
     if response.status_code == 401:
         return None
     return (await response.get_json())["user"]
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app):
+    """Drive an ASGI lifespan by hand, for an app served outside Quart's own
+    test client (the MCP dispatcher in front of it): both halves have to start."""
+    to_app: asyncio.Queue = asyncio.Queue()
+    from_app: asyncio.Queue = asyncio.Queue()
+    task = asyncio.create_task(
+        app({"type": "lifespan", "asgi": {"version": "3.0"}}, to_app.get, from_app.put)
+    )
+    await to_app.put({"type": "lifespan.startup"})
+    started = await from_app.get()
+    assert started["type"] == "lifespan.startup.complete", started
+    try:
+        yield app
+    finally:
+        await to_app.put({"type": "lifespan.shutdown"})
+        assert (await from_app.get())["type"] == "lifespan.shutdown.complete"
+        await task
 
 
 async def call_tool(registry, ctx, tool_name: str, /, **arguments):

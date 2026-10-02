@@ -4,13 +4,12 @@ A real ``ClientSession`` talks to the dispatcher over an ASGI transport, so
 these are the same code paths a deployment serves, minus the socket.
 """
 
-import asyncio
 import contextlib
 import json
 
 import httpx2
 import pytest
-from conftest import make_settings
+from conftest import lifespan, make_settings
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
@@ -19,25 +18,6 @@ from cra.app.mcpserver.dispatcher import Dispatcher, wrap
 from cra.app.web.factory import create_app
 
 BASE = "http://cra.test"
-
-
-@contextlib.asynccontextmanager
-async def lifespan(app):
-    """Drive the ASGI lifespan by hand: both halves have to start."""
-    to_app: asyncio.Queue = asyncio.Queue()
-    from_app: asyncio.Queue = asyncio.Queue()
-    task = asyncio.create_task(
-        app({"type": "lifespan", "asgi": {"version": "3.0"}}, to_app.get, from_app.put)
-    )
-    await to_app.put({"type": "lifespan.startup"})
-    started = await from_app.get()
-    assert started["type"] == "lifespan.startup.complete", started
-    try:
-        yield app
-    finally:
-        await to_app.put({"type": "lifespan.shutdown"})
-        assert (await from_app.get())["type"] == "lifespan.shutdown.complete"
-        await task
 
 
 def make_endpoint(tmp_path, **overrides):

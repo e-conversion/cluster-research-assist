@@ -21,6 +21,8 @@ PUBLIC_ROUTES = {
     # these two also need the verified identity of a sign-in without an account
     "/api/access-requests",
     "/api/access-requests/me",
+    # an MCP client's sign-in starts here, before its person has signed in
+    "/oauth/consent",
 }
 
 
@@ -46,6 +48,7 @@ USER_ROUTES = {
     "/api/me/export",
     "/api/me/password",
     "/api/stats",
+    "/oauth/consent/answer",
 }
 
 

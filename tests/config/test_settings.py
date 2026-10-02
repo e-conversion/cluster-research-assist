@@ -78,6 +78,9 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
         {"CRA_OIDC_CLIENT_SECRET": "s", "CRA_OIDC_CLIENT_ID": "c"},
         {"CRA_PORT": "0"},
         {"CRA_BRAND_DIR": "/no/such/brand"},
+        {"CRA_PUBLIC_URL": "atlas.example.org"},
+        {"CRA_PUBLIC_URL": "https://atlas.example.org/cra"},
+        {"CRA_PUBLIC_URL": "http://atlas.example.org"},
     ],
     ids=[
         "relative base path",
@@ -85,6 +88,9 @@ def test_base_path_is_normalised(monkeypatch, raw, expected):
         "oidc client without issuer",
         "port",
         "missing brand directory",
+        "public url without scheme",
+        "public url with a path",
+        "public url over plain http",
     ],
 )
 def test_invalid_configuration_is_rejected(monkeypatch, env):
@@ -93,6 +99,48 @@ def test_invalid_configuration_is_rejected(monkeypatch, env):
         monkeypatch.setenv(key, value)
     with pytest.raises(ValidationError):
         Settings.load(None)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("https://atlas.example.org/", "https://atlas.example.org"),
+        ("http://localhost:8000", "http://localhost:8000"),
+    ],
+)
+def test_public_url_is_an_origin(monkeypatch, raw, expected):
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    monkeypatch.setenv("CRA_PUBLIC_URL", raw)
+    assert Settings.load(None).public_url == expected
+
+
+@pytest.mark.parametrize(
+    ("env", "enabled"),
+    [
+        ({"CRA_PUBLIC_URL": "https://a.example"}, True),
+        ({}, False),
+        (
+            {
+                "CRA_PUBLIC_URL": "https://a.example",
+                "CRA_MCP_SERVER_REQUIRE_TOKEN": "false",
+            },
+            False,
+        ),
+        (
+            {"CRA_PUBLIC_URL": "https://a.example", "CRA_MCP_SERVER_ENABLED": "false"},
+            False,
+        ),
+    ],
+    ids=["configured", "no public url", "no tokens asked for", "no endpoint"],
+)
+def test_mcp_sign_in_needs_the_endpoint_tokens_and_an_address(
+    monkeypatch, env, enabled
+):
+    monkeypatch.setenv("CRA_LIBRARY_PATH", "/c")
+    monkeypatch.setenv("CRA_MCP_SERVER_ENABLED", "true")
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    assert Settings.load(None).mcp_oauth_enabled is enabled
 
 
 def test_library_path_is_required():

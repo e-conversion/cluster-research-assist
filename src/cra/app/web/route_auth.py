@@ -61,6 +61,8 @@ WRONG_PASSWORD = "The username or password is not right."
 PENDING_KEY = "pending_identity"
 PENDING_LIFETIME_S = 30 * 60
 VIA_KEY = "via"
+# a page that sent its visitor to sign in first, and wants them back after
+RETURN_KEY = "return_to"
 
 
 def _ctx():
@@ -88,7 +90,7 @@ def pending_identity(session: SessionState | None) -> dict[str, Any] | None:
     return pending
 
 
-def _set_cookie(response: Response, cookie: str) -> Response:
+def set_cookie(response: Response, cookie: str) -> Response:
     ctx = _ctx()
     response.set_cookie(
         COOKIE_NAME,
@@ -137,17 +139,29 @@ def _json_error(message: str, status: int) -> Response:
     return response
 
 
-async def _sign_in(state: SessionState | None, user_id: str, via: str) -> str:
+async def _sign_in(
+    state: SessionState | None, user_id: str, via: str
+) -> tuple[str, str | None]:
+    """The new session's cookie, and where to go next if a page asked to be
+    returned to."""
     ctx = _ctx()
     if state is None:
         cookie, fresh = await ctx.sessions.create(user_id)
     else:
         cookie, fresh = await ctx.sessions.rotate(state, user_id)
     fresh.data[VIA_KEY] = via
+    destination = fresh.data.pop(RETURN_KEY, None)
     await ctx.sessions.save(fresh)
     await ctx.repo.touch_login(user_id)
     log.info("login", extra={"fields": {"user": user_id, "via": via}})
-    return cookie
+    return cookie, destination if returnable(destination) else None
+
+
+def returnable(path: Any) -> bool:
+    """Only the consent page asks to be returned to; anything else stored
+    under the key is not followed, so it cannot become an open redirect."""
+    prefix = _ctx().settings.base_path + "/oauth/consent?"
+    return isinstance(path, str) and path.startswith(prefix)
 
 
 async def _ask_for_access(state: SessionState, identity: dict[str, str]) -> Response:
@@ -159,7 +173,7 @@ async def _ask_for_access(state: SessionState, identity: dict[str, str]) -> Resp
         "unregistered identity offered an access request",
         extra={"fields": {"organization": identity.get("home_organization", "")}},
     )
-    return _set_cookie(redirect(ctx.home + "#/request-access"), cookie)
+    return set_cookie(redirect(ctx.home + "#/request-access"), cookie)
 
 
 async def _finish(state: SessionState, outcome: LoginOutcome) -> Response:
@@ -191,8 +205,8 @@ async def _finish(state: SessionState, outcome: LoginOutcome) -> Response:
             log.info(
                 "granted admin from configuration", extra={"fields": {"user": user.id}}
             )
-    cookie = await _sign_in(state, outcome.user_id, "oidc")
-    return _set_cookie(redirect(ctx.home), cookie)
+    cookie, destination = await _sign_in(state, outcome.user_id, "oidc")
+    return set_cookie(redirect(destination or ctx.home), cookie)
 
 
 @bp.post("/auth/password")
@@ -215,8 +229,8 @@ async def password_login() -> Response:
     if not verified.ok:
         # said only to whoever knows the password
         return _json_error(MESSAGES[LoginDenied.INACTIVE], 403)
-    cookie = await _sign_in(g.session, verified.user.id, "password")
-    return _set_cookie(jsonify(ok=True), cookie)
+    cookie, destination = await _sign_in(g.session, verified.user.id, "password")
+    return set_cookie(jsonify(ok=True, redirect=destination), cookie)
 
 
 @bp.post("/auth/set-password")
@@ -238,8 +252,8 @@ async def set_password() -> Response:
     user = await ctx.repo.get_user(user_id)
     if user is None or not user.is_active:
         return _json_error(MESSAGES[LoginDenied.INACTIVE], 403)
-    cookie = await _sign_in(g.session, user_id, "password")
-    return _set_cookie(jsonify(ok=True), cookie)
+    cookie, destination = await _sign_in(g.session, user_id, "password")
+    return set_cookie(jsonify(ok=True, redirect=destination), cookie)
 
 
 @bp.post("/auth/password-link")
@@ -275,7 +289,7 @@ async def login() -> Response:
         return await _finish(state, LoginOutcome(denied=LoginDenied.FAILED))
     await ctx.sessions.save(state)
     response = redirect(url)
-    return _set_cookie(response, cookie) if cookie else response
+    return set_cookie(response, cookie) if cookie else response
 
 
 @bp.get("/auth/callback")

@@ -7,12 +7,14 @@ Nothing else in the package reads ``os.environ``.
 import os
 from pathlib import Path
 from typing import Annotated, Any
+from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
 from pydantic import BeforeValidator, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ENV_PREFIX = "CRA_"
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 REDACTED = "***"
 # keys an older release read, with what replaces them: an .env that still sets
 # one would otherwise only be told the key is unknown
@@ -128,6 +130,20 @@ class Settings(BaseSettings):
     mcp_server_rate_limit: int = Field(default=60, ge=1)
     # Host values the endpoint answers to; empty turns DNS-rebinding checks off
     mcp_server_allowed_hosts: CommaList = []
+    # Where people reach this deployment, e.g. https://atlas.e-conversion.de,
+    # without CRA_BASE_PATH. With it the endpoint also lets a client sign in
+    # (OAuth): Claude's and ChatGPT's connectors cannot send a fixed token.
+    public_url: str = ""
+    # https hosts trusted to act as signing-in clients: they may receive the
+    # person back, and publish the client documents Claude and ChatGPT name
+    # themselves by. Loopback addresses and app schemes (cursor://…) may always
+    # receive the person: only the machine they sit at can.
+    mcp_oauth_client_hosts: CommaList = [
+        "claude.ai",
+        "claude.com",
+        "chatgpt.com",
+        "vscode.dev",
+    ]
 
     # history
     history_url: str = "sqlite+aiosqlite:///./cra.sqlite"
@@ -189,6 +205,25 @@ class Settings(BaseSettings):
             raise ValueError("must start with '/'")
         return value
 
+    @field_validator("public_url")
+    @classmethod
+    def _origin_only(cls, value: str) -> str:
+        value = value.strip().rstrip("/")
+        if not value:
+            return value
+        parts = urlsplit(value)
+        if parts.scheme not in ("https", "http") or not parts.hostname:
+            raise ValueError(
+                "must be an absolute URL such as https://atlas.example.org"
+            )
+        if parts.path or parts.query or parts.fragment:
+            raise ValueError("must be the origin only; the path is CRA_BASE_PATH")
+        # OAuth metadata must be served over https; plain http only for a
+        # server on the developer's own machine
+        if parts.scheme == "http" and parts.hostname not in LOOPBACK_HOSTS:
+            raise ValueError("must use https")
+        return value
+
     @field_validator("source_token_key")
     @classmethod
     def _fernet_key(cls, value: SecretStr) -> SecretStr:
@@ -237,6 +272,16 @@ class Settings(BaseSettings):
     @property
     def oidc_enabled(self) -> bool:
         return not self._oidc_missing()
+
+    @property
+    def mcp_oauth_enabled(self) -> bool:
+        """Signing in is a way to get a token, so it exists only where tokens
+        are asked for, and only where the deployment knows its own address."""
+        return bool(
+            self.mcp_server_enabled
+            and self.mcp_server_require_token
+            and self.public_url
+        )
 
     @classmethod
     def load(cls, env_file: Path | None = Path(".env")) -> "Settings":

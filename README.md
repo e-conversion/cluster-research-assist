@@ -178,7 +178,34 @@ backed by the very same registry, asked at the public tier: an internal tool is
 neither listed nor reachable by name, and full texts and the proposal never
 leave through it.
 
-Signed-in users mint their own tokens under **Settings → MCP access**: a label,
+**Settings → Connect apps** tells people how to connect Claude, ChatGPT,
+Claude Code, Codex, Cursor and VS Code, with every value to fill in.
+
+### Signing in (OAuth)
+
+Claude's and ChatGPT's connectors cannot send a fixed token; they sign their
+person in. With `CRA_PUBLIC_URL` set (the origin people reach the deployment
+at, e.g. `https://atlas.example.org`) the endpoint is also an OAuth 2.1
+authorization server for itself: it serves the protected-resource and
+authorization-server metadata under `/.well-known/`, points to them from every
+401, and offers `/oauth/authorize`, `/oauth/token`, `/oauth/register` (dynamic
+client registration) and `/oauth/revoke`. Clients may also name themselves by
+a client ID metadata document, as Claude and ChatGPT do by default. The
+protocol handling is the MCP SDK's; the person approves on a consent page
+here, after signing in as usual.
+
+Both a client's return address and the host of its metadata document MUST be
+on `CRA_MCP_OAUTH_CLIENT_HOSTS` (default `claude.ai`, `claude.com`,
+`chatgpt.com`, `vscode.dev`); loopback addresses and app schemes such as
+`cursor://` may always receive people back. A sign-in becomes a row in the
+person's token list ("signed in"), revocable like any token. Its access value
+lives an hour and renews with a rotating refresh value; the grant ends 90 days
+after its last renewal. Without `CRA_PUBLIC_URL` none of this is served and
+tokens are the only way in.
+
+### Tokens
+
+Signed-in users mint their own tokens under **Settings → Connect apps**: a label,
 an expiry of 30, 90 or 365 days, and the value, shown once. Only its sha256 is
 stored. A token can be revoked there at any time, by an admin in the console's
 Tokens tab, or from the command line:

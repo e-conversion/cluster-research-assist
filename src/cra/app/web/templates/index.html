@@ -153,7 +153,7 @@
     </header>
     <nav class="tabs" id="settings-tabs" role="tablist">
       <button type="button" role="tab" data-tab="appearance">Appearance</button>
-      <button type="button" role="tab" data-tab="mcp" id="settings-tab-mcp">MCP access</button>
+      <button type="button" role="tab" data-tab="mcp" id="settings-tab-mcp">Connect apps</button>
       <button type="button" role="tab" data-tab="account">Account</button>
     </nav>
 
@@ -167,45 +167,46 @@
     </section>
 
     <section class="set-section" id="set-mcp" role="tabpanel" hidden>
-      <p class="muted">A token lets an MCP client such as Claude Code or Cursor search
-        the cluster's public library on your behalf: papers and their abstracts, the
-        groups and who works with whom, never full texts or the proposal. Give each client its own token, so you can
-        revoke one without the others.</p>
-      <p class="muted small">The value is shown once, when you create it; treat it like
-        a password. Every call is logged against the token. It stops working when it
-        expires, when you revoke it here, or when your account is deactivated.</p>
+      <p class="muted">Use the library from an AI app such as Claude or ChatGPT. The app
+        can search papers and their abstracts, the groups and who works with whom; never
+        full texts or internal documents, and it cannot change anything.</p>
+
+      <div class="seg app-seg" id="app-seg" role="tablist" aria-label="Your app">
+        <button type="button" role="tab" data-app="claude">Claude</button>
+        <button type="button" role="tab" data-app="chatgpt">ChatGPT</button>
+        <button type="button" role="tab" data-app="other">Other apps</button>
+      </div>
+      <div class="guide" id="app-guide" role="tabpanel"></div>
+
+      <h3 class="set-heading">Connected apps and tokens</h3>
       <table class="token-table" id="token-table" hidden>
-        <thead><tr><th>Label</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Created</th><th>Expires</th><th>Last used</th><th></th></tr></thead>
         <tbody id="token-rows"></tbody>
       </table>
-      <p class="muted small" id="token-empty">No tokens yet.</p>
-      <div class="token-new">
-        <label class="field grow">
-          <span>Label</span>
-          <input type="text" id="token-label" maxlength="100" autocomplete="off" placeholder="e.g. Claude Code on the lab laptop">
-        </label>
-        <label class="field">
-          <span>Expires after</span>
-          <select id="token-days"></select>
-        </label>
-        <button type="button" class="btn primary" id="token-create">Create token</button>
+      <p class="muted small" id="token-empty">Nothing connected yet.</p>
+      <p class="error" id="token-list-error" hidden></p>
+
+      <div class="token-create">
+        <h4 class="set-subheading">Create a token</h4>
+        <p class="muted small" id="token-why"></p>
+        <div class="token-new">
+          <label class="field grow">
+            <span>Label</span>
+            <input type="text" id="token-label" maxlength="100" autocomplete="off" placeholder="e.g. Claude Code on the lab laptop">
+          </label>
+          <label class="field">
+            <span>Expires after</span>
+            <select id="token-days"></select>
+          </label>
+          <button type="button" class="btn primary" id="token-create">Create token</button>
+        </div>
+        <p class="error" id="token-error" hidden></p>
       </div>
-      <p class="error" id="token-error" hidden></p>
       <div class="token-minted" id="token-minted" hidden>
-        <p><b>Copy your token now.</b> It will not be shown again.</p>
-        <div class="copy-row">
+        <p><b>Copy your token now.</b> It is shown only once; the instructions above now
+          include it until you close Settings.</p>
+        <div class="copy-row" id="token-value-row">
           <input type="text" id="token-value" readonly aria-label="New token">
-          <button type="button" class="btn" data-copy="token-value">Copy</button>
-        </div>
-        <p class="muted small">Claude Code:</p>
-        <div class="copy-row">
-          <pre class="snippet" id="token-cli"></pre>
-          <button type="button" class="btn" data-copy="token-cli">Copy</button>
-        </div>
-        <p class="muted small">Cursor, and other clients configured with <code>mcpServers</code> JSON:</p>
-        <div class="copy-row">
-          <pre class="snippet" id="token-json"></pre>
-          <button type="button" class="btn" data-copy="token-json">Copy</button>
         </div>
       </div>
     </section>

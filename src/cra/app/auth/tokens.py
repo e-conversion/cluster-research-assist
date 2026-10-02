@@ -1,7 +1,9 @@
 """Bearer tokens for the outward MCP endpoint.
 
 A token belongs to one account and is stored as the sha256 of its value, so
-each one can be listed, revoked and seen to be in use on its own. Verifying
+each one can be listed, revoked and seen to be in use on its own. It is made
+by hand in the web interface, or got by a client that signed its person in
+(``cra.app.mcpserver.oauth``). Verifying
 one is a single indexed read; ``last_used_at`` is written at most once per
 ``TOUCH_INTERVAL`` so that a busy client does not turn every call into a write.
 """
@@ -59,6 +61,9 @@ async def verify(
     now = now or utcnow()
     if row.revoked_at is not None or row.expires_at <= now or not owner_active:
         return None
+    # a signed-in client's access value expires long before its grant does
+    if row.access_expires_at is not None and row.access_expires_at <= now:
+        return None
     if row.last_used_at is None or now - row.last_used_at >= TOUCH_INTERVAL:
         await repo.touch_token(row.id, now)
     return row
@@ -84,6 +89,8 @@ def describe(row: McpToken) -> dict[str, Any]:
         "last_used_at": iso(row.last_used_at),
         "revoked_at": iso(row.revoked_at),
         "state": state(row),
+        # got by signing in through the client, rather than made by hand
+        "signed_in": row.client_id is not None,
     }
 
 

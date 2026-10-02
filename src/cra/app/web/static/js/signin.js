@@ -40,8 +40,11 @@ function hideChrome() {
   for (const id of ["nav", "new-chat", "menu"]) document.getElementById(id).hidden = true;
 }
 
-/** Reloads onto the app itself, without whatever the address still carries. */
-function enter() {
+/** Goes where the server says the sign-in should continue (a page that sent
+ * the visitor to sign in first), or else reloads onto the app itself, without
+ * whatever the address still carries. */
+function enter(next) {
+  if (next) { location.assign(next); return; }
   history.replaceState(null, "", location.pathname + location.search);
   location.reload();
 }
@@ -59,8 +62,8 @@ function passwordForm() {
     submit.disabled = true;
     showError(error, "");
     try {
-      await postJSON("auth/password", { username: username.value, password: password.value });
-      enter();
+      const { redirect } = await postJSON("auth/password", { username: username.value, password: password.value });
+      enter(redirect);
     } catch (err) {
       password.value = "";
       showError(error, err.message);
@@ -152,8 +155,8 @@ export async function renderSetPassword(view, config) {
     submit.disabled = true;
     showError(error, "");
     try {
-      await postJSON("auth/set-password", { token, password: password.value });
-      enter();
+      const { redirect } = await postJSON("auth/set-password", { token, password: password.value });
+      enter(redirect);
     } catch (err) {
       showError(error, err.message);
       submit.disabled = false;

@@ -179,6 +179,17 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .signin .btn.block { display: flex; width: 100%; padding: 11px 16px; font-size: 14.5px; }
 .signin .small { margin: 16px 0 0; }
 .signin.wide { width: min(520px, calc(100vw - 32px)); }
+.consent { text-align: left; }
+.consent h1, .consent .logo { text-align: center; }
+.consent .lede { margin: 0 0 16px; max-width: none; text-align: center; }
+.consent-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.consent-list li { display: flex; gap: 10px; align-items: baseline; }
+.consent-list li::before { flex: none; width: 1.2em; text-align: center; font-weight: 600; }
+.consent-list .yes::before { content: "✓"; color: var(--ok); }
+.consent-list .no::before { content: "✕"; color: var(--muted); }
+.consent-return { font-size: 14px; margin: 0 0 18px; padding: 10px 12px; border-radius: calc(10px * var(--radius-scale)); background: var(--panel-2); }
+.consent-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.consent-actions .btn { justify-content: center; padding: 11px 16px; font-size: 14.5px; }
 .signin .tabs { justify-content: center; margin: -6px 0 20px; }
 .signin-panel { display: flex; flex-direction: column; }
 .signin-form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
@@ -187,7 +198,28 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .signin .explain { text-align: left; margin: 0 0 20px; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
 .signin .or { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--faint); font-size: 13px; }
 .signin .or::before, .signin .or::after { content: ""; flex: 1; border-top: 1px solid var(--hair); }
-.signin .account-facts { text-align: left; margin: 0 0 18px; }
+.signin /* connect apps: one guide per app, every value with its own copy button */
+.set-section .app-seg { max-width: 420px; }
+.guide { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.guide code, .set-section code { font: 12.5px var(--mono); background: var(--panel-2); border-radius: 5px; padding: 1px 5px; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 12px; }
+.steps > li { counter-increment: step; position: relative; padding-left: 32px; line-height: 1.5; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font: 600 12px/1 var(--body); background: var(--accent-soft); color: var(--accent); }
+.copy-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.copy-label { font-size: 12px; color: var(--muted); }
+.steps .copy-row:first-child { margin-top: 8px; }
+.guide-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.doc-link { font-size: 13px; color: var(--accent); text-decoration: none; align-self: flex-start; }
+@media (hover: hover) { .doc-link:hover { text-decoration: underline; } }
+.fold { border: 1px solid var(--hair); border-radius: calc(10px * var(--radius-scale)); }
+.fold > summary { cursor: pointer; padding: 9px 12px; font-weight: 500; }
+.fold[open] > summary { border-bottom: 1px solid var(--hair); }
+.fold-body { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.set-heading { font: 600 14px/1.3 var(--body); margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--heading-ink); }
+.token-create { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.set-subheading { font: 600 13.5px/1.3 var(--body); margin: 0; color: var(--ink-2); }
+.account-facts { text-align: left; margin: 0 0 18px; }
 .signin .note { text-align: left; margin: 0 0 12px; }
 .landing-head { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 8vh; }
 .landing-head h1 { font: 500 24px/1.25 var(--body); margin: 0; color: var(--ink-2); letter-spacing: -.01em; }
@@ -365,6 +397,9 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .radio-row { display: flex; gap: 18px; font-size: 14px; }
 
 .dlg.tall .dlg-body { max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; }
+/* the body scrolls; left to shrink, a long section would spill past its own
+   end, and past the padding below it */
+.dlg.tall .dlg-body > * { flex-shrink: 0; }
 /* a long dialog keeps its title and close button in reach while it scrolls */
 .dlg.tall .dlg-head { position: sticky; top: -18px; z-index: 2; background: var(--panel);
   margin: -18px calc(-1 * var(--pad)) 0; padding: 18px var(--pad) 8px; }
@@ -381,8 +416,12 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .badge { font: 500 11px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .token-new { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
 .token-new .grow { flex: 1 1 240px; }
+/* one height for field, select and button, so the labels above line up */
+.token-new .field input, .token-new .field select, .token-new > .btn { box-sizing: border-box; height: 40px; }
+
 .token-minted { display: flex; flex-direction: column; gap: 6px; background: var(--accent-soft); border-radius: calc(10px * var(--radius-scale)); padding: 12px 14px; }
 .copy-row { display: flex; gap: 8px; align-items: flex-start; }
+.copy-row .btn { flex: none; }
 .copy-row input { flex: 1; min-width: 0; font: 13px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--hair-2); border-radius: calc(9px * var(--radius-scale)); padding: 7px 10px; }
 .snippet { flex: 1; min-width: 0; margin: 0; font: 12.5px/1.45 var(--mono); background: var(--panel); border: 1px solid var(--hair-2); border-radius: calc(9px * var(--radius-scale)); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .account-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
@@ -527,6 +566,7 @@ html:has(.viz-frame.expanded) { overflow: hidden; }
   .seg button { padding: 9px 8px; }
   .researched summary { padding: 7px 6px; }
   .step > summary { padding: 10px 11px; }
+  .fold > summary { padding: 12px; }
   .map-toolbar input[type="range"] { height: 32px; }
   .graph-frame .reset { padding: 8px 14px; font-size: 13px; }
   /* iOS zooms the whole page into any field under 16px when it takes focus */
@@ -573,6 +613,13 @@ html:has(.viz-frame.expanded) { overflow: hidden; }
   .dlg-body { --pad: 16px; padding: 16px max(var(--pad), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(var(--pad), env(safe-area-inset-left)); }
   .dlg.tall .dlg-body { max-height: calc(100dvh - 12px - env(safe-area-inset-top)); }
   .token-table { display: block; overflow-x: auto; }
+  /* on a phone a row keeps what it is, when it ends, and how to end it */
+  .token-table th:nth-child(2), .token-table td:nth-child(2),
+  .token-table th:nth-child(4), .token-table td:nth-child(4) { display: none; }
+  .set-section .token-table { display: table; }
+  .set-section .app-seg { max-width: none; }
+  .steps > li { padding-left: 30px; }
+  .signin.consent { margin-top: 4vh; padding: 28px 20px 22px; }
   .radio-row { flex-wrap: wrap; gap: 8px 18px; }
   .admin { padding: 16px max(14px, env(safe-area-inset-right)) 32px max(14px, env(safe-area-inset-left)); }
   .admin table { display: block; overflow-x: auto; }
