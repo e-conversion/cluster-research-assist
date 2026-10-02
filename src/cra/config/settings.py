@@ -116,6 +116,10 @@ class Settings(BaseSettings):
     oidc_client_secret: SecretStr = SecretStr("")
     oidc_redirect_uri: str = ""
     oidc_scopes: str = "openid email profile"
+    # failed sign-ins (and failed set-password links) per client address per
+    # minute; 0 removes the limit. Successes never count: a room behind one NAT
+    # address signs in at once.
+    auth_failures_per_address: int = Field(default=100, ge=0)
 
     # questions per signed-in user per day; 0 removes the limit
     user_chat_daily_limit: int = Field(default=200, ge=0)

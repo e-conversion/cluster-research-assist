@@ -49,11 +49,12 @@ STATUS = {LoginDenied.FAILED: 400}
 CALLBACKS_PER_MINUTE = 30
 # Password guesses. Per address, so one client cannot hammer the hasher; per
 # username, so a botnet cannot work through one account's password. Only
-# failures count against a username, or anyone could keep a known one locked
-# out. A person who mistypes a few times is never near either.
-PASSWORD_TRIES_PER_ADDRESS = (10, 60)
+# failures count: against a username, or anyone could keep a known one locked
+# out; against an address, because a workshop room shares one NAT address and
+# signs in within the same minute. A person who mistypes a few times is never
+# near either. The per-address cap is the auth_failures_per_address policy.
+ADDRESS_WINDOW_S = 60
 PASSWORD_TRIES_PER_USERNAME = (10, 15 * 60)
-LINK_TRIES_PER_ADDRESS = (10, 60)
 WRONG_PASSWORD = "The username or password is not right."
 
 # where the verified claims of an identity without an account wait while the
@@ -113,6 +114,10 @@ async def body_of() -> dict[str, Any]:
     # a body such as [1] is a bad request, not an error
     body = await request.get_json(silent=True)
     return body if isinstance(body, dict) else {}
+
+
+def _address_limit() -> tuple[int, int]:
+    return (_ctx().policy["auth_failures_per_address"], ADDRESS_WINDOW_S)
 
 
 def _too_many(
@@ -216,13 +221,15 @@ async def password_login() -> Response:
     body = await body_of()
     username = str(body.get("username", ""))[: local.PASSWORD_MAX]
     password = str(body.get("password", ""))
-    if refused := _too_many(f"pw-ip:{client_address()}", PASSWORD_TRIES_PER_ADDRESS):
+    address_key = f"pw-ip:{client_address()}"
+    if refused := _too_many(address_key, _address_limit(), count=False):
         return refused
     user_key = f"pw-user:{local.normalise_username(username)}"
     if refused := _too_many(user_key, PASSWORD_TRIES_PER_USERNAME, count=False):
         return refused
     verified = await local.verify(ctx.repo, username, password)
     if verified.user is None:
+        _too_many(address_key, _address_limit())
         _too_many(user_key, PASSWORD_TRIES_PER_USERNAME)
         log.info("password sign-in refused", extra={"fields": {"reason": "mismatch"}})
         return _json_error(WRONG_PASSWORD, 401)
@@ -237,7 +244,8 @@ async def password_login() -> Response:
 @public
 async def set_password() -> Response:
     ctx = _ctx()
-    if refused := _too_many(f"link-ip:{client_address()}", LINK_TRIES_PER_ADDRESS):
+    address_key = f"link-ip:{client_address()}"
+    if refused := _too_many(address_key, _address_limit(), count=False):
         return refused
     body = await body_of()
     try:
@@ -245,6 +253,7 @@ async def set_password() -> Response:
             ctx.repo, str(body.get("token", "")), str(body.get("password", ""))
         )
     except local.CredentialError as exc:
+        _too_many(address_key, _address_limit())
         return _json_error(str(exc), 400)
     for session in await ctx.repo.sessions_of(user_id):
         await ctx.remote.forget(session.id)
@@ -261,13 +270,15 @@ async def set_password() -> Response:
 async def password_link() -> Response:
     # POST, not GET: the token stays out of URLs and access logs
     ctx = _ctx()
-    if refused := _too_many(f"link-ip:{client_address()}", LINK_TRIES_PER_ADDRESS):
+    address_key = f"link-ip:{client_address()}"
+    if refused := _too_many(address_key, _address_limit(), count=False):
         return refused
     try:
         username = await local.link_username(
             ctx.repo, str((await body_of()).get("token", ""))
         )
     except local.CredentialError as exc:
+        _too_many(address_key, _address_limit())
         return _json_error(str(exc), 400)
     return jsonify(username=username)
 

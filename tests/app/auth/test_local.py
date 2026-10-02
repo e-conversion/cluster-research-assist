@@ -8,11 +8,7 @@ from conftest import PASSWORD, add_account, session_user, sign_in
 
 from cra.app.auth import local
 from cra.app.history.repository import utcnow
-from cra.app.web.route_auth import (
-    PASSWORD_TRIES_PER_ADDRESS,
-    PASSWORD_TRIES_PER_USERNAME,
-    WRONG_PASSWORD,
-)
+from cra.app.web.route_auth import PASSWORD_TRIES_PER_USERNAME, WRONG_PASSWORD
 
 NEW_PASSWORD = "a different long passphrase"
 
@@ -111,24 +107,29 @@ async def test_an_outdated_hash_is_upgraded_at_sign_in(app, client, repo, monkey
     assert "t=2" in after
 
 
+ADDRESS_LIMIT = 5
+
+
+@pytest.fixture
+def address_limit(app):
+    app.extensions["cra"].policy.set("auth_failures_per_address", ADDRESS_LIMIT)
+    return ADDRESS_LIMIT
+
+
 @pytest.mark.parametrize(
-    ("limit", "vary"),
-    [
-        (PASSWORD_TRIES_PER_ADDRESS, "username"),
-        (PASSWORD_TRIES_PER_USERNAME, "address"),
-    ],
-    ids=["per address", "per username"],
+    "vary", ["username", "address"], ids=["per address", "per username"]
 )
-async def test_guessing_is_rate_limited(app, client, limit, vary):
+async def test_guessing_is_rate_limited(app, client, address_limit, vary):
     await add_account(app, "alice")
+    limit = address_limit if vary == "username" else PASSWORD_TRIES_PER_USERNAME[0]
     statuses = []
-    for i in range(limit[0] + 1):
+    for i in range(limit + 1):
         if vary == "username":
             response = await login(client, f"user{i}", "guess")
         else:
             response = await login(client, "alice", "guess", address=f"10.0.1.{i}")
         statuses.append(response.status_code)
-    assert statuses[:-1] == [401] * limit[0]
+    assert statuses[:-1] == [401] * limit
     assert statuses[-1] == 429
 
 
@@ -137,6 +138,17 @@ async def test_signing_in_does_not_count_against_ones_own_username(app, client):
     await add_account(app, "alice")
     for i in range(PASSWORD_TRIES_PER_USERNAME[0] + 1):
         assert (await login(client, address=f"10.0.2.{i}")).status_code == 200
+
+
+async def test_a_room_behind_one_address_can_sign_in_together(
+    app, client, address_limit
+):
+    """Only failures count against an address: a workshop shares one NAT."""
+    statuses = []
+    for i in range(address_limit + 1):
+        await add_account(app, f"attendee{i}")
+        statuses.append((await login(client, f"attendee{i}")).status_code)
+    assert statuses == [200] * (address_limit + 1)
 
 
 async def test_a_body_that_is_not_an_object_is_refused_not_a_crash(client):
@@ -225,6 +237,17 @@ async def test_the_link_names_the_account_it_is_for(app):
         "/auth/password-link", json={"token": token_of(created["link"])}
     )
     assert (await response.get_json())["username"] == "bob"
+
+
+@pytest.mark.parametrize("path", ["/auth/password-link", "/auth/set-password"])
+async def test_guessing_links_is_rate_limited(client, address_limit, path):
+    statuses = [
+        (
+            await client.post(path, json={"token": f"made-up-{i}", "password": "x"})
+        ).status_code
+        for i in range(address_limit + 1)
+    ]
+    assert statuses == [400] * address_limit + [429]
 
 
 async def test_a_too_short_password_does_not_spend_the_link(app):
