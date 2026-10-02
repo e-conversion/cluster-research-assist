@@ -166,6 +166,10 @@ def test_unusable_usernames_are_refused(username):
         local.check_username(username)
 
 
+def test_an_email_address_is_a_usable_username():
+    assert local.check_username("Grace.Hopper+ws@TUM.de") == "grace.hopper+ws@tum.de"
+
+
 @pytest.mark.parametrize(
     "password",
     ["short", "x" * (local.PASSWORD_MAX + 1), "Grace.Hopper"],

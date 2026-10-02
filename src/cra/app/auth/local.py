@@ -35,7 +35,9 @@ HASHING_SLOTS = asyncio.Semaphore(4)
 # anonymous request can make the hasher do.
 PASSWORD_MIN = 12
 PASSWORD_MAX = 256
-USERNAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9._-]{1,63}")
+# an email address is a username too, so a workshop's accounts can be named
+# after the addresses people registered with; 64 is the column's width
+USERNAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9._+@-]{1,63}")
 # the first names anyone tries; refusing them means a guess needs the username
 # as well as the password
 RESERVED_USERNAMES = frozenset(
@@ -87,8 +89,8 @@ def check_username(username: str) -> str:
     name = normalise_username(username)
     if not USERNAME_PATTERN.fullmatch(name):
         raise CredentialError(
-            "a username is 2 to 64 lowercase letters, digits, '.', '_' or '-', "
-            "starting with a letter or digit"
+            "a username is 2 to 64 lowercase letters, digits, '.', '_', '-', '+' "
+            "or '@', starting with a letter or digit"
         )
     if name in RESERVED_USERNAMES:
         raise CredentialError(f"{name!r} is too easy to guess; choose another username")
