@@ -156,3 +156,74 @@ def test_a_forgotten_password_gets_a_link_on_the_command_line(env, monkeypatch, 
     assert main([*base, "password-link", "grace"]) == 0
     assert "/#/set-password/" in capsys.readouterr().out
     assert not cli_verify(env, "grace", PASSWORD)
+
+
+@pytest.fixture
+def sources_env(env):
+    from cryptography.fernet import Fernet
+
+    env.write_text(
+        env.read_text()
+        + "CRA_MCP_ELAB_URL=https://elab.test/mcp\n"
+        + f"CRA_SOURCE_TOKEN_KEY={Fernet.generate_key().decode()}\n"
+    )
+    return env
+
+
+def stored_tokens(env, username) -> dict[str, str]:
+    from cra.app.history.engine import make_engine, make_session_factory
+    from cra.app.history.repository import Repository
+    from cra.app.web.stored_sources import Vault
+    from cra.config.settings import Settings
+
+    vault = Vault(Settings.load(env).source_token_key.get_secret_value())
+
+    async def run() -> dict[str, str]:
+        engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
+        repo = Repository(make_session_factory(engine))
+        user_id = (await repo.get_credential_by_username(username)).user_id
+        rows = await repo.source_connections_of(user_id)
+        await engine.dispose()
+        return {row.kind: vault.open(row.sealed) for row in rows}
+
+    return asyncio.run(run())
+
+
+def create_accounts(env, monkeypatch, *usernames):
+    for username in usernames:
+        monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+        cli = ["--env-file", str(env), "users", "create", username, "--name", "X"]
+        assert main([*cli, "--password-stdin"]) == 0
+
+
+def test_a_token_from_stdin_is_stored_for_every_account_named(sources_env, monkeypatch):
+    create_accounts(sources_env, monkeypatch, "ada@uni.de", "bob@uni.de")
+    monkeypatch.setattr("sys.stdin", io.StringIO("tok-123\n"))
+    cli = ["--env-file", str(sources_env), "users", "connect-source", "elab"]
+    assert main([*cli, "ada@uni.de", "bob@uni.de"]) == 0
+    assert stored_tokens(sources_env, "bob@uni.de") == {"elab": "tok-123"}
+
+
+def test_a_token_is_copied_from_another_account(sources_env, monkeypatch):
+    create_accounts(sources_env, monkeypatch, "demo-venice", "ada@uni.de")
+    cli = ["--env-file", str(sources_env), "users", "connect-source", "elab"]
+    monkeypatch.setattr("sys.stdin", io.StringIO("tok-123\n"))
+    main([*cli, "demo-venice"])
+    assert main([*cli, "ada@uni.de", "--copy-from", "demo-venice"]) == 0
+    assert stored_tokens(sources_env, "ada@uni.de") == {"elab": "tok-123"}
+
+
+@pytest.mark.parametrize(
+    ("args", "says"),
+    [
+        (["nomad", "ada"], "unknown source 'nomad'"),
+        (["elab", "ada", "--copy-from", "ada"], "ada holds no readable elab token"),
+        (["elab", "ada", "nobody"], "no password account named nobody"),
+    ],
+    ids=["unconfigured source", "nothing to copy", "unknown account"],
+)
+def test_connecting_a_source_fails_loudly(sources_env, monkeypatch, capsys, args, says):
+    create_accounts(sources_env, monkeypatch, "ada")
+    monkeypatch.setattr("sys.stdin", io.StringIO("tok-123\n"))
+    assert main(["--env-file", str(sources_env), "users", "connect-source", *args]) == 1
+    assert says in capsys.readouterr().err

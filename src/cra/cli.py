@@ -436,6 +436,78 @@ def cmd_users_set_role(args: argparse.Namespace, role: str) -> int:
     return asyncio.run(run())
 
 
+def cmd_users_connect_source(args: argparse.Namespace) -> int:
+    """Store a source token for accounts, as if each had connected it.
+
+    For a workshop's shared test accounts: registering upstream once per
+    person would trip the proxy's per-address limit, since every request comes
+    from this one server. ``--copy-from`` reuses another account's sealed token
+    without the plaintext ever leaving the database.
+    """
+    from cra.app.auth import local
+    from cra.app.web.stored_sources import Vault
+    from cra.core.connectors.sources import configured
+
+    settings = load_settings(args)
+    vault = Vault(settings.source_token_key.get_secret_value())
+    if not vault.enabled:
+        sys.stderr.write("CRA_SOURCE_TOKEN_KEY is not set; nothing can be stored\n")
+        return 1
+    kinds = configured(settings)
+    if args.kind not in kinds:
+        sys.stderr.write(
+            f"unknown source {args.kind!r}; this deployment has: "
+            + (", ".join(kinds) or "none")
+            + "\n"
+        )
+        return 1
+    engine, repo = _repo(settings)
+
+    async def user_of(username: str) -> str | None:
+        found = await repo.get_credential_by_username(
+            local.normalise_username(username)
+        )
+        return found.user_id if found else None
+
+    async def sealed_token() -> str | None:
+        if not args.copy_from:
+            token = sys.stdin.readline().strip()
+            return vault.seal(token) if token else None
+        donor = await user_of(args.copy_from)
+        rows = await repo.source_connections_of(donor) if donor else []
+        for row in rows:
+            if row.kind == args.kind and vault.open(row.sealed) is not None:
+                return row.sealed
+        return None
+
+    async def run() -> int:
+        try:
+            sealed = await sealed_token()
+            if sealed is None:
+                sys.stderr.write(
+                    f"{args.copy_from} holds no readable {args.kind} token\n"
+                    if args.copy_from
+                    else "no token on stdin\n"
+                )
+                return 1
+            missing = []
+            for username in args.usernames:
+                user_id = await user_of(username)
+                if user_id is None:
+                    missing.append(username)
+                    continue
+                await repo.save_source_connection(user_id, args.kind, sealed)
+            connected = len(args.usernames) - len(missing)
+            _out(f"connected {connected} account(s) to {args.kind}")
+            for username in missing:
+                sys.stderr.write(f"no password account named {username}\n")
+            return 1 if missing else 0
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(run())
+
+
 def cmd_policy_list(args: argparse.Namespace) -> int:
     from cra.app.policy import Policy
 
@@ -697,6 +769,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reset.add_argument("username")
     reset.set_defaults(func=cmd_users_password_link)
+    connect = users_sub.add_parser(
+        "connect-source",
+        help="store a source token for accounts; they are connected at their "
+        "next request",
+    )
+    connect.add_argument("kind", help="elab, dt or nomad")
+    connect.add_argument("usernames", nargs="+", metavar="username")
+    connect.add_argument(
+        "--copy-from",
+        metavar="USERNAME",
+        help="reuse the token this account holds; otherwise read one from stdin",
+    )
+    connect.set_defaults(func=cmd_users_connect_source)
     add = users_sub.add_parser("add-email", help="allow an email address to sign in")
     add.add_argument("email")
     add.add_argument("--by", default="cli", help="who registered it (for the record)")

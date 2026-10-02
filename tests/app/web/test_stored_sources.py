@@ -5,7 +5,7 @@ import json
 from dataclasses import replace
 
 import pytest
-from conftest import make_settings, sign_in
+from conftest import PASSWORD, make_settings, sign_in
 from cryptography.fernet import Fernet
 from fakes import ELAB, Toy, make_host
 
@@ -86,6 +86,25 @@ async def test_locking_an_account_forgets_its_connections(kept_app, how):
     else:
         await admin.post(f"/api/admin/users/{user_id}/password-reset")
     assert await repo.source_connections_of(user_id) == []
+
+
+async def test_changing_ones_own_password_keeps_the_connections(kept_app):
+    """Workshop accounts come pre-connected and their first step is a new
+    password; only an admin reset, which locks the account, drops them."""
+    client = await sign_in(kept_app, kept_app.test_client())
+    await client.post("/api/session/connect/elab", json={"token": "good"})
+    response = await client.put(
+        "/api/me/password",
+        json={"current": PASSWORD, "new": "a different long passphrase"},
+    )
+    assert response.status_code == 200
+    elsewhere = kept_app.test_client()
+    signed_in = await elsewhere.post(
+        "/auth/password",
+        json={"username": "alice", "password": "a different long passphrase"},
+    )
+    assert signed_in.status_code == 200
+    assert await elab_status(elsewhere) == {"active": True, "tools": 2}
 
 
 async def test_without_a_key_nothing_is_stored(connected_app):
