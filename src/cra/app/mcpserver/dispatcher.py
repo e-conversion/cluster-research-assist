@@ -32,6 +32,7 @@ WINDOW_S = 60
 # platform signs in all its users from a handful of addresses; the limit is
 # against filling the client table, not against people.
 REGISTRATIONS_PER_MINUTE = 30
+WELL_KNOWN = "/.well-known/"
 
 
 class Dispatcher:
@@ -75,6 +76,11 @@ class Dispatcher:
             return
         if scope["type"] == "http" and scope.get("path", "") in self._oauth_paths:
             await self._sign_in(scope, receive, send)
+            return
+        if scope["type"] == "http" and scope.get("path", "").startswith(WELL_KNOWN):
+            # a client probing for a document this server has no use for (OpenID
+            # discovery, say) must read "not here", not the web app's "sign in"
+            await _refuse(send, 404, "Not found.", [])
             return
         await self._app(scope, receive, send)
 

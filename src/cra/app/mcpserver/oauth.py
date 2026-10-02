@@ -106,6 +106,21 @@ class Paths:
         # RFC 9728 §3.1: the well-known part goes between host and path
         return f"{self.origin}{RESOURCE_METADATA}{self.base}{self.mcp}"
 
+    @property
+    def resource_metadata_paths(self) -> tuple[str, ...]:
+        # RFC 9728 puts the document at the resource's own path; clients that
+        # were not handed that address try the bare one
+        return (f"{RESOURCE_METADATA}{self.base}{self.mcp}", RESOURCE_METADATA)
+
+    @property
+    def server_metadata_paths(self) -> tuple[str, ...]:
+        # RFC 8414 derives the address from the issuer; some clients (ChatGPT,
+        # by reports) derive it from the MCP URL instead
+        return (
+            f"{SERVER_METADATA}{self.base}",
+            f"{SERVER_METADATA}{self.base}{self.mcp}",
+        )
+
     def endpoint(self, name: str) -> str:
         return f"{self.base}/oauth/{name}"
 
@@ -571,20 +586,16 @@ def router(provider: Provider, settings: Settings) -> Router:
     ).handle
     get = ["GET", "OPTIONS"]
     post = ["POST", "OPTIONS"]
+    server = MetadataHandler(server_metadata(paths)).handle
     return Router(
         routes=[
-            Route(
-                f"{RESOURCE_METADATA}{paths.base}{paths.mcp}",
-                _cors(request_response(resource), get),
-                methods=get,
+            *(
+                Route(path, _cors(request_response(resource), get), methods=get)
+                for path in paths.resource_metadata_paths
             ),
-            Route(
-                f"{SERVER_METADATA}{paths.base}",
-                _cors(
-                    request_response(MetadataHandler(server_metadata(paths)).handle),
-                    get,
-                ),
-                methods=get,
+            *(
+                Route(path, _cors(request_response(server), get), methods=get)
+                for path in paths.server_metadata_paths
             ),
             # a browser is sent here, so no CORS
             Route(
@@ -626,8 +637,8 @@ def served_paths(settings: Settings) -> frozenset[str]:
     paths = Paths.of(settings)
     return frozenset(
         {
-            f"{RESOURCE_METADATA}{paths.base}{paths.mcp}",
-            f"{SERVER_METADATA}{paths.base}",
+            *paths.resource_metadata_paths,
+            *paths.server_metadata_paths,
             *(paths.endpoint(n) for n in ("authorize", "token", "register", "revoke")),
         }
     )

@@ -205,6 +205,28 @@ async def test_a_refusal_points_to_the_sign_in(endpoint):
     assert "none" in server.json()["token_endpoint_auth_methods_supported"]
 
 
+@pytest.mark.parametrize(
+    ("path", "key"),
+    [
+        ("/.well-known/oauth-protected-resource/mcp", "resource"),
+        ("/.well-known/oauth-protected-resource", "resource"),
+        ("/.well-known/oauth-authorization-server", "issuer"),
+        ("/.well-known/oauth-authorization-server/mcp", "issuer"),
+    ],
+)
+async def test_metadata_is_found_where_clients_look(endpoint, path, key):
+    async with http(endpoint) as client:
+        response = await client.get(path)
+    assert response.status_code == 200
+    assert key in response.json()
+
+
+async def test_an_unknown_discovery_document_is_not_found(endpoint):
+    async with http(endpoint) as client:
+        response = await client.get("/.well-known/openid-configuration")
+    assert response.status_code == 404
+
+
 async def test_the_sign_in_is_absent_without_a_public_url(tmp_path):
     async with (
         lifespan(make_endpoint(tmp_path, public_url="")) as app,
@@ -214,8 +236,7 @@ async def test_the_sign_in_is_absent_without_a_public_url(tmp_path):
         metadata = await client.get("/.well-known/oauth-authorization-server")
         consent = await client.get("/oauth/consent?request=x")
     assert "resource_metadata" not in refused.headers["www-authenticate"]
-    # an unknown path to the web app: refused before routing for anyone signed out
-    assert metadata.status_code == 401
+    assert metadata.status_code == 404
     assert consent.status_code == 404
 
 
