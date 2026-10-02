@@ -16,6 +16,7 @@ import json
 import logging
 import random
 import threading
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -31,6 +32,10 @@ RETRY_STATUSES = frozenset({408, 409, 429})
 BACKOFF_S, BACKOFF_MAX_S = 0.5, 8.0
 # a longer Retry-After is not worth keeping someone waiting for
 RETRY_AFTER_MAX_S = 60.0
+# what a gateway answers a request for token counts in the stream with when it
+# does not support them; anything else (no credit, throttled, down) is not
+# about the field and must not switch the counts off for good
+USAGE_UNSUPPORTED_STATUSES = frozenset({400, 422, 500})
 
 # Endpoints that answered a usage request with an error. Module level because
 # it is a fact about a URL, not about a user, and it carries no user data.
@@ -62,6 +67,14 @@ def _message(body: Any, fallback: str) -> str:
     if isinstance(error, str) and error:
         return error
     return fallback
+
+
+def _code(body: Any) -> int | None:
+    """The ``error.code`` an OpenRouter error event carries mid-stream, where
+    the HTTP status is already 200."""
+    error = body.get("error") if isinstance(body, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, int) and 400 <= code < 600 else None
 
 
 def _status_error(response: httpx.Response) -> LLMError:
@@ -121,7 +134,9 @@ class ChatStream:
             raise LLMError(f"unexpected event from the endpoint: {payload[:200]}")
         # a gateway that fails midway says so in an event of its own
         if chunk.get("error"):
-            raise LLMError(_message(chunk, "the endpoint failed while answering"))
+            raise LLMError(
+                _message(chunk, "the endpoint failed while answering"), _code(chunk)
+            )
         return chunk
 
     async def close(self) -> None:
@@ -131,11 +146,14 @@ class ChatStream:
 class ChatClient:
     """Gives up rather than waiting forever, and retries what a retry fixes.
 
-    The two together bound how long someone waits: retries times the timeout.
+    No retry starts once a request has been failing for the retry window, so
+    a dead endpoint costs someone one timeout rather than one per retry, and a
+    long Retry-After is reported at once instead of waited out.
     """
 
     def __init__(self, settings: Settings, http: httpx.AsyncClient) -> None:
         self._http = http
+        self._retry_window_s = settings.llm_retry_window_s
         self._url = settings.llm_base_url.rstrip("/") + "/chat/completions"
         self._headers = {
             "Authorization": f"Bearer {settings.llm_api_key.get_secret_value()}"
@@ -174,38 +192,62 @@ class ChatClient:
         self, body: dict[str, Any], limits: httpx.Timeout
     ) -> httpx.Response:
         """The response once its status is a success; the body is still unread."""
+        give_up_at = time.monotonic() + self._retry_window_s
         for attempt in range(self._retries + 1):
-            last = attempt == self._retries
             request = self._http.build_request(
-                "POST", self._url, json=body, headers=self._headers, timeout=limits
+                "POST",
+                self._url,
+                json=body,
+                headers=self._headers,
+                timeout=limits,
             )
             try:
                 response = await self._http.send(request, stream=True)
             except httpx.TimeoutException as exc:
-                if last:
+                if not await self._may_retry(
+                    give_up_at, attempt, self._backoff(attempt)
+                ):
                     raise LLMTimeout("the endpoint did not answer in time") from exc
-                await asyncio.sleep(self._backoff(attempt))
                 continue
             except httpx.TransportError as exc:
-                if last:
+                if not await self._may_retry(
+                    give_up_at, attempt, self._backoff(attempt)
+                ):
                     raise LLMUnreachable(
                         f"the endpoint could not be reached: {exc}"
                     ) from exc
-                await asyncio.sleep(self._backoff(attempt))
                 continue
             if response.is_success:
                 return response
             await response.aread()
             await response.aclose()
             status = response.status_code
-            if last or not (status in RETRY_STATUSES or status >= 500):
+            wait = _retry_after(response) or self._backoff(attempt)
+            if not (status in RETRY_STATUSES or status >= 500) or not (
+                await self._may_retry(give_up_at, attempt, wait, status)
+            ):
                 raise _status_error(response)
+        raise AssertionError("unreachable: the last attempt returns or raises")
+
+    async def _may_retry(
+        self, give_up_at: float, attempt: int, wait: float, status: int | None = None
+    ) -> bool:
+        """Sleep before the next attempt, or say there is none: the retries
+        are used up, or the next one would start after ``give_up_at``."""
+        if attempt >= self._retries:
+            return False
+        if time.monotonic() + wait > give_up_at:
             log.info(
-                "retrying the model endpoint",
+                "not retrying the model endpoint after its retry window",
                 extra={"fields": {"status": status, "attempt": attempt + 1}},
             )
-            await asyncio.sleep(_retry_after(response) or self._backoff(attempt))
-        raise AssertionError("unreachable: the last attempt returns or raises")
+            return False
+        log.info(
+            "retrying the model endpoint",
+            extra={"fields": {"status": status, "attempt": attempt + 1}},
+        )
+        await asyncio.sleep(wait)
+        return True
 
     @staticmethod
     def _backoff(attempt: int) -> float:
@@ -223,7 +265,7 @@ async def open_stream(client: Any, request: dict[str, Any], base_url: str) -> An
                 {**request, "stream_options": {"include_usage": True}}
             )
         except LLMError as exc:
-            if exc.status is None:
+            if exc.status not in USAGE_UNSUPPORTED_STATUSES:
                 raise
             # One gateway answers this with a 500 and another with a 400 naming
             # the field. Either way it is unsupported, so retry without it and
@@ -237,22 +279,56 @@ async def open_stream(client: Any, request: dict[str, Any], base_url: str) -> An
     return await client.stream(request)
 
 
+def failure_kind(exc: BaseException) -> str:
+    """A stable name for why a turn failed, for the logs and the history."""
+    if isinstance(exc, LLMTimeout):
+        return "llm_timeout"
+    if isinstance(exc, LLMUnreachable):
+        return "llm_unreachable"
+    if not isinstance(exc, LLMError):
+        return type(exc).__name__
+    status = exc.status or 0
+    if status in KIND_BY_STATUS:
+        return KIND_BY_STATUS[status]
+    return "llm_unavailable" if status >= 500 else "llm_refused"
+
+
+KIND_BY_STATUS = {
+    401: "llm_key_rejected",
+    402: "llm_out_of_credit",
+    403: "llm_forbidden",
+    429: "llm_rate_limited",
+}
+
+
 def friendly_error(exc: Exception) -> str:
     """What to show someone who asked a question and got a failure."""
-    if isinstance(exc, LLMTimeout):
-        return "The model endpoint stopped responding. Try again or pick another model."
-    if isinstance(exc, LLMUnreachable):
-        return "The model endpoint could not be reached."
+    kind = failure_kind(exc)
     status = exc.status if isinstance(exc, LLMError) else None
-    if status == 401:
+    if kind == "llm_timeout":
+        return "The model endpoint stopped responding. Try again or pick another model."
+    if kind == "llm_unreachable":
+        return "The model endpoint could not be reached. Try again in a moment."
+    if kind == "llm_key_rejected":
         return (
             "The model endpoint rejected our API key. An administrator has to renew it."
         )
-    if status == 429:
-        return "The model endpoint is rate-limiting us. Try again in a moment."
-    if status and status >= 500:
+    if kind == "llm_out_of_credit":
+        return (
+            "The assistant has used up its model budget, so it cannot answer right "
+            "now. Please tell an administrator; asking again will not help until "
+            "the budget is raised."
+        )
+    if kind == "llm_forbidden":
+        return (
+            "The model endpoint refused this request, for example because a "
+            "moderation filter flagged it. Try rephrasing, or pick another model."
+        )
+    if kind == "llm_rate_limited":
+        return "The model endpoint is busy right now. Try again in a moment."
+    if kind == "llm_unavailable":
         return (
             f"The model endpoint failed with HTTP {status} even after retries. "
-            "It is probably overloaded; try again or pick another model."
+            "It is probably overloaded; try again in a moment or pick another model."
         )
     return (str(exc).strip() or type(exc).__name__)[:300]

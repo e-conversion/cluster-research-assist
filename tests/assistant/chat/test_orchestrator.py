@@ -8,6 +8,7 @@ from fakes import FakeChatClient, reasoning_chunk, text_chunk, tool_chunk, usage
 from cra.assistant.chat.orchestrator import (
     ANSWER_NOW,
     LIMIT_REACHED,
+    OUT_OF_CREDIT,
     ThinkSplitter,
     framed,
     run_turn,
@@ -305,6 +306,16 @@ async def test_a_failing_endpoint_becomes_an_error_event_not_an_exception():
     assert kinds(events) == ["round", "error"]
     assert events[-1]["error_type"] == "RuntimeError"
     assert "upstream is down" in events[-1]["message"]
+
+
+async def test_running_out_of_credit_is_named_and_logged_as_such(caplog):
+    client = FakeChatClient([LLMError("HTTP 402: Insufficient credits", status=402)])
+    events = await collect(client)
+    assert events[-1]["error_type"] == "llm_out_of_credit"
+    assert "model budget" in events[-1]["message"]
+    assert [r.getMessage() for r in caplog.records if r.levelname == "ERROR"] == [
+        OUT_OF_CREDIT
+    ]
 
 
 async def test_a_failure_keeps_the_work_already_done():

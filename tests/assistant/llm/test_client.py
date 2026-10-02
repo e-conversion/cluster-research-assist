@@ -16,7 +16,9 @@ from cra.assistant.llm.client import (
     LLMError,
     LLMTimeout,
     LLMUnreachable,
+    failure_kind,
     friendly_error,
+    open_stream,
 )
 
 BASE = "https://gateway.test/v1"
@@ -100,8 +102,9 @@ async def test_an_error_in_the_middle_of_a_stream_is_raised(chat):
             data({"error": {"code": 502, "message": "provider went away"}}),
         )
     )
-    with pytest.raises(LLMError, match="provider went away"):
+    with pytest.raises(LLMError, match="provider went away") as caught:
         await chunks(chat)
+    assert caught.value.status == 502
 
 
 @respx.mock
@@ -137,6 +140,17 @@ async def test_retries_end_with_the_last_status(chat):
 
 
 @respx.mock
+async def test_a_retry_after_beyond_the_retry_window_is_not_waited_out(chat):
+    route = respx.post(URL).mock(
+        return_value=httpx.Response(429, headers={"Retry-After": "59"})
+    )
+    with pytest.raises(LLMError) as caught:
+        await chat.stream({"model": "m"})
+    assert caught.value.status == 429
+    assert route.call_count == 1
+
+
+@respx.mock
 @pytest.mark.parametrize(
     ("failure", "kind"),
     [
@@ -166,7 +180,8 @@ async def test_a_completion_comes_back_whole(chat):
     ("exc", "says"),
     [
         (LLMError("HTTP 401: no", status=401), "rejected our API key"),
-        (LLMError("HTTP 429: slow down", status=429), "rate-limiting"),
+        (LLMError("HTTP 429: slow down", status=429), "busy right now"),
+        (LLMError("HTTP 402: Insufficient credits", status=402), "model budget"),
         (LLMError("HTTP 502: bad", status=502), "HTTP 502 even after retries"),
         (LLMTimeout("x"), "stopped responding"),
         (LLMUnreachable("x"), "could not be reached"),
@@ -175,6 +190,36 @@ async def test_a_completion_comes_back_whole(chat):
 )
 def test_a_failure_is_told_in_plain_words(exc, says):
     assert says in friendly_error(exc)
+
+
+@pytest.mark.parametrize(
+    ("exc", "kind"),
+    [
+        (LLMError("HTTP 402: Insufficient credits", status=402), "llm_out_of_credit"),
+        (LLMError("HTTP 429: slow down", status=429), "llm_rate_limited"),
+        (LLMError("HTTP 503: no provider", status=503), "llm_unavailable"),
+        (LLMError("HTTP 400: unknown model", status=400), "llm_refused"),
+        (LLMTimeout("x"), "llm_timeout"),
+        (KeyError("x"), "KeyError"),
+    ],
+)
+def test_a_failure_has_a_stable_kind(exc, kind):
+    assert failure_kind(exc) == kind
+
+
+@respx.mock
+@pytest.mark.parametrize("status", [402, 429])
+async def test_a_failure_unrelated_to_token_counts_keeps_them_on(
+    chat, monkeypatch, status
+):
+    """Only a refusal of the field switches the counts off for good: running
+    out of credit once must not cost every later turn its token counts."""
+    monkeypatch.setattr(client_, "_no_usage_in_stream", set())
+    route = respx.post(URL).mock(return_value=httpx.Response(status))
+    with pytest.raises(LLMError):
+        await open_stream(chat, {"model": "m"}, BASE)
+    assert BASE not in client_._no_usage_in_stream
+    assert "stream_options" in json.loads(route.calls[-1].request.content)
 
 
 needs_endpoint = pytest.mark.skipif(

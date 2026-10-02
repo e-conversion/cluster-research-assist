@@ -19,7 +19,12 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from cra.assistant.llm.client import friendly_error, open_stream
+from cra.assistant.llm.client import (
+    LLMError,
+    failure_kind,
+    friendly_error,
+    open_stream,
+)
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +49,8 @@ ANSWER_NOW = (
 # rounds in a row in which every call failed or repeated an earlier one
 FRUITLESS_ROUNDS = 2
 LIMIT_REACHED_ERROR = "tool_call_limit_reached"
+# its own log line, so an alert or a grep finds it among ordinary failures
+OUT_OF_CREDIT = "the model endpoint is out of credit"
 FRUITLESS_ERROR = "tool_calls_fruitless"
 
 THINK_OPEN, THINK_CLOSE = "<think>", "</think>"
@@ -216,12 +223,26 @@ async def run_turn(
         ):
             yield event
     except Exception as exc:
-        log.exception("the turn failed", extra={"fields": {"model": model}})
+        kind = failure_kind(exc)
+        if isinstance(exc, LLMError):
+            # the endpoint's own words are the diagnosis; a traceback adds nothing
+            log.error(  # noqa: TRY400
+                OUT_OF_CREDIT if kind == "llm_out_of_credit" else "the model failed",
+                extra={
+                    "fields": {
+                        "model": model,
+                        "kind": kind,
+                        "status": exc.status,
+                        "detail": str(exc)[:300],
+                        "round": progress.rounds,
+                    }
+                },
+            )
+        else:
+            log.exception("the turn failed", extra={"fields": {"model": model}})
         message = friendly_error(exc)
-        event = progress.ending(
-            progress.answer() or f"Error: {message}", type(exc).__name__
-        )
-        event |= {"type": "error", "message": message, "error_type": type(exc).__name__}
+        event = progress.ending(progress.answer() or f"Error: {message}", kind)
+        event |= {"type": "error", "message": message, "error_type": kind}
         yield event
 
 
