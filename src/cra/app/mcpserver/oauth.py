@@ -13,6 +13,7 @@ the same ``tokens.verify`` on every call.
 
 import ipaddress
 import json
+import logging
 import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -57,6 +58,8 @@ from starlette.routing import Route, Router, request_response
 from cra.app.auth import tokens
 from cra.app.history.repository import Repository, utcnow
 from cra.config.settings import LOOPBACK_HOSTS, Settings
+
+log = logging.getLogger("cra.mcp.oauth")
 
 # Clients renew an access token without the person; a short life bounds what
 # a leaked one is worth. A grant lives as long as a default hand-made token,
@@ -153,6 +156,15 @@ def _loopback(host: str) -> bool:
         return False
 
 
+def _refused(client_id: str, reason: str) -> None:
+    """An unknown client, with the reason in the log: the client itself only
+    sees "invalid client", so this is where an admin finds out why."""
+    log.warning(
+        "mcp sign-in client refused",
+        extra={"fields": {"client_id": client_id, "reason": reason}},
+    )
+
+
 class Access(AccessToken):
     grant_id: str
 
@@ -194,7 +206,9 @@ class Provider:
         """
         parts = urlsplit(url)
         if parts.fragment or not trusted_host(parts.hostname or "", self._hosts):
-            return None
+            return _refused(
+                url, "client document host is not in CRA_MCP_OAUTH_CLIENT_HOSTS"
+            )
         row = await self._repo.get_oauth_client(url)
         cached = OAuthClientInformationFull.model_validate(row.info) if row else None
         if row is not None and utcnow() - row.created_at < DOCUMENT_TTL:
@@ -204,20 +218,30 @@ class Provider:
             return cached
         try:
             client = OAuthClientInformationFull.model_validate(document)
-        except ValidationError:
-            return None
+        except ValidationError as exc:
+            return _refused(
+                url,
+                f"client document is not valid client metadata: {exc.error_count()} errors",
+            )
         # this server holds no keys to check a signed client assertion, so a
         # document client is a public one, kept honest by PKCE
-        if (
-            client.client_id != url
-            or client.client_secret is not None
-            or client.token_endpoint_auth_method not in (None, "none")
-            or not all(
-                redirect_allowed(str(u), self._hosts)
-                for u in client.redirect_uris or []
+        if client.client_id != url:
+            return _refused(
+                url, f"client document names another client_id: {client.client_id}"
             )
+        if (
+            client.client_secret is not None
+            or client.token_endpoint_auth_method not in (None, "none")
         ):
-            return None
+            return _refused(
+                url, f"client document asks for {client.token_endpoint_auth_method}"
+            )
+        if refused := [
+            str(u)
+            for u in client.redirect_uris or []
+            if not redirect_allowed(str(u), self._hosts)
+        ]:
+            return _refused(url, f"return addresses not allowed: {', '.join(refused)}")
         client.token_endpoint_auth_method = "none"
         await self._repo.put_oauth_client(
             url, client.model_dump(mode="json", exclude_none=True)
@@ -233,20 +257,35 @@ class Provider:
                 follow_redirects=False,
             ) as response:
                 if response.status_code != 200:
-                    return None
+                    return _refused(
+                        url, f"client document answered {response.status_code}"
+                    )
                 body = b""
                 async for chunk in response.aiter_bytes():
                     body += chunk
                     if len(body) > DOCUMENT_MAX_BYTES:
-                        return None
+                        return _refused(url, "client document is too large")
             document = json.loads(body)
-        except (httpx.HTTPError, ValueError):
-            return None
-        return document if isinstance(document, dict) else None
+        except (httpx.HTTPError, ValueError) as exc:
+            return _refused(
+                url, f"client document could not be read: {type(exc).__name__}"
+            )
+        if not isinstance(document, dict):
+            return _refused(url, "client document is not a JSON object")
+        return document
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
         for uri in client_info.redirect_uris or []:
             if not redirect_allowed(str(uri), self._hosts):
+                log.warning(
+                    "mcp sign-in registration refused",
+                    extra={
+                        "fields": {
+                            "client": client_info.client_name or "",
+                            "redirect_uri": str(uri),
+                        }
+                    },
+                )
                 raise RegistrationError(
                     "invalid_redirect_uri",
                     f"{uri} is not a place this server sends people back to",

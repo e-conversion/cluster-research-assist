@@ -15,6 +15,7 @@ knows its public address, the dispatcher also serves the OAuth sign-in
 import json
 import logging
 from typing import Any
+from urllib.parse import parse_qs
 
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
 from mcp.server.transport_security import TransportSecuritySettings
@@ -133,7 +134,34 @@ class Dispatcher:
                     [(b"retry-after", str(allowance.retry_after).encode())],
                 )
                 return
-        await self._oauth(scope, receive, send)
+        await self._oauth(scope, receive, _logged(scope, send))
+
+
+def _logged(scope: dict, send: Any) -> Any:
+    """``send``, noting each sign-in step and how it was answered, so a client
+    that gives up can be followed. Only the path and the client's id: codes,
+    tokens and verifiers stay out of the log."""
+    query = parse_qs(scope.get("query_string", b"").decode("latin-1"))
+
+    async def noting(message: dict) -> None:
+        if message["type"] == "http.response.start":
+            headers = {k.decode("latin-1").lower(): v for k, v in scope["headers"]}
+            oauth.log.info(
+                "mcp sign-in step",
+                extra={
+                    "fields": {
+                        "method": scope.get("method", ""),
+                        "path": scope["path"],
+                        "status": message["status"],
+                        "client_id": query.get("client_id", [""])[0],
+                        "caller": _address(scope, headers),
+                        "agent": headers.get("user-agent", b"").decode("latin-1")[:120],
+                    }
+                },
+            )
+        await send(message)
+
+    return noting
 
 
 def _stamped(scope: dict, token_id: str) -> dict:
