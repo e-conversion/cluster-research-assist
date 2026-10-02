@@ -32,9 +32,10 @@ class User(Base):
     last_login_at: Mapped[datetime | None]
     is_active: Mapped[bool] = mapped_column(default=True)
     role: Mapped[str] = mapped_column(String(20), default="user")
-    # where to reach the person; never a way to sign in (that is what
-    # registered_emails is for, and a contact address must not open the account
-    # to whoever holds that address at some university)
+    # where to reach the person. An identity provider's email claim never
+    # matches it (that is what registered_emails is for: a contact address must
+    # not open the account to whoever holds that address at some university);
+    # password sign-in may name the account by it, the password still decides
     email: Mapped[str] = mapped_column(String(320), default="")
 
 

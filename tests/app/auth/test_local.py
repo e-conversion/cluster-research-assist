@@ -151,6 +151,30 @@ async def test_a_room_behind_one_address_can_sign_in_together(
     assert statuses == [200] * (address_limit + 1)
 
 
+@pytest.mark.parametrize(
+    ("accounts", "typed", "status"),
+    [
+        ({"ada": "ada@uni.de"}, "ada", 200),
+        ({"ada": "Ada@Uni.de"}, " ADA@uni.de ", 200),
+        ({"ada": "ada@uni.de"}, "bob@uni.de", 401),
+        ({"ada": "shared@uni.de", "ada2": "shared@uni.de"}, "shared@uni.de", 401),
+    ],
+    ids=["username", "email", "unknown email", "email of two accounts"],
+)
+async def test_signing_in_by_username_or_email(app, client, accounts, typed, status):
+    for username, email in accounts.items():
+        await add_account(app, username, email=email)
+    assert (await login(client, typed)).status_code == status
+
+
+async def test_an_email_naming_one_account_twice_still_signs_in(app, client, repo):
+    """Username and contact address may be the same: one account, not two."""
+    user_id = await add_account(app, "ada@uni.de", email="ada@uni.de")
+    await repo.add_registered_email("ada@uni.de", "test")
+    await repo.link_registered_email("ada@uni.de", user_id)
+    assert (await login(client, "ada@uni.de")).status_code == 200
+
+
 async def test_a_body_that_is_not_an_object_is_refused_not_a_crash(client):
     response = await client.post("/auth/password", json=[1])
     assert response.status_code == 401

@@ -249,6 +249,24 @@ class Repository:
                 select(LocalCredential).where(LocalCredential.username == username)
             )
 
+    async def credentials_by_email(self, email: str) -> list[LocalCredential]:
+        """Password credentials of every account the address names: as its
+        contact address or as a registered email it signed in with. More than
+        one means the address is ambiguous."""
+        address = normalise_email(email)
+        by_contact = select(User.id).where(func.lower(User.email) == address)
+        by_registration = select(RegisteredEmail.user_id).where(
+            RegisteredEmail.email == address
+        )
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(LocalCredential).where(
+                    LocalCredential.user_id.in_(by_contact)
+                    | LocalCredential.user_id.in_(by_registration)
+                )
+            )
+            return list(rows)
+
     async def usernames(self) -> dict[str, str]:
         async with self._sessions() as s:
             rows = await s.execute(

@@ -56,7 +56,7 @@ function passwordForm() {
   const password = make("input", { type: "password", name: "password", autocomplete: "current-password", required: true });
   const submit = make("button", { type: "submit", className: "btn primary block", textContent: "Sign in" });
   const error = errorLine();
-  const form = make("form", { className: "signin-form" }, field("Username", username), field("Password", password), submit, error);
+  const form = make("form", { className: "signin-form" }, field("Username or email", username), field("Password", password), submit, error);
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     submit.disabled = true;
