@@ -2,16 +2,9 @@
 // renders what it is allowed to see.
 import { del, getJSON, postJSON } from "./api.js";
 import { copyText } from "./clipboard.js";
+import { toast } from "./toast.js";
 
 const $ = (id) => document.getElementById(id);
-
-function toast(message, kind = "") {
-  const t = document.createElement("div");
-  t.className = "toast " + kind;
-  t.textContent = message;
-  $("toasts").append(t);
-  setTimeout(() => t.remove(), 3200);
-}
 
 async function guard(fn) {
   try {
