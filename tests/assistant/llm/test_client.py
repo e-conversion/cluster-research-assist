@@ -150,6 +150,37 @@ async def test_a_retry_after_beyond_the_retry_window_is_not_waited_out(chat):
     assert route.call_count == 1
 
 
+@pytest.fixture
+async def impatient(tmp_path):
+    """A client whose retry window has already closed."""
+    settings = make_settings(
+        tmp_path,
+        llm_api_key="k",
+        llm_base_url=BASE,
+        llm_retries=3,
+        llm_retry_window_s=0,
+    )
+    async with httpx.AsyncClient() as http:
+        yield ChatClient(settings, http)
+
+
+@respx.mock
+async def test_a_hung_request_is_retried_once_past_the_window(impatient):
+    route = respx.post(URL).mock(
+        side_effect=[httpx.ReadTimeout("hung"), sse(data({"choices": []}))]
+    )
+    assert await chunks(impatient) == [{"choices": []}]
+    assert route.call_count == 2
+
+
+@respx.mock
+async def test_a_request_that_hangs_twice_is_given_up(impatient):
+    route = respx.post(URL).mock(side_effect=httpx.ReadTimeout("hung"))
+    with pytest.raises(LLMTimeout):
+        await impatient.stream({"model": "m"})
+    assert route.call_count == 2
+
+
 @respx.mock
 @pytest.mark.parametrize(
     ("failure", "kind"),

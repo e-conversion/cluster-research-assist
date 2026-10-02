@@ -92,8 +92,8 @@ class Settings(BaseSettings):
     # a stream that sends nothing for this long is hung, not thinking
     llm_timeout_s: float = Field(default=90.0, gt=0)
     llm_retries: int = Field(default=3, ge=0)
-    # no retry starts once a request has been failing this long, so a dead
-    # endpoint costs one timeout, not llm_retries of them
+    # no retry starts once a request has been failing this long; a request
+    # that hung is still retried once, since that is what a retry fixes
     llm_retry_window_s: float = Field(default=30.0, ge=0)
     llm_max_tokens: int = Field(default=8192, ge=1)
     llm_max_context_tokens: int = Field(default=64000, ge=1)

@@ -146,9 +146,13 @@ class ChatStream:
 class ChatClient:
     """Gives up rather than waiting forever, and retries what a retry fixes.
 
-    No retry starts once a request has been failing for the retry window, so
-    a dead endpoint costs someone one timeout rather than one per retry, and a
-    long Retry-After is reported at once instead of waited out.
+    No retry starts once a request has been failing for the retry window: a
+    long Retry-After is reported at once instead of waited out, and an
+    endpoint that keeps refusing is given up on. A request that hung or broke
+    off is retried once even past the window, because that is the case a
+    retry fixes: an academic gateway was measured answering two of three
+    requests in 3 s and hanging on the third. One that hangs twice has had
+    two timeouts, not one per configured retry.
     """
 
     def __init__(self, settings: Settings, http: httpx.AsyncClient) -> None:
@@ -193,6 +197,7 @@ class ChatClient:
     ) -> httpx.Response:
         """The response once its status is a success; the body is still unread."""
         give_up_at = time.monotonic() + self._retry_window_s
+        hang_retried = False
         for attempt in range(self._retries + 1):
             request = self._http.build_request(
                 "POST",
@@ -205,17 +210,19 @@ class ChatClient:
                 response = await self._http.send(request, stream=True)
             except httpx.TimeoutException as exc:
                 if not await self._may_retry(
-                    give_up_at, attempt, self._backoff(attempt)
+                    give_up_at, attempt, self._backoff(attempt), once=not hang_retried
                 ):
                     raise LLMTimeout("the endpoint did not answer in time") from exc
+                hang_retried = True
                 continue
             except httpx.TransportError as exc:
                 if not await self._may_retry(
-                    give_up_at, attempt, self._backoff(attempt)
+                    give_up_at, attempt, self._backoff(attempt), once=not hang_retried
                 ):
                     raise LLMUnreachable(
                         f"the endpoint could not be reached: {exc}"
                     ) from exc
+                hang_retried = True
                 continue
             if response.is_success:
                 return response
@@ -230,13 +237,20 @@ class ChatClient:
         raise AssertionError("unreachable: the last attempt returns or raises")
 
     async def _may_retry(
-        self, give_up_at: float, attempt: int, wait: float, status: int | None = None
+        self,
+        give_up_at: float,
+        attempt: int,
+        wait: float,
+        status: int | None = None,
+        *,
+        once: bool = False,
     ) -> bool:
         """Sleep before the next attempt, or say there is none: the retries
-        are used up, or the next one would start after ``give_up_at``."""
+        are used up, or the next one would start after ``give_up_at`` and
+        ``once`` does not allow it anyway."""
         if attempt >= self._retries:
             return False
-        if time.monotonic() + wait > give_up_at:
+        if time.monotonic() + wait > give_up_at and not once:
             log.info(
                 "not retrying the model endpoint after its retry window",
                 extra={"fields": {"status": status, "attempt": attempt + 1}},
