@@ -135,7 +135,8 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .admin h1 { font: var(--heading-weight) 26px/1.2 var(--display); color: var(--heading-ink); margin: 0 0 4px; }
 .admin section { margin-top: 22px; }
 /* tab strips: the admin console and the Settings dialog */
-.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); overflow-x: auto; scrollbar-width: none; }
+.tabs button { white-space: nowrap; flex: 0 0 auto; }
 .admin .tabs { margin-top: 22px; }
 .tabs button { background: none; border: none; border-bottom: 2px solid transparent;
   color: var(--muted); font: 500 14px/1 var(--body); padding: 10px 14px; cursor: pointer; }
@@ -646,4 +647,63 @@ html:has(.viz-frame.expanded) { overflow: hidden; }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .dlg, .history, .map-card, .toast { animation: none; }
+}
+
+/* admin: Server info and Logs */
+.admin .monitor-block h2 { margin-top: 22px; }
+.admin .kpis + .charts { margin-top: 12px; }
+.admin .kpi.status-ok .status-note { color: var(--ok); }
+.admin .kpi.status-warn { border-color: var(--warn); }
+.admin .kpi.status-warn .status-note { color: var(--warn); }
+.admin .kpi.status-bad { border-color: var(--bad); background: var(--bad-soft); }
+.admin .kpi.status-bad .status-note { color: var(--bad); }
+.admin .status-note { font-size: 12px; margin-top: 2px; }
+.admin .stale { background: var(--bad-soft); color: var(--ink); border: 1px solid var(--bad);
+  border-radius: calc(8px * var(--radius-scale)); padding: 8px 10px; font-size: 13px; }
+.admin .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.admin .chart { position: relative; margin: 0; }
+.admin .chart figcaption { font-size: 12.5px; color: var(--muted); margin-bottom: 4px; }
+.admin .chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.admin .chart .bar { fill: var(--viz-1); }
+.admin .chart .axis { stroke: var(--hair-2); stroke-width: 1; }
+.admin .chart .tick { fill: var(--muted); font: 10px var(--mono); }
+.admin .chart .hit { fill: transparent; }
+.admin .chart .hit:hover { fill: var(--accent-soft); fill-opacity: .5; }
+.admin .chart-tip { position: absolute; top: 18px; transform: translateX(-50%); pointer-events: none;
+  background: var(--tip-bg); color: var(--tip-ink); font: 12px var(--mono); padding: 3px 7px;
+  border-radius: 6px; white-space: nowrap; }
+.admin .chart-table { margin-top: 8px; }
+.admin .chart-table td.num, .admin .chart-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.admin .meters { display: grid; gap: 10px; }
+.admin .meter-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 4px; }
+.admin .meter-bar { height: 8px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 4px; overflow: hidden; }
+.admin .meter-fill { height: 100%; background: var(--viz-1); border-radius: 0 4px 4px 0; }
+.admin .meter-fill.warn { background: var(--warn); }
+.admin .meter-fill.bad { background: var(--bad); }
+.admin .facts { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 4px 16px; margin: 6px 0 0; font-size: 14px; }
+.admin .facts dt { color: var(--muted); }
+.admin .facts dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.admin .log-controls { align-items: center; }
+.admin .log-controls .check { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.admin .log-controls input[type=search] { flex: 1 1 200px; }
+.admin table.logs { table-layout: fixed; }
+.admin table.logs th:nth-child(1) { width: 84px; }
+.admin table.logs th:nth-child(2) { width: 92px; }
+.admin table.logs th:nth-child(3) { width: 150px; }
+.admin .log-row { cursor: pointer; }
+.admin .log-row td { overflow-wrap: anywhere; }
+@media (hover: hover) { .admin .log-row:hover td { background: var(--panel-2); } }
+.admin .log-row.open td { border-bottom-color: transparent; }
+.admin .log-detail pre { margin: 0; font: 12px/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--panel-2); border: 1px solid var(--hair); border-radius: 6px; padding: 8px 10px; max-height: 420px; overflow: auto; }
+.admin .nowrap { white-space: nowrap; }
+.admin .level { font: 500 11px/1 var(--mono); letter-spacing: .04em; padding: 3px 6px; border-radius: 4px;
+  border: 1px solid var(--hair-2); color: var(--ink-2); }
+.admin .level-warning { color: var(--warn); border-color: var(--warn); }
+.admin .level-error, .admin .level-critical { color: var(--bad); border-color: var(--bad); }
+.admin .level-debug { color: var(--faint); }
+@media (max-width: 640px) {
+  .admin table.logs th:nth-child(3), .admin table.logs td:nth-child(3) { display: none; }
+  .admin .facts { grid-template-columns: 1fr; }
+  .admin .facts dd { margin-bottom: 6px; }
 }

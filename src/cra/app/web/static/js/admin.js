@@ -1,5 +1,6 @@
 // Admin console. Every call is authorised on the server; this page only
 // renders what it is allowed to see.
+import { logsTab, serverTab } from "./admin-monitor.js";
 import { del, getJSON, postJSON } from "./api.js";
 import { copyText } from "./clipboard.js";
 import { toast } from "./toast.js";
@@ -468,7 +469,10 @@ async function uploadLibrary(file) {
   return data;
 }
 
-const TABS = ["accounts", "requests", "settings", "feedback", "tokens", "library"];
+const TABS = ["accounts", "requests", "settings", "feedback", "tokens", "library", "server", "logs"];
+// tabs that poll, made on first open and running only while open
+const live = {};
+const LIVE_TABS = { server: () => serverTab($("server-info")), logs: () => logsTab($("log-view")) };
 
 /** The open tab lives in the URL fragment, so a reload keeps it. */
 function showTab(name) {
@@ -477,6 +481,10 @@ function showTab(name) {
   // requests arrive while the console is open; show the current ones
   if (open === "requests" && !$("tabs").querySelector('[data-tab="requests"]').hidden) guard(loadRequests);
   for (const tab of TABS) $(`tab-${tab}`).hidden = tab !== open;
+  for (const [tab, make] of Object.entries(LIVE_TABS)) {
+    if (tab === open) (live[tab] ??= make()).start();
+    else live[tab]?.stop();
+  }
   for (const b of $("tabs").querySelectorAll("button")) {
     b.classList.toggle("on", b.dataset.tab === open);
     b.setAttribute("aria-selected", String(b.dataset.tab === open));

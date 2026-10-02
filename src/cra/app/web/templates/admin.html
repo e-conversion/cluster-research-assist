@@ -29,6 +29,8 @@
     <button type="button" role="tab" data-tab="feedback">Feedback</button>
     <button type="button" role="tab" data-tab="tokens" hidden>Tokens</button>
     <button type="button" role="tab" data-tab="library">Library</button>
+    <button type="button" role="tab" data-tab="server">Server info</button>
+    <button type="button" role="tab" data-tab="logs">Logs</button>
   </nav>
 
   <section id="tab-accounts" role="tabpanel">
@@ -114,6 +116,15 @@
       <button class="btn primary" type="submit">Upload and activate</button>
     </form>
     <p class="desc" id="upload-hint" hidden></p>
+  </section>
+  <section id="tab-server" role="tabpanel" hidden>
+    <div id="server-info"><p class="desc">Loading…</p></div>
+  </section>
+
+  <section id="tab-logs" role="tabpanel" hidden>
+    <p class="desc">The application log, newest first. Click an entry for all its fields and, for
+    errors, the traceback.</p>
+    <div id="log-view"></div>
   </section>
 </main>
 

@@ -5,7 +5,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -640,6 +640,76 @@ class Repository:
                 .where(Message.role == "assistant")
             )
             return [(row[0] or {}, row[1]) for row in rows]
+
+    async def answers_since(
+        self, since: datetime
+    ) -> list[tuple[datetime, dict[str, Any]]]:
+        """When each answer was given, with its metadata, oldest first."""
+        async with self._sessions() as s:
+            rows = await s.execute(
+                select(Message.created_at, Message.meta)
+                .where(Message.role == "assistant", Message.created_at >= since)
+                .order_by(Message.created_at)
+            )
+            return [(row[0], row[1] or {}) for row in rows]
+
+    async def active_users(self, since: datetime) -> int:
+        """Accounts with a session that made a request since then."""
+        async with self._sessions() as s:
+            return int(
+                await s.scalar(
+                    select(func.count(func.distinct(WebSession.user_id))).where(
+                        WebSession.last_seen_at >= since,
+                        WebSession.user_id.is_not(None),
+                    )
+                )
+            )
+
+    async def table_counts(self) -> dict[str, int]:
+        counted = {
+            "users": User,
+            "sessions": WebSession,
+            "conversations": Conversation,
+            "messages": Message,
+            "feedback": Feedback,
+        }
+        async with self._sessions() as s:
+            return {
+                name: int(await s.scalar(select(func.count()).select_from(table)))
+                for name, table in counted.items()
+            }
+
+    async def database_info(self) -> dict[str, Any]:
+        """The server's version and the database's size, where it says."""
+        async with self._sessions() as s:
+            dialect = s.bind.dialect.name
+            if dialect == "postgresql":
+                version = await s.scalar(text("show server_version"))
+                size = await s.scalar(
+                    text("select pg_database_size(current_database())")
+                )
+                connections = await s.scalar(
+                    text(
+                        "select count(*) from pg_stat_activity "
+                        "where datname = current_database()"
+                    )
+                )
+                return {
+                    "dialect": dialect,
+                    "version": str(version),
+                    "size": int(size or 0),
+                    "connections": int(connections or 0),
+                }
+            if dialect == "sqlite":
+                version = await s.scalar(text("select sqlite_version()"))
+                pages = await s.scalar(text("pragma page_count"))
+                page_size = await s.scalar(text("pragma page_size"))
+                return {
+                    "dialect": dialect,
+                    "version": str(version),
+                    "size": int(pages or 0) * int(page_size or 0),
+                }
+            return {"dialect": dialect}
 
     async def count_conversations(self) -> int:
         async with self._sessions() as s:

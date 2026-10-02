@@ -94,3 +94,10 @@ def test_ids_can_be_passed_on_the_command_line():
     """An id starting with "-" is read by argparse as an option."""
     ids = {new_id() for _ in range(2000)}
     assert not [i for i in ids if not i.isalnum()]
+
+
+async def test_the_database_names_its_version_and_size(repo):
+    info = await repo.database_info()
+    assert info["dialect"] in ("sqlite", "postgresql")
+    assert info["version"]
+    assert info["size"] > 0

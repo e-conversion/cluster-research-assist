@@ -65,5 +65,8 @@ class TurnSlots:
     def of(self, session_id: str) -> TurnSlot:
         return self._slots.setdefault(session_id, TurnSlot())
 
+    def running(self) -> int:
+        return sum(slot.busy for slot in self._slots.values())
+
     def forget(self, session_id: str) -> None:
         self._slots.pop(session_id, None)

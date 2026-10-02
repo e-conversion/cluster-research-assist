@@ -124,6 +124,12 @@ class RemotePool:
     def __len__(self) -> int:
         return len(self._live)
 
+    def open_by_source(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for _, kind in self._live:
+            counts[kind] = counts.get(kind, 0) + 1
+        return counts
+
     async def acquire(self, key: Key, url: str) -> Connection:
         """The open connection for this key, reconnecting if it dropped."""
         await self.sweep()

@@ -177,6 +177,10 @@ class RemoteHost:
             return _error(f"{source.label}: {friendly_error(exc)}")
         return _content(result)
 
+    def open_connections(self) -> dict[str, int]:
+        """Live sessions to each source, across every browser session."""
+        return self._pool.open_by_source()
+
     async def aclose(self) -> None:
         await self._pool.aclose()
 

@@ -29,6 +29,7 @@ from cra.app.auth.principal import ANONYMOUS, Principal, Role
 from cra.app.history import migrate
 from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
+from cra.app.monitor import Monitor
 from cra.app.policy import Policy
 from cra.app.ratelimit import RateLimiter
 from cra.app.web import (
@@ -41,6 +42,7 @@ from cra.app.web import (
     route_conversation,
     route_feedback,
     route_health,
+    route_monitor,
     route_oauth,
     route_preferences,
     route_session,
@@ -150,6 +152,7 @@ class AppContext:
     # app that created it, leak between tests, or survive a reload.
     lookups: LookupGuard = field(default_factory=LookupGuard)
     turns: TurnSlots = field(default_factory=TurnSlots)
+    monitor: Monitor = field(default_factory=Monitor)
     library: Library | None = None
     indexes: Indexes | None = None
     registry: Registry = field(default_factory=Registry)
@@ -265,6 +268,7 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
         route_views.bp,
         route_tokens.bp,
         route_oauth.bp,
+        route_monitor.bp,
         route_stats.bp,
         route_account.bp,
         route_admin.bp,
