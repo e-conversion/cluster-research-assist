@@ -186,6 +186,7 @@ function noChatgpt() {
 function chatgptGuide() {
   if (!signIn()) return noChatgpt();
   return [
+    note("Using Codex? See ", b("Other apps"), "."),
     steps(
       ["In the ChatGPT desktop app, open ", b("Integrations → Plugins"), ", click ", b("Add"), " and choose ", b("Add MCP server"), "."],
       ["Enter the name, switch the type from ", b("STDIO"), " to ", b("Streamable HTTP"), ", enter the URL, leave the other fields empty, and click ",
@@ -200,6 +201,7 @@ function chatgptGuide() {
 function chatgptWebGuide() {
   if (!signIn()) return noChatgpt();
   return [
+    note("Using Codex? See ", b("Other apps"), "."),
     steps(
       ["Open ", doc("chatgpt.com/plugins", "https://chatgpt.com/plugins"), ", click ", b("+"), " and choose ",
         b("Create custom MCP server"), "."],
