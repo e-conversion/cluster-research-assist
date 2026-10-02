@@ -184,17 +184,24 @@ function chatgptGuide() {
       " to set it up; until then, Claude and the apps under ", b("Other apps"), " work.")];
   }
   return [
-    note("Using Codex? See ", b("Other apps"), "."),
     steps(
-      ["On ", doc("chatgpt.com", "https://chatgpt.com"), " open ", b("Settings → Security and login"), " and turn on ",
-        b("Developer mode"), "."],
-      ["Go to ", doc("chatgpt.com/plugins", "https://chatgpt.com/plugins"), ", click ", b("+"), " and fill in the name and address:",
-        field("Name", title()), field("MCP server URL", mcpUrl())],
-      ["Create it. ", `A ${title()} page opens: sign in and click `, b("Allow"), ". It is then listed under ", b("Drafts"), "."],
-      ["In a chat, choose ", b("Developer mode"), " from the ", b("+"), " menu and select it."],
+      ["In the ChatGPT desktop app, open ", b("Integrations → Plugins"), ", click ", b("Add"), " and choose ", b("Add MCP server"), "."],
+      ["Enter the name, switch the type from ", b("STDIO"), " to ", b("Streamable HTTP"), ", enter the URL, leave the other fields empty, and click ",
+        b("Save"), ".", field("Name", serverName()), field("URL", mcpUrl())],
+      ["Click ", b("Authenticate"), `. A ${title()} page opens: sign in and click `, b("Allow"), "."],
     ),
-    note("Developer mode is offered on Plus, Pro, Business, Enterprise and Edu, and your workspace may have to allow it."),
-    doc("OpenAI’s guide to developer mode", DOCS.chatgpt),
+    note("The desktop app shares this connection with Codex on the command line and in your editor. It shows up below as “Codex”."),
+    fold("On chatgpt.com instead",
+      steps(
+        ["Open ", doc("chatgpt.com/plugins", "https://chatgpt.com/plugins"), ", click ", b("+"), " and choose ",
+          b("Create custom MCP server"), "."],
+        ["Fill in the name and URL, choose ", b("OAuth"), " if asked, and create it.",
+          field("Name", title()), field("URL", mcpUrl())],
+        [`A ${title()} page opens: sign in and click `, b("Allow"), "."],
+      ),
+      note("Custom MCP servers on the web need a Plus, Pro, Business, Enterprise or Edu plan, and may need ",
+        b("Developer mode"), " (Settings → Security and login), which your workspace may have to allow."),
+      doc("OpenAI’s guide to developer mode", DOCS.chatgpt)),
   ];
 }
 
@@ -212,12 +219,8 @@ function otherGuide() {
           b("Code"), " tab."),
         doc("Claude Code and MCP", DOCS.claudeCode)),
       fold("Codex",
-        note("In a terminal:"),
+        note("Already connected the ChatGPT desktop app? Codex shares its list, so it is there already. Otherwise, in a terminal:"),
         snippet(`codex mcp add ${name} --url ${url}\ncodex mcp login ${name}`),
-        note("Or in the Codex app or editor extension: ", b("Settings → MCP servers → Add server"), ", choose ",
-          b("Streamable HTTP"), ", paste the address, restart, and select ", b("Authenticate"), "."),
-        field("URL", url),
-        note("The command line, the app and the editor extension share one list, so adding it once is enough."),
         doc("Codex and MCP", DOCS.codex)),
       fold("Cursor",
         note("Add this to ", code("~/.cursor/mcp.json"), " and sign in when Cursor asks."),
@@ -254,7 +257,7 @@ function otherGuide() {
       field("Header", header),
       note(...tokenStep())),
     note("Apps keep separate lists. Claude shares its connectors with Claude Code when both use the same account; ",
-      "ChatGPT does not share with Codex."),
+      "the ChatGPT desktop app shares with Codex, but not with ChatGPT on the web."),
   ];
 }
 
