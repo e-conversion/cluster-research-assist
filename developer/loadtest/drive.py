@@ -39,7 +39,9 @@ LAB_QUESTIONS = [
 async def ask(client: httpx.AsyncClient, prompt: str) -> dict:
     started = time.perf_counter()
     first = None
-    outcome: dict = {"status": None, "error": None, "tools": []}
+    # a tool that returns an error is part of a normal answer: the model
+    # reads the error and carries on, so it is counted apart from failures
+    outcome: dict = {"status": None, "error": None, "tools": [], "tool_errors": 0}
     async with client.stream(
         "POST", "/api/chat", json={"prompt": prompt}, timeout=300
     ) as response:
@@ -57,8 +59,7 @@ async def ask(client: httpx.AsyncClient, prompt: str) -> dict:
                 elif kind == "tool_call_end":
                     event = json.loads(line[5:])
                     outcome["tools"].append(event.get("name"))
-                    if not event.get("ok"):
-                        outcome["error"] = outcome["error"] or "tool failed"
+                    outcome["tool_errors"] += not event.get("ok")
                 elif kind in ("done", "error"):
                     event = json.loads(line[5:])
                     if kind == "error" or event.get("error") not in ANSWERED:
@@ -154,6 +155,7 @@ def summary(results: list, samples: list) -> dict:
         ),
         "page_p95_s": pct([s for r in results for *_, s in r.get("pages", [])], 0.95),
         "questions": len(questions),
+        "tool_errors": sum(q.get("tool_errors", 0) for q in questions),
         "question_errors": len(errors),
         "error_kinds": sorted({str(q.get("error") or q.get("status")) for q in errors}),
         "ttft_p50_s": pct([q.get("ttft_s") for q in questions], 0.5),
