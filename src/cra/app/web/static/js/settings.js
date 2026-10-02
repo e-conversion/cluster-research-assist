@@ -1,4 +1,4 @@
-// Settings row (sources, model, feedback) and the dialogs (connect, feedback, stats;
+// Settings row (tools, model and parameters, feedback) and the dialogs (connect, feedback, stats;
 // the Settings dialog itself lives in account.js).
 import { getJSON, postJSON, del } from "./api.js";
 import { initSettings, openSettings } from "./account.js";
@@ -34,7 +34,7 @@ function openConnect(kind) {
     : "Your key is passed to the registration service to mint a personal token. " +
       "Neither is written to the database; the token lives in this session only.";
   el("connect-hint").textContent = conn.active
-    ? `Connected — ${conn.tools} tools available. Registering again replaces the token.`
+    ? "Connected. Registering again replaces the token."
     : "Register your account once; the tools it unlocks are then available in the chat.";
   const field = el("connect-profile-field");
   const select = el("connect-profile");
@@ -59,7 +59,7 @@ async function attempt(button, label, call) {
     const r = await call();
     await refreshSession();
     if (r.active) {
-      toast(`${store.config.sources[connectKind].label}: connected (${r.tools} tools)`);
+      toast(`${store.config.sources[connectKind].label}: connected`);
       el("dlg-connect").close();
     } else {
       err.textContent = r.error || "That did not work — check the address and the key.";
@@ -325,54 +325,115 @@ export function initDialogs(s) {
 }
 
 // ---------- settings row ----------
+function svgIcon(id) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "ico");
+  svg.innerHTML = `<use href="#${id}"/>`;
+  return svg;
+}
+
+function chip(icon, text, title) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "chip";
+  b.title = title;
+  b.append(svgIcon(icon), text);
+  return b;
+}
+
+/** A chip that opens a menu above it; the menu is filled by the caller. */
+function picker(icon, label, title) {
+  const d = document.createElement("details");
+  d.className = "picker";
+  const summary = document.createElement("summary");
+  summary.className = "chip";
+  summary.title = title;
+  const text = document.createElement("span");
+  text.className = "chip-text";
+  text.textContent = label;
+  summary.append(svgIcon(icon), text, svgIcon("i-chevron"));
+  summary.lastChild.classList.add("chev");
+  const menu = document.createElement("div");
+  menu.className = "picker-menu";
+  d.append(summary, menu);
+  return { picker: d, summary, menu };
+}
+
+function heading(text) {
+  const h = document.createElement("h4");
+  h.textContent = text;
+  return h;
+}
+
+function hint(text) {
+  const p = document.createElement("div");
+  p.className = "hint";
+  p.textContent = text;
+  return p;
+}
+
 export function renderSettingsRow(store, el) {
-  const session = store.session;
   const cfg = store.config;
   el.replaceChildren();
-
   // Each part appears only once the server offers what it needs, so the row
   // still carries the feedback button while the rest is being built.
-  for (const [kind, src] of Object.entries(cfg.sources || {})) {
-    const conn = (session.connected || {})[kind] || { active: false, tools: 0 };
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "chip" + (conn.active ? " on" : "");
-    b.title = conn.active ? `connected — ${conn.tools} tools available` : "not connected — click to register and paste a token";
-    b.innerHTML = `<span class="dot"></span>${escapeHtml(src.label)}${conn.active ? ` <span class="muted">· ${conn.tools}</span>` : ""}`;
-    b.addEventListener("click", () => openConnect(kind));
-    el.append(b);
-  }
-
-  if ((cfg.models || []).length || cfg.openrouter) el.append(modelPicker(store));
-
-  const changed = changedParams(store);
-  const params = document.createElement("button");
-  params.type = "button";
-  params.className = "chip" + (changed.length ? " on" : "");
-  params.textContent = changed.length ? `Parameters \u00b7 ${changed.length}` : "Parameters";
-  params.title = changed.length
-    ? `Changed for this session: ${changed.join(", ")}`
-    : "Reasoning, sampling and the tool-call limit";
-  params.addEventListener("click", openParams);
-  el.append(params);
+  if (Object.keys(cfg.sources || {}).length) el.append(toolsPicker(store));
+  if (store.session.model || store.session.auto_model) el.append(modelPicker(store));
 
   const spacer = document.createElement("span"); spacer.className = "spacer"; el.append(spacer);
-  const fb = document.createElement("button");
-  fb.type = "button"; fb.className = "chip"; fb.textContent = "Feedback";
-  fb.title = "Report a bug or leave a note about an answer";
+  const fb = chip("i-feedback", "Feedback", "Report a bug or leave a note about an answer");
   fb.addEventListener("click", openFeedback);
   el.append(fb);
 }
 
+function toolsPicker(store) {
+  const connected = store.session.connected || {};
+  const sources = Object.entries(store.config.sources);
+  const active = sources.filter(([kind]) => connected[kind]?.active).map(([, src]) => src.label);
+  const { picker: p, summary, menu } = picker(
+    "i-tools", "Tools",
+    active.length ? `Connected: ${active.join(", ")}` : "The library is built in; connect further sources here",
+  );
+  summary.classList.toggle("on", active.length > 0);
+  menu.classList.add("tool-menu");
+
+  menu.append(heading("Built in"));
+  const library = document.createElement("div");
+  library.className = "tool-row fixed";
+  library.innerHTML = `<span class="dot on"></span><span class="tool-name">${escapeHtml(store.config.cluster?.name || "Cluster")} library</span><span class="tool-state">always on</span>`;
+  menu.append(library);
+
+  menu.append(heading("Connectors"));
+  for (const [kind, src] of sources) {
+    const on = Boolean(connected[kind]?.active);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tool-row";
+    b.title = on ? "Connected — click to replace the token or disconnect" : "Not connected — click to register and paste a token";
+    b.innerHTML = `<span class="dot${on ? " on" : ""}"></span><span class="tool-name">${escapeHtml(src.label)}</span>` +
+      `<span class="tool-state">${on ? "connected" : "connect…"}</span>`;
+    b.addEventListener("click", () => { p.open = false; openConnect(kind); });
+    menu.append(b);
+  }
+  menu.append(hint("The assistant calls these when a question needs them."));
+  return p;
+}
+
 function modelPicker(store) {
   const { session, config } = store;
-  const picker = document.createElement("details");
-  picker.className = "picker";
+  const changed = changedParams(store);
   const label = session.auto_model ? `auto · ${session.route_label}` : session.model;
-  picker.innerHTML =
-    `<summary class="chip" title="Choose the model">${escapeHtml(label)} \u25be</summary>` +
-    `<div class="picker-menu"></div>`;
-  const menu = picker.querySelector(".picker-menu");
+  const { picker: p, summary, menu } = picker(
+    "i-model", label,
+    changed.length ? `Choose the model · parameters changed: ${changed.join(", ")}` : "Choose the model and its parameters",
+  );
+  summary.classList.toggle("on", changed.length > 0);
+  if (changed.length) {
+    const mark = document.createElement("span");
+    mark.className = "tuned";
+    mark.title = "Parameters changed for this session";
+    summary.insertBefore(mark, summary.querySelector(".chev"));
+  }
 
   const pick = async (body) => {
     try {
@@ -381,15 +442,19 @@ function modelPicker(store) {
     } catch (e) {
       toast(e.message, "bad");
     }
-    picker.open = false;
+    p.open = false;
   };
 
-  const heading = document.createElement("h4");
-  heading.textContent = config.provider || "models";
-  menu.append(heading);
-
+  const models = config.openrouter ? ["", ...(config.models || [])] : config.models || [];
+  menu.append(heading(config.provider || "model"));
+  if (!models.length) {
+    const current = document.createElement("div");
+    current.className = "current-model";
+    current.textContent = session.model;
+    menu.append(current);
+  }
   // on OpenRouter an empty pick means "choose for me", so it leads the list
-  for (const model of config.openrouter ? ["", ...config.models] : config.models) {
+  for (const model of models) {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = model || "auto (cheapest that can call tools)";
@@ -400,9 +465,7 @@ function modelPicker(store) {
   }
 
   if (config.openrouter) {
-    const routing = document.createElement("h4");
-    routing.textContent = "routing";
-    menu.append(routing);
+    menu.append(heading("routing"));
     for (const route of config.routes) {
       const b = document.createElement("button");
       b.type = "button";
@@ -413,14 +476,15 @@ function modelPicker(store) {
     }
   }
 
-  const tools = session.tools || { local: 0 };
-  const inventory = document.createElement("div");
-  inventory.className = "hint";
-  inventory.textContent =
-    "Tools: " +
-    [`${tools.local} local`].concat(sourceCounts(store, tools)).join(" \u00b7 ");
-  menu.append(inventory);
-  return picker;
+  menu.append(document.createElement("hr"));
+  const params = document.createElement("button");
+  params.type = "button";
+  params.className = "action";
+  params.append(svgIcon("i-sliders"), "Parameters…");
+  params.addEventListener("click", () => { p.open = false; openParams(); });
+  menu.append(params,
+    hint(changed.length ? `Changed for this session: ${changed.join(", ")}` : "Reasoning, sampling and the tool-call limit"));
+  return p;
 }
 
 function sourceCounts(store, tools) {

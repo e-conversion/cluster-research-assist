@@ -11,27 +11,29 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 </head>
 <body>
+{% include "_icons.html" %}
 <header class="top">
   <a class="brand" href="./" title="Back to the assistant">{{ b.logo("square") }}<span class="brand-name">Admin console</span></a>
   <div class="top-actions">
     <span class="user" id="user-label"></span>
-    <a class="btn ghost" href="./">Back to the assistant</a>
+    <a class="btn ghost" href="./"><svg class="ico"><use href="#i-back"/></svg><span>Back to the assistant</span></a>
   </div>
 </header>
 
-<main class="admin">
-  <h1>Administration</h1>
+<div class="admin-shell">
+<nav class="tabs side admin-nav" id="tabs" role="tablist" aria-orientation="vertical">
+  <button type="button" role="tab" data-tab="accounts"><svg class="ico"><use href="#i-users"/></svg><span>Accounts</span></button>
+  <button type="button" role="tab" data-tab="requests"><svg class="ico"><use href="#i-inbox"/></svg><span>Requests</span> <span class="count" id="requests-count" hidden></span></button>
+  <button type="button" role="tab" data-tab="settings"><svg class="ico"><use href="#i-sliders"/></svg><span>Server settings</span></button>
+  <button type="button" role="tab" data-tab="feedback"><svg class="ico"><use href="#i-feedback"/></svg><span>Feedback</span></button>
+  <button type="button" role="tab" data-tab="tokens" hidden><svg class="ico"><use href="#i-key"/></svg><span>Tokens</span></button>
+  <button type="button" role="tab" data-tab="library"><svg class="ico"><use href="#i-library"/></svg><span>Library</span></button>
+  <button type="button" role="tab" data-tab="server"><svg class="ico"><use href="#i-server"/></svg><span>Server info</span></button>
+  <button type="button" role="tab" data-tab="logs"><svg class="ico"><use href="#i-logs"/></svg><span>Logs</span></button>
+</nav>
 
-  <nav class="tabs" id="tabs" role="tablist">
-    <button type="button" role="tab" data-tab="accounts">Accounts</button>
-    <button type="button" role="tab" data-tab="requests">Requests <span class="count" id="requests-count" hidden></span></button>
-    <button type="button" role="tab" data-tab="settings">Server settings</button>
-    <button type="button" role="tab" data-tab="feedback">Feedback</button>
-    <button type="button" role="tab" data-tab="tokens" hidden>Tokens</button>
-    <button type="button" role="tab" data-tab="library">Library</button>
-    <button type="button" role="tab" data-tab="server">Server info</button>
-    <button type="button" role="tab" data-tab="logs">Logs</button>
-  </nav>
+<main class="admin">
+  <h1 id="admin-title">Administration</h1>
 
   <section id="tab-accounts" role="tabpanel">
     <p class="desc">Everyone who can sign in: accounts that have, addresses invited but not yet
@@ -127,6 +129,7 @@
     <div id="log-view"></div>
   </section>
 </main>
+</div>
 
 <div id="toasts" class="toasts" popover="manual" aria-live="polite"></div>
 <script type="module" src="static/js/admin.js"></script>

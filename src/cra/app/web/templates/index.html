@@ -17,23 +17,7 @@
         crossorigin="anonymous"></script>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4.2 3.4c-.4.3-.8 0-.8-.5V5.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
-  <symbol id="i-map" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="6" cy="17" r="2.2"/><circle cx="11" cy="8" r="2.2"/><circle cx="17.5" cy="13" r="2.2"/><circle cx="18" cy="5" r="1.5"/><circle cx="13" cy="18.5" r="1.5"/></g></symbol>
-  <symbol id="i-graph" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12.00" cy="5.30" r="2.4"/><circle cx="18.50" cy="16.55" r="2.4"/><circle cx="5.50" cy="16.55" r="2.4"/><path d="M13.20 7.38L17.30 14.47M16.10 16.55L7.90 16.55M6.70 14.47L10.80 7.38"/></g></symbol>
-  <symbol id="i-copy" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></g></symbol>
-  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-research" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></g></symbol>
-  <symbol id="i-history" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3 4v4h4"/><path d="M12 8v4.5l3 1.8"/></g></symbol>
-  <symbol id="i-trash" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 7V5h4v2M6 7l1 13h10l1-13"/></g></symbol>
-  <symbol id="i-rerun" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.6"/><path d="M20 4v4h-4"/></g></symbol>
-  <symbol id="i-modify" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3Z"/><path d="M14.5 6.5l3 3"/></g></symbol>
-  <symbol id="i-new" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5v8a2.5 2.5 0 0 1-2.5 2.5H9l-4.2 3.4c-.4.3-.8 0-.8-.5V5.5Z"/><path d="M12 6.5v6M9 9.5h6"/></g></symbol>
-  <symbol id="i-expand" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-collapse" viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
-  <symbol id="i-more" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></g></symbol>
-</svg>
+{% include "_icons.html" %}
 <header class="top">
   <a class="brand" href="#/chat" aria-label="{{ title }}">
     {%- if brand.has_wide_logo %}{{ b.logo("wide") }}{% else %}{{ b.logo("square") }}<span class="brand-name">{{ title }}</span>{% endif -%}
@@ -49,10 +33,11 @@
     <details class="menu" id="menu">
       <summary class="btn ghost icon" title="Menu" aria-label="Menu"><svg class="ico"><use href="#i-more"/></svg></summary>
       <div class="menu-panel">
-        <button type="button" class="menu-item" id="settings-btn">Settings</button>
-        <button type="button" class="menu-item" id="stats-btn">Stats for nerds</button>
-        <a class="menu-item" id="admin-link" href="admin" hidden>Admin console</a>
-        <button type="button" class="menu-item" id="sign-out" hidden>Sign out</button>
+        <button type="button" class="menu-item" id="settings-btn"><svg class="ico"><use href="#i-settings"/></svg>Settings</button>
+        <button type="button" class="menu-item" id="stats-btn"><svg class="ico"><use href="#i-stats"/></svg>Stats for nerds</button>
+        <a class="menu-item" id="admin-link" href="admin" hidden><svg class="ico"><use href="#i-shield"/></svg>Admin console</a>
+        <hr id="sign-out-rule" hidden>
+        <button type="button" class="menu-item" id="sign-out" hidden><svg class="ico"><use href="#i-logout"/></svg>Sign out</button>
       </div>
     </details>
   </div>
@@ -151,11 +136,13 @@
       <h2>Settings</h2>
       <button class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
     </header>
-    <nav class="tabs" id="settings-tabs" role="tablist">
-      <button type="button" role="tab" data-tab="appearance">Appearance</button>
-      <button type="button" role="tab" data-tab="mcp" id="settings-tab-mcp">Connect apps</button>
-      <button type="button" role="tab" data-tab="account">Account</button>
+    <div class="side-layout">
+    <nav class="tabs side" id="settings-tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" role="tab" data-tab="appearance"><svg class="ico"><use href="#i-appearance"/></svg><span>Appearance</span></button>
+      <button type="button" role="tab" data-tab="mcp" id="settings-tab-mcp"><svg class="ico"><use href="#i-plug"/></svg><span>Connect apps</span></button>
+      <button type="button" role="tab" data-tab="account"><svg class="ico"><use href="#i-user"/></svg><span>Account</span></button>
     </nav>
+    <div class="side-content">
 
     <section class="set-section" id="set-appearance" role="tabpanel">
       <div class="seg" id="theme-seg" role="radiogroup" aria-label="Appearance">
@@ -247,6 +234,8 @@
         <p class="error" id="account-delete-error" hidden></p>
       </div>
     </section>
+    </div>
+    </div>
   </form>
 </dialog>
 

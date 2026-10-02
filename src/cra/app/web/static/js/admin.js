@@ -489,6 +489,7 @@ function showTab(name) {
     b.classList.toggle("on", b.dataset.tab === open);
     b.setAttribute("aria-selected", String(b.dataset.tab === open));
   }
+  $("admin-title").textContent = $("tabs").querySelector(`[data-tab="${open}"] span`).textContent;
 }
 
 function initTabs() {

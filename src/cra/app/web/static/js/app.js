@@ -29,6 +29,7 @@ export async function refreshSession() {
 function renderIdentity() {
   const s = store.session || {};
   document.getElementById("sign-out").hidden = !s.signed_in;
+  document.getElementById("sign-out-rule").hidden = !s.signed_in;
   document.getElementById("admin-link").hidden = !s.is_admin;
 }
 
