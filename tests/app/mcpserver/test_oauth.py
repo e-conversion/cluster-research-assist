@@ -102,7 +102,9 @@ class Person:
         )
         page = await self.browser.get(signed_in.json()["redirect"])
         assert page.status_code == 200
-        handle = re.search(r'data-request="([^"]+)"', page.text).group(1)
+        found = re.search(r'data-request="([^"]+)"', page.text)
+        assert found is not None, page.text
+        handle = found.group(1)
         answer = await self.browser.post(
             "/oauth/consent/answer", json={"request": handle, "approve": self.approve}
         )
@@ -265,6 +267,7 @@ async def approved_code(endpoint, client: OAuthClientInformationFull) -> str:
     handle = parse_qs(urlsplit(consent).query)["request"][0]
     user = await repo.get_credential_by_username("alice")
     landed = await oauth.answer(repo, handle, user.user_id, approve=True)
+    assert landed is not None
     return parse_qs(urlsplit(landed).query)["code"][0]
 
 

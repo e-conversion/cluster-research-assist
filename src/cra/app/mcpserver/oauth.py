@@ -171,7 +171,7 @@ def _loopback(host: str) -> bool:
         return False
 
 
-def _refused(client_id: str, reason: str) -> None:
+def _log_refusal(client_id: str, reason: str) -> None:
     """An unknown client, with the reason in the log: the client itself only
     sees "invalid client", so this is where an admin finds out why."""
     log.warning(
@@ -250,9 +250,10 @@ class Provider:
         """
         parts = urlsplit(url)
         if parts.fragment or not trusted_host(parts.hostname or "", self._hosts):
-            return _refused(
+            _log_refusal(
                 url, "client document host is not in CRA_MCP_OAUTH_CLIENT_HOSTS"
             )
+            return None
         row = await self._repo.get_oauth_client(url)
         cached = Client.model_validate(row.info) if row else None
         if row is not None and utcnow() - row.created_at < DOCUMENT_TTL:
@@ -263,16 +264,18 @@ class Provider:
         try:
             client = Client.model_validate(document)
         except ValidationError as exc:
-            return _refused(
+            _log_refusal(
                 url,
                 f"client document is not valid client metadata: {exc.error_count()} errors",
             )
+            return None
         # this server holds no keys to check a signed client assertion, so a
         # document client is a public one, kept honest by PKCE
         if client.client_id != url:
-            return _refused(
+            _log_refusal(
                 url, f"client document names another client_id: {client.client_id}"
             )
+            return None
         # A client may prefer a signed assertion and still list "none" among
         # the methods it can do (ChatGPT does); it then talks to this server
         # without one, as the metadata here offers no other method it knows.
@@ -280,15 +283,17 @@ class Provider:
             client.token_endpoint_auth_method or "none"
         ]
         if client.client_secret is not None or "none" not in methods:
-            return _refused(
+            _log_refusal(
                 url, f"client document can only authenticate with {', '.join(methods)}"
             )
+            return None
         if refused := [
             str(u)
             for u in client.redirect_uris or []
             if not redirect_allowed(str(u), self._hosts)
         ]:
-            return _refused(url, f"return addresses not allowed: {', '.join(refused)}")
+            _log_refusal(url, f"return addresses not allowed: {', '.join(refused)}")
+            return None
         client.token_endpoint_auth_method = "none"
         await self._repo.put_oauth_client(
             url, client.model_dump(mode="json", exclude_none=True)
@@ -304,21 +309,25 @@ class Provider:
                 follow_redirects=False,
             ) as response:
                 if response.status_code != 200:
-                    return _refused(
+                    _log_refusal(
                         url, f"client document answered {response.status_code}"
                     )
+                    return None
                 body = b""
                 async for chunk in response.aiter_bytes():
                     body += chunk
                     if len(body) > DOCUMENT_MAX_BYTES:
-                        return _refused(url, "client document is too large")
+                        _log_refusal(url, "client document is too large")
+                        return None
             document = json.loads(body)
         except (httpx.HTTPError, ValueError) as exc:
-            return _refused(
+            _log_refusal(
                 url, f"client document could not be read: {type(exc).__name__}"
             )
+            return None
         if not isinstance(document, dict):
-            return _refused(url, "client document is not a JSON object")
+            _log_refusal(url, "client document is not a JSON object")
+            return None
         return document
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
