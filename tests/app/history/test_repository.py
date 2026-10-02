@@ -101,3 +101,30 @@ async def test_the_database_names_its_version_and_size(repo):
     assert info["dialect"] in ("sqlite", "postgresql")
     assert info["version"]
     assert info["size"] > 0
+
+
+async def test_an_address_names_the_accounts_that_use_it(repo):
+    ada = await repo.create_local_user("ada", "Ada", "Ada@Uni.de", "user")
+    await repo.create_local_user("bob", "Bob", "bob@uni.de", "user")
+    await repo.add_registered_email("ada.l@uni.de", "test")
+    await repo.link_registered_email("ada.l@uni.de", ada.id)
+    for address in ("ada@uni.de", "ADA.L@uni.de"):
+        assert [c.username for c in await repo.credentials_by_email(address)] == ["ada"]
+
+
+async def test_only_recent_answers_are_returned(repo):
+    user = await repo.create_user("A")
+    conversation = await repo.create_conversation(user.id)
+    await repo.add_message(conversation.id, "user", "q")
+    await repo.add_message(conversation.id, "assistant", "a", {"usage": {"total": 9}})
+    recent = await repo.answers_since(utcnow() - timedelta(minutes=1))
+    assert [meta for _, meta in recent] == [{"usage": {"total": 9}}]
+    assert await repo.answers_since(utcnow() + timedelta(minutes=1)) == []
+
+
+async def test_active_users_count_people_not_sessions(repo):
+    user = await repo.create_user("A")
+    for sid in ("one", "two"):
+        await repo.create_session(sid, utcnow() + timedelta(hours=1), user.id)
+    await repo.create_session("anonymous", utcnow() + timedelta(hours=1))
+    assert await repo.active_users(utcnow() - timedelta(minutes=5)) == 1
