@@ -214,6 +214,22 @@ def test_a_token_is_copied_from_another_account(sources_env, monkeypatch):
     assert stored_tokens(sources_env, "ada@uni.de") == {"elab": "tok-123"}
 
 
+def test_the_deployment_key_is_copied_from_an_account_it_names(env, monkeypatch):
+    from cryptography.fernet import Fernet
+
+    env.write_text(
+        env.read_text()
+        + "CRA_MCP_NOMAD_URL=https://nomad.test/mcp\n"
+        + "CRA_MCP_NOMAD_TOKEN=deploy-key\nCRA_MCP_NOMAD_TOKEN_FOR=demo-venice\n"
+        + f"CRA_SOURCE_TOKEN_KEY={Fernet.generate_key().decode()}\n"
+    )
+    create_accounts(env, monkeypatch, "demo-venice", "ada@uni.de", "bob@uni.de")
+    cli = ["--env-file", str(env), "users", "connect-source", "nomad", "ada@uni.de"]
+    assert main([*cli, "--copy-from", "demo-venice"]) == 0
+    assert stored_tokens(env, "ada@uni.de") == {"nomad": "deploy-key"}
+    assert main([*cli, "--copy-from", "bob@uni.de"]) == 1, "the key does not name bob"
+
+
 @pytest.mark.parametrize(
     ("args", "says"),
     [

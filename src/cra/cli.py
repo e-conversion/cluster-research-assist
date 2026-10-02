@@ -462,7 +462,8 @@ def cmd_users_connect_source(args: argparse.Namespace) -> int:
     For a workshop's shared test accounts: registering upstream once per
     person would trip the proxy's per-address limit, since every request comes
     from this one server. ``--copy-from`` reuses another account's sealed token
-    without the plaintext ever leaving the database.
+    without the plaintext ever leaving the database, or the deployment key
+    when that account is one the key is named for.
     """
     from cra.app.auth import local
     from cra.app.web.stored_sources import Vault
@@ -498,6 +499,13 @@ def cmd_users_connect_source(args: argparse.Namespace) -> int:
         for row in rows:
             if row.kind == args.kind and vault.open(row.sealed) is not None:
                 return row.sealed
+        # a donor connected through the deployment key (CRA_MCP_NOMAD_TOKEN
+        # naming it) has no row of its own; the copies are sealed rows, so
+        # they outlive a rotation of that key until copied again
+        source = kinds[args.kind]
+        named = {args.copy_from.lower(), donor}
+        if donor and source.shared_token and named & set(source.shared_token_for):
+            return vault.seal(source.shared_token)
         return None
 
     async def run() -> int:
