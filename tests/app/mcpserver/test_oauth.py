@@ -429,6 +429,20 @@ async def test_a_published_client_is_read_from_its_document(endpoint):
     assert (client.client_name, client.token_endpoint_auth_method) == ("Claude", "none")
 
 
+async def test_a_client_that_prefers_a_signed_assertion_but_can_do_without(endpoint):
+    """ChatGPT on the web names private_key_jwt first and lists "none" too."""
+    url = "https://chatgpt.com/oauth/abc/client.json"
+    document = DOCUMENT | {
+        "client_id": url,
+        "redirect_uris": ["https://chatgpt.com/connector/oauth/abc"],
+        "token_endpoint_auth_method": "private_key_jwt",
+        "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
+    }
+    http, _ = serving(document)
+    client = await provider_of(endpoint, http).get_client(url)
+    assert client.token_endpoint_auth_method == "none"
+
+
 async def test_a_published_client_is_read_once_a_day(endpoint):
     http, seen = serving(DOCUMENT)
     provider = provider_of(endpoint, http)

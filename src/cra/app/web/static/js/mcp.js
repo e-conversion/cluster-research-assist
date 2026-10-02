@@ -11,7 +11,7 @@ import { toast } from "./toast.js";
 import { copyText } from "./clipboard.js";
 
 const APP_KEY = "cra.connect-app";
-const APPS = ["claude", "chatgpt", "other"];
+const APPS = ["claude", "chatgpt", "chatgpt-web", "other"];
 const PLACEHOLDER = "<your token>";
 const DOCS = {
   claude: "https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp",
@@ -177,12 +177,14 @@ function desktopConfig() {
   }, null, 2);
 }
 
+function noChatgpt() {
+  const contact = store.config.auth?.contact || "the administrators";
+  return [note("ChatGPT can only connect to servers that let it sign in, and this one does not yet. Ask ", contact,
+    " to set it up; until then, Claude and the apps under ", b("Other apps"), " work.")];
+}
+
 function chatgptGuide() {
-  if (!signIn()) {
-    const contact = store.config.auth?.contact || "the administrators";
-    return [note("ChatGPT can only connect to servers that let it sign in, and this one does not yet. Ask ", contact,
-      " to set it up; until then, Claude and the apps under ", b("Other apps"), " work.")];
-  }
+  if (!signIn()) return noChatgpt();
   return [
     steps(
       ["In the ChatGPT desktop app, open ", b("Integrations → Plugins"), ", click ", b("Add"), " and choose ", b("Add MCP server"), "."],
@@ -190,18 +192,26 @@ function chatgptGuide() {
         b("Save"), ".", field("Name", serverName()), field("URL", mcpUrl())],
       ["Click ", b("Authenticate"), `. A ${title()} page opens: sign in and click `, b("Allow"), "."],
     ),
-    note("The desktop app shares this connection with Codex on the command line and in your editor. It shows up below as “Codex”."),
-    fold("On chatgpt.com instead",
-      steps(
-        ["Open ", doc("chatgpt.com/plugins", "https://chatgpt.com/plugins"), ", click ", b("+"), " and choose ",
-          b("Create custom MCP server"), "."],
-        ["Fill in the name and URL, choose ", b("OAuth"), " if asked, and create it.",
-          field("Name", title()), field("URL", mcpUrl())],
-        [`A ${title()} page opens: sign in and click `, b("Allow"), "."],
-      ),
-      note("Custom MCP servers on the web need a Plus, Pro, Business, Enterprise or Edu plan, and may need ",
-        b("Developer mode"), " (Settings → Security and login), which your workspace may have to allow."),
-      doc("OpenAI’s guide to developer mode", DOCS.chatgpt)),
+    note("The desktop app shares this connection with Codex on the command line and in your editor, but not with chatgpt.com. ",
+      "It shows up below as “Codex”."),
+  ];
+}
+
+function chatgptWebGuide() {
+  if (!signIn()) return noChatgpt();
+  return [
+    steps(
+      ["Open ", doc("chatgpt.com/plugins", "https://chatgpt.com/plugins"), ", click ", b("+"), " and choose ",
+        b("Create custom MCP server"), "."],
+      ["In the window that opens, click ", b("Create MCP App"), "."],
+      ["Fill in the name and paste the address under ", b("Connection"), " (", b("Server URL"), "). Keep ",
+        b("Authentication"), " on ", b("OAuth"), ".", field("Name", title()), field("Server URL", mcpUrl())],
+      ["Tick ", b("I understand and want to continue"), " and click ", b("Create"), "."],
+      [`A ${title()} page opens: sign in and click `, b("Allow"), "."],
+    ),
+    note("Custom MCP servers need a Plus, Pro, Business, Enterprise or Edu plan, and a workspace admin may have to allow them. ",
+      "This connects ChatGPT on the web, not the desktop app: see ", b("ChatGPT app"), "."),
+    doc("OpenAI’s guide to developer mode", DOCS.chatgpt),
   ];
 }
 
@@ -261,7 +271,7 @@ function otherGuide() {
   ];
 }
 
-const GUIDES = { claude: claudeGuide, chatgpt: chatgptGuide, other: otherGuide };
+const GUIDES = { claude: claudeGuide, chatgpt: chatgptGuide, "chatgpt-web": chatgptWebGuide, other: otherGuide };
 
 function renderGuide() {
   el("app-guide").replaceChildren(...GUIDES[app]());

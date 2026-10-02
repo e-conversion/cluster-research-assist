@@ -273,12 +273,15 @@ class Provider:
             return _refused(
                 url, f"client document names another client_id: {client.client_id}"
             )
-        if (
-            client.client_secret is not None
-            or client.token_endpoint_auth_method not in (None, "none")
-        ):
+        # A client may prefer a signed assertion and still list "none" among
+        # the methods it can do (ChatGPT does); it then talks to this server
+        # without one, as the metadata here offers no other method it knows.
+        methods = document.get("token_endpoint_auth_methods_supported") or [
+            client.token_endpoint_auth_method or "none"
+        ]
+        if client.client_secret is not None or "none" not in methods:
             return _refused(
-                url, f"client document asks for {client.token_endpoint_auth_method}"
+                url, f"client document can only authenticate with {', '.join(methods)}"
             )
         if refused := [
             str(u)

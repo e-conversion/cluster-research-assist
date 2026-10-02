@@ -198,28 +198,7 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .signin .explain { text-align: left; margin: 0 0 20px; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; }
 .signin .or { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: var(--faint); font-size: 13px; }
 .signin .or::before, .signin .or::after { content: ""; flex: 1; border-top: 1px solid var(--hair); }
-.signin /* connect apps: one guide per app, every value with its own copy button */
-.set-section .app-seg { max-width: 420px; }
-.guide { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-.guide code, .set-section code { font: 12.5px var(--mono); background: var(--panel-2); border-radius: 5px; padding: 1px 5px; }
-.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 12px; }
-.steps > li { counter-increment: step; position: relative; padding-left: 32px; line-height: 1.5; }
-.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
-  display: grid; place-items: center; font: 600 12px/1 var(--body); background: var(--accent-soft); color: var(--accent); }
-.copy-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
-.copy-label { font-size: 12px; color: var(--muted); }
-.steps .copy-row:first-child { margin-top: 8px; }
-.guide-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
-.doc-link { font-size: 13px; color: var(--accent); text-decoration: none; align-self: flex-start; }
-@media (hover: hover) { .doc-link:hover { text-decoration: underline; } }
-.fold { border: 1px solid var(--hair); border-radius: calc(10px * var(--radius-scale)); }
-.fold > summary { cursor: pointer; padding: 9px 12px; font-weight: 500; }
-.fold[open] > summary { border-bottom: 1px solid var(--hair); }
-.fold-body { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-.set-heading { font: 600 14px/1.3 var(--body); margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--heading-ink); }
-.token-create { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-.set-subheading { font: 600 13.5px/1.3 var(--body); margin: 0; color: var(--ink-2); }
-.account-facts { text-align: left; margin: 0 0 18px; }
+.signin .account-facts { text-align: left; margin: 0 0 18px; }
 .signin .note { text-align: left; margin: 0 0 12px; }
 .landing-head { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 8vh; }
 .landing-head h1 { font: 500 24px/1.25 var(--body); margin: 0; color: var(--ink-2); letter-spacing: -.01em; }
@@ -424,6 +403,29 @@ body:not([data-route="chat"]) #history-btn, body:not([data-route="chat"]) #new-c
 .copy-row .btn { flex: none; }
 .copy-row input { flex: 1; min-width: 0; font: 13px var(--mono); color: var(--ink); background: var(--panel); border: 1px solid var(--hair-2); border-radius: calc(9px * var(--radius-scale)); padding: 7px 10px; }
 .snippet { flex: 1; min-width: 0; margin: 0; font: 12.5px/1.45 var(--mono); background: var(--panel); border: 1px solid var(--hair-2); border-radius: calc(9px * var(--radius-scale)); padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* connect apps: one guide per app, every value with its own copy button */
+/* the theme switch above caps .seg at 320px; four app names need more */
+.set-section .seg.app-seg { max-width: 520px; }
+.app-seg button { white-space: nowrap; }
+.guide { display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.guide code, .set-section code { font: 12.5px var(--mono); background: var(--panel-2); border-radius: 5px; padding: 1px 5px; }
+.steps { margin: 0; padding: 0; list-style: none; counter-reset: step; display: flex; flex-direction: column; gap: 12px; }
+.steps > li { counter-increment: step; position: relative; padding-left: 32px; line-height: 1.5; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font: 600 12px/1 var(--body); background: var(--accent-soft); color: var(--accent); }
+.copy-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.copy-label { font-size: 12px; color: var(--muted); }
+.steps .copy-row:first-child { margin-top: 8px; }
+.guide-note { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.doc-link { font-size: 13px; color: var(--accent); text-decoration: none; align-self: flex-start; }
+@media (hover: hover) { .doc-link:hover { text-decoration: underline; } }
+.fold { border: 1px solid var(--hair); border-radius: calc(10px * var(--radius-scale)); }
+.fold > summary { cursor: pointer; padding: 9px 12px; font-weight: 500; }
+.fold[open] > summary { border-bottom: 1px solid var(--hair); }
+.fold-body { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.set-heading { font: 600 14px/1.3 var(--body); margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--heading-ink); }
+.token-create { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.set-subheading { font: 600 13.5px/1.3 var(--body); margin: 0; color: var(--ink-2); }
 .account-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 14px; }
 .account-facts dt { color: var(--muted); }
 .account-facts dd { margin: 0; overflow-wrap: anywhere; }
@@ -617,7 +619,7 @@ html:has(.viz-frame.expanded) { overflow: hidden; }
   .token-table th:nth-child(2), .token-table td:nth-child(2),
   .token-table th:nth-child(4), .token-table td:nth-child(4) { display: none; }
   .set-section .token-table { display: table; }
-  .set-section .app-seg { max-width: none; }
+  .set-section .seg.app-seg { max-width: none; }
   .steps > li { padding-left: 30px; }
   .signin.consent { margin-top: 4vh; padding: 28px 20px 22px; }
   .radio-row { flex-wrap: wrap; gap: 8px 18px; }
@@ -636,6 +638,10 @@ html:has(.viz-frame.expanded) { overflow: hidden; }
   .collab-bar .encodes { margin-left: 0; }
   .map-card { left: 8px; right: 8px; top: auto; bottom: 8px; width: auto; }
   .graph-card { top: auto; bottom: 8px; left: 8px; right: 8px; width: auto; max-height: 48%; }
+}
+/* four app names do not fit one row on a narrow phone: two rows of two */
+@media (max-width: 440px) {
+  .set-section .seg.app-seg { display: grid; grid-template-columns: 1fr 1fr; }
 }
 @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
