@@ -181,12 +181,15 @@ class RemoteHost:
         await self._pool.aclose()
 
 
-# a server that declares nothing gets judged by the verb it chose
+# a server that declares nothing gets judged by the verb it chose; ensure,
+# bulk, toggle and apply are elabmcp's (ensure_link, bulk_delete_links,
+# toggle_step, apply_tag_suggestions)
 MUTATING_VERBS = re.compile(
     r"^(create|add|new|insert|update|edit|patch|set|put|post|write|save|upload|"
     r"delete|remove|destroy|drop|purge|clear|rename|move|copy|duplicate|archive|"
     r"restore|lock|unlock|assign|attach|detach|link|unlink|tag|untag|share|"
-    r"publish|submit|send|execute|run)(_|$)",
+    r"publish|submit|send|execute|run|ensure|bulk|toggle|apply|import|merge|"
+    r"approve|sign|mark|complete)(_|$)",
     re.IGNORECASE,
 )
 

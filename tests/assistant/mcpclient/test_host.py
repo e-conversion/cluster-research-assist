@@ -6,9 +6,12 @@ code paths as a deployment without needing a socket.
 """
 
 import json
+from types import SimpleNamespace
 
 import pytest
 from fakes import Toy, make_host
+
+from cra.assistant.mcpclient.host import is_read_only
 
 SESSION = "session-1"
 
@@ -139,3 +142,25 @@ async def test_tools_that_write_are_withheld_unless_the_deployment_opts_in(toy):
         SESSION, "elab_create_item", {"title": "x"}
     )
     await open_host.aclose()
+
+
+@pytest.mark.parametrize(
+    ("name", "read_only"),
+    [
+        ("apply_tag_suggestions", False),
+        ("ensure_link", False),
+        ("bulk_ensure_links", False),
+        ("bulk_delete_links", False),
+        ("ensure_link_by_query", False),
+        ("toggle_step", False),
+        ("get_entity_links", True),
+        ("expand_links_network", True),
+        ("list_steps", True),
+        ("resolve_entity_by_query", True),
+        ("refresh_team_caps", True),
+    ],
+)
+def test_an_undeclared_tool_is_judged_by_its_verb(name, read_only):
+    """elabmcp declares no readOnlyHint; its real tool names, with the
+    writes the verb list once let through."""
+    assert is_read_only(SimpleNamespace(name=name, annotations=None)) is read_only
