@@ -51,7 +51,7 @@ from mcp.shared.auth import (
     OAuthToken,
     ProtectedResourceMetadata,
 )
-from pydantic import ValidationError
+from pydantic import AnyUrl, ValidationError
 from starlette.middleware.cors import CORSMiddleware
 from starlette.routing import Route, Router, request_response
 
@@ -180,6 +180,35 @@ def _refused(client_id: str, reason: str) -> None:
     )
 
 
+class Client(OAuthClientInformationFull):
+    """A registered client whose loopback return addresses match on any port.
+
+    A native app (Codex, the ChatGPT desktop app, Claude Code) registers
+    ``http://127.0.0.1/callback`` and then listens on whatever port the system
+    gives it; RFC 8252 §7.3 has the server ignore the port for a loopback
+    address. Everything else is still compared exactly.
+    """
+
+    def validate_redirect_uri(self, redirect_uri: AnyUrl | None) -> AnyUrl:
+        if redirect_uri is not None and any(
+            _same_but_port(str(redirect_uri), str(u)) for u in self.redirect_uris or []
+        ):
+            return redirect_uri
+        return super().validate_redirect_uri(redirect_uri)
+
+
+def _same_but_port(requested: str, registered: str) -> bool:
+    a, b = urlsplit(requested), urlsplit(registered)
+    return (
+        a.scheme == b.scheme == "http"
+        and _loopback(a.hostname or "")
+        and a.hostname == b.hostname
+        and (a.path or "/") == (b.path or "/")
+        and a.query == b.query
+        and not a.fragment
+    )
+
+
 class Access(AccessToken):
     grant_id: str
 
@@ -204,13 +233,13 @@ class Provider:
 
     # ---- clients
 
-    async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
+    async def get_client(self, client_id: str) -> "Client | None":
         if client_id.startswith("https://"):
             return await self._published(client_id)
         row = await self._repo.get_oauth_client(client_id)
-        return OAuthClientInformationFull.model_validate(row.info) if row else None
+        return Client.model_validate(row.info) if row else None
 
-    async def _published(self, url: str) -> OAuthClientInformationFull | None:
+    async def _published(self, url: str) -> "Client | None":
         """A client that names itself by the address of its own description,
         which is how Claude and ChatGPT connect unless told otherwise.
 
@@ -225,14 +254,14 @@ class Provider:
                 url, "client document host is not in CRA_MCP_OAUTH_CLIENT_HOSTS"
             )
         row = await self._repo.get_oauth_client(url)
-        cached = OAuthClientInformationFull.model_validate(row.info) if row else None
+        cached = Client.model_validate(row.info) if row else None
         if row is not None and utcnow() - row.created_at < DOCUMENT_TTL:
             return cached
         document = await self._fetch(url)
         if document is None:
             return cached
         try:
-            client = OAuthClientInformationFull.model_validate(document)
+            client = Client.model_validate(document)
         except ValidationError as exc:
             return _refused(
                 url,

@@ -22,10 +22,12 @@ from mcp.client.streamable_http import streamable_http_client
 from mcp.server.auth.provider import AuthorizationParams, AuthorizeError, TokenError
 from mcp.shared.auth import (
     AuthorizationCodeResult,
+    InvalidRedirectUriError,
     OAuthClientInformationFull,
     OAuthClientMetadata,
     OAuthToken,
 )
+from pydantic import AnyUrl
 
 from cra.app.auth import tokens
 from cra.app.mcpserver import oauth
@@ -470,3 +472,36 @@ async def test_the_server_says_it_reads_client_documents(endpoint):
     async with http(endpoint) as client:
         server = await client.get("/.well-known/oauth-authorization-server")
     assert server.json()["client_id_metadata_document_supported"] is True
+
+
+CODEX = {
+    "client_id": "https://chatgpt.com/oauth/codex/abc/client.json",
+    "client_name": "Codex",
+    "redirect_uris": ["http://127.0.0.1/callback/abc", "http://localhost/callback/abc"],
+    "token_endpoint_auth_method": "none",
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+}
+
+
+@pytest.mark.parametrize(
+    ("uri", "allowed"),
+    [
+        ("http://127.0.0.1:56947/callback/abc", True),
+        ("http://localhost:8080/callback/abc", True),
+        ("http://127.0.0.1/callback/abc", True),
+        ("http://127.0.0.1:56947/callback/other", False),
+        ("http://localhost:8080/callback/abc?x=1", False),
+        ("https://127.0.0.1:56947/callback/abc", False),
+    ],
+)
+async def test_a_native_app_returns_to_any_loopback_port(endpoint, uri, allowed):
+    """RFC 8252 §7.3: Codex registers no port and listens on whichever it gets."""
+    http, _ = serving(CODEX)
+    client = await provider_of(endpoint, http).get_client(CODEX["client_id"])
+    try:
+        client.validate_redirect_uri(AnyUrl(uri))
+    except InvalidRedirectUriError:
+        assert not allowed
+    else:
+        assert allowed
