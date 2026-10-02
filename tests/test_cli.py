@@ -228,3 +228,13 @@ def test_connecting_a_source_fails_loudly(sources_env, monkeypatch, capsys, args
     monkeypatch.setattr("sys.stdin", io.StringIO("tok-123\n"))
     assert main(["--env-file", str(sources_env), "users", "connect-source", *args]) == 1
     assert says in capsys.readouterr().err
+
+
+def test_the_accounts_are_listed_as_json_for_scripts(env, monkeypatch, capsys):
+    import json
+
+    create_accounts(env, monkeypatch, "ada@uni.de")
+    capsys.readouterr()
+    assert main(["--env-file", str(env), "users", "list", "--json"]) == 0
+    (listed,) = json.loads(capsys.readouterr().out)
+    assert (listed["username"], listed["active"]) == ("ada@uni.de", True)

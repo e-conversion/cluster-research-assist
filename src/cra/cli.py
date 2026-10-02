@@ -283,12 +283,28 @@ def cmd_users_list(args: argparse.Namespace) -> int:
     engine, repo = _repo(load_settings(args))
 
     async def run() -> None:
+        usernames = await repo.usernames()
+        if args.json:
+            import json
+
+            users = [
+                {
+                    "id": user.id,
+                    "name": user.display_name,
+                    "role": user.role,
+                    "active": user.is_active,
+                    "username": usernames.get(user.id),
+                }
+                for user in await repo.list_users()
+            ]
+            _out(json.dumps(users, ensure_ascii=False))
+            await engine.dispose()
+            return
         for email in await repo.list_registered_emails():
             _out(
                 f"email  {email.email:40} user={email.user_id or '-'}  "
                 f"org={email.home_organization or '*'}  by {email.created_by}"
             )
-        usernames = await repo.usernames()
         for user in await repo.list_users():
             state = "active" if user.is_active else "disabled"
             sign_in = [f"password:{usernames[user.id]}"] if user.id in usernames else []
@@ -734,9 +750,13 @@ def build_parser() -> argparse.ArgumentParser:
     users_sub = users.add_subparsers(
         dest="users_command", metavar="<command>", required=True
     )
-    users_sub.add_parser(
+    listing_users = users_sub.add_parser(
         "list", help="registered emails, users and how they sign in"
-    ).set_defaults(func=cmd_users_list)
+    )
+    listing_users.add_argument(
+        "--json", action="store_true", help="the accounts as JSON, for scripts"
+    )
+    listing_users.set_defaults(func=cmd_users_list)
     create = users_sub.add_parser(
         "create",
         help="create a password account; the first admin of a new instance "
