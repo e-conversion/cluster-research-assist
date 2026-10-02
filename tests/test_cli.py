@@ -170,7 +170,7 @@ def sources_env(env):
     return env
 
 
-def stored_tokens(env, username) -> dict[str, str]:
+def stored_tokens(env, username) -> dict[str, str | None]:
     from cra.app.history.engine import make_engine, make_session_factory
     from cra.app.history.repository import Repository
     from cra.app.web.stored_sources import Vault
@@ -178,11 +178,12 @@ def stored_tokens(env, username) -> dict[str, str]:
 
     vault = Vault(Settings.load(env).source_token_key.get_secret_value())
 
-    async def run() -> dict[str, str]:
+    async def run() -> dict[str, str | None]:
         engine = make_engine(f"sqlite+aiosqlite:///{env.parent}/cra.sqlite")
         repo = Repository(make_session_factory(engine))
-        user_id = (await repo.get_credential_by_username(username)).user_id
-        rows = await repo.source_connections_of(user_id)
+        credential = await repo.get_credential_by_username(username)
+        assert credential is not None
+        rows = await repo.source_connections_of(credential.user_id)
         await engine.dispose()
         return {row.kind: vault.open(row.sealed) for row in rows}
 
