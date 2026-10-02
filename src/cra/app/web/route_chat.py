@@ -111,7 +111,8 @@ async def chat() -> Any:
     allowance = ctx.limiter.check(f"chat:{g.principal.user_id}", limit)
     if not allowance.allowed:
         return {
-            "error": f"You have reached today's limit of {limit} questions.",
+            "error": f"You have reached today's limit of {limit} questions. "
+            f"It resets in about {-(-allowance.retry_after // 3600)} hours.",
             "retry_after": allowance.retry_after,
         }, 429
 

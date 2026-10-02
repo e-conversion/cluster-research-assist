@@ -217,7 +217,11 @@ def create_app(settings: Settings, engine: AsyncEngine | None = None) -> Quart:
             "upload_limit": settings.library_max_upload_mb * 1024 * 1024,
         },
     )
-    engine = engine or make_engine(settings.history_url)
+    engine = engine or make_engine(
+        settings.history_url,
+        settings.history_pool_size,
+        settings.history_pool_overflow,
+    )
     repo = Repository(make_session_factory(engine))
     http = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
     ctx = AppContext(

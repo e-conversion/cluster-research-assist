@@ -156,6 +156,9 @@ class Settings(BaseSettings):
     history_url: str = "sqlite+aiosqlite:///./cra.sqlite"
     history_retention_days: int = Field(default=365, ge=1)
     history_auto_migrate: bool = False
+    # PostgreSQL connections kept open, and how many more a burst may open
+    history_pool_size: int = Field(default=5, ge=1)
+    history_pool_overflow: int = Field(default=10, ge=0)
 
     # external MCP servers this instance consumes
     mcp_elab_url: str = ""

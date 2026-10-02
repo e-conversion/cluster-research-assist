@@ -7,8 +7,17 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-def make_engine(url: str) -> AsyncEngine:
-    engine = create_async_engine(url)
+def make_engine(url: str, pool_size: int = 5, max_overflow: int = 10) -> AsyncEngine:
+    if url.startswith("sqlite"):
+        engine = create_async_engine(url)
+    else:
+        # A turn holds no connection while it waits for the model: every
+        # repository call opens and closes its own session. pre_ping replaces
+        # connections a database restart left dead instead of failing a
+        # request on them.
+        engine = create_async_engine(
+            url, pool_size=pool_size, max_overflow=max_overflow, pool_pre_ping=True
+        )
     if engine.dialect.name == "sqlite":
         # SQLite ignores ON DELETE clauses unless asked per connection.
         @event.listens_for(engine.sync_engine, "connect")

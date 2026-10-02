@@ -223,7 +223,11 @@ def cmd_library_init_root(args: argparse.Namespace) -> int:
 def _engine(settings: Settings):
     from cra.app.history.engine import make_engine
 
-    return make_engine(settings.history_url)
+    return make_engine(
+        settings.history_url,
+        settings.history_pool_size,
+        settings.history_pool_overflow,
+    )
 
 
 def cmd_db_upgrade(args: argparse.Namespace) -> int:

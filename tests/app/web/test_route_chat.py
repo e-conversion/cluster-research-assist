@@ -102,6 +102,15 @@ async def test_an_answer_keeps_its_token_counts(client, app, scripted):
     assert meta[-1]["usage"] == {"prompt": 120, "completion": 30, "total": 150}
 
 
+async def test_the_daily_limit_says_when_it_resets(client, app, scripted):
+    scripted([[text_chunk("Hi.")]])
+    app.extensions["cra"].policy.set("user_chat_daily_limit", 1)
+    await (await client.post("/api/chat", json={"prompt": "One?"})).get_data()
+    refused = await client.post("/api/chat", json={"prompt": "Two?"})
+    assert refused.status_code == 429
+    assert "resets in about" in (await refused.get_json())["error"]
+
+
 async def test_the_conversation_is_named_after_the_stream_has_ended(
     client, app, scripted
 ):
