@@ -282,6 +282,8 @@ async def update_profile(
     """Changes what is given and differs from what is stored; returns the
     names of the fields that changed. Nothing changes when any is refused."""
     user = await repo.get_user(user_id)
+    if user is None:
+        raise CredentialError("this account no longer exists")
     credential = await repo.get_credential(user_id)
     changes: dict[str, str] = {}
     if name is not None and (name := check_name(name)) != user.display_name:
