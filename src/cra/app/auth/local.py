@@ -22,7 +22,12 @@ from enum import StrEnum
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-from cra.app.history.repository import Repository, utcnow, valid_email
+from cra.app.history.repository import (
+    Repository,
+    normalise_email,
+    utcnow,
+    valid_email,
+)
 from cra.app.history.tables import LocalCredential, User
 
 # module-level so tests can swap in cheap parameters
@@ -95,6 +100,23 @@ def check_username(username: str) -> str:
     if name in RESERVED_USERNAMES:
         raise CredentialError(f"{name!r} is too easy to guess; choose another username")
     return name
+
+
+def check_name(name: str) -> str:
+    name = name.strip()
+    if not name:
+        raise CredentialError("an account needs a name")
+    if len(name) > NAME_MAX:
+        raise CredentialError(f"a name has at most {NAME_MAX} characters")
+    return name
+
+
+def check_email(email: str) -> str:
+    """An account may go without a contact address."""
+    email = normalise_email(email)
+    if email and not valid_email(email):
+        raise CredentialError("that is not an email address")
+    return email
 
 
 def check_password(password: str, username: str) -> None:
@@ -176,14 +198,8 @@ async def create_user(
     repo: Repository, username: str, name: str, email: str = "", role: str = "user"
 ) -> User:
     username = check_username(username)
-    name = name.strip()
-    if not name:
-        raise CredentialError("an account needs a name")
-    if len(name) > NAME_MAX:
-        raise CredentialError(f"a name has at most {NAME_MAX} characters")
-    email = email.strip()
-    if email and not valid_email(email):
-        raise CredentialError("that is not an email address")
+    name = check_name(name)
+    email = check_email(email)
     if await repo.get_credential_by_username(username) is not None:
         raise CredentialError(f"the username {username!r} is taken")
     return await repo.create_local_user(username, name, email, role)
@@ -246,6 +262,44 @@ async def change_password(
         raise CredentialError("the current password is not right")
     check_password(new, credential.username)
     await repo.set_password_hash(user_id, await hash_password(new))
+
+
+async def _free_for(repo: Repository, user_id: str, address: str) -> bool:
+    """Whether nobody else signs in by ``address``. Two accounts sharing one
+    make it name neither, so taking somebody's address would lock them out
+    of signing in with it."""
+    return not (await repo.accounts_named(address) - {user_id})
+
+
+async def update_profile(
+    repo: Repository,
+    user_id: str,
+    *,
+    name: str | None = None,
+    username: str | None = None,
+    email: str | None = None,
+) -> set[str]:
+    """Changes what is given and differs from what is stored; returns the
+    names of the fields that changed. Nothing changes when any is refused."""
+    user = await repo.get_user(user_id)
+    credential = await repo.get_credential(user_id)
+    changes: dict[str, str] = {}
+    if name is not None and (name := check_name(name)) != user.display_name:
+        changes["display_name"] = name
+    if username is not None:
+        if credential is None:
+            raise CredentialError("this account signs in at its institution")
+        if (username := check_username(username)) != credential.username:
+            if "@" in username and not await _free_for(repo, user_id, username):
+                raise CredentialError(f"the username {username!r} is taken")
+            changes["username"] = username
+    if email is not None and (email := check_email(email)) != user.email:
+        if email and not await _free_for(repo, user_id, email):
+            raise CredentialError("another account uses that email address")
+        changes["email"] = email
+    if changes and not await repo.update_profile(user_id, **changes):
+        raise CredentialError(f"the username {changes['username']!r} is taken")
+    return {"name" if key == "display_name" else key for key in changes}
 
 
 async def reset(repo: Repository, user_id: str, created_by: str) -> str:

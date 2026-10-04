@@ -1,6 +1,6 @@
 // The Settings dialog: appearance, connecting apps (mcp.js) and the account
 // itself.
-import { getJSON, putJSON, del } from "./api.js";
+import { getJSON, patchJSON, putJSON, del } from "./api.js";
 import { syncControls } from "./theme.js";
 import { toast } from "./toast.js";
 import { forgetMinted, initMcp, loadTokens, showMcp } from "./mcp.js";
@@ -20,16 +20,80 @@ function showError(id, message) {
   p.hidden = !message;
 }
 
+// Enter in a field of a method=dialog form would close the dialog
+function onEnter(ids, action) {
+  for (const id of ids) {
+    el(id).addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      action();
+    });
+  }
+}
+
+// ---------- profile ----------
+
+const PROFILE_FIELDS = {
+  name: "profile-name",
+  username: "profile-username",
+  email: "profile-email",
+};
+// what the server holds; an institutional account has no username
+let savedProfile = {};
+
+function profileChanges() {
+  const changes = {};
+  for (const [key, value] of Object.entries(savedProfile)) {
+    const typed = el(PROFILE_FIELDS[key]).value.trim();
+    if (typed !== value) changes[key] = typed;
+  }
+  return changes;
+}
+
+function syncProfileActions() {
+  const dirty = Object.keys(profileChanges()).length > 0;
+  el("profile-save").disabled = !dirty;
+  el("profile-reset").hidden = !dirty;
+}
+
+function resetProfile() {
+  for (const [key, value] of Object.entries(savedProfile)) el(PROFILE_FIELDS[key]).value = value;
+  showError("profile-error", "");
+  syncProfileActions();
+}
+
+function renderProfile(me) {
+  savedProfile = { name: me.name, email: me.email };
+  if (me.username) savedProfile.username = me.username;
+  el("profile-username-field").hidden = !me.username;
+  el("profile-hint").textContent = me.username
+    ? "You sign in with your username or your email address."
+    : "You sign in at your institution; the address here is only for reaching you.";
+  resetProfile();
+}
+
+async function saveProfile() {
+  const changes = profileChanges();
+  if (!Object.keys(changes).length) return;
+  el("profile-save").disabled = true;
+  try {
+    renderProfile(await patchJSON("api/me", changes));
+    toast("Profile saved");
+  } catch (e) {
+    showError("profile-error", e.message);
+    syncProfileActions();
+  }
+}
+
 // ---------- account ----------
 
 function renderAccount(me) {
+  renderProfile(me);
   const facts = [
-    ["Name", me.name],
-    ["Email", me.emails.join(", ") || "—"],
     ["Role", me.role],
-    ["Since", day(me.created_at)],
+    ["Member since", day(me.created_at)],
   ];
-  if (me.username) facts.splice(1, 0, ["Username", me.username]);
+  if (me.sign_in_emails.length) facts.unshift(["Invited as", me.sign_in_emails.join(", ")]);
   el("account-facts").replaceChildren(
     ...facts.flatMap(([term, value]) => {
       const dt = document.createElement("dt");
@@ -41,7 +105,6 @@ function renderAccount(me) {
   );
   // only a password account has a password to change
   el("account-password").hidden = !me.username;
-  el("account-username").value = me.username || "";
   forgetPasswords();
   showError("account-delete-blocked", me.delete_blocked);
   el("account-delete-form").hidden = Boolean(me.delete_blocked);
@@ -50,8 +113,10 @@ function renderAccount(me) {
   showError("account-delete-error", "");
 }
 
+const PASSWORD_FIELDS = ["password-current", "password-new", "password-again"];
+
 function forgetPasswords() {
-  for (const id of ["password-current", "password-new", "password-again"]) el(id).value = "";
+  for (const id of PASSWORD_FIELDS) el(id).value = "";
   showError("password-error", "");
 }
 
@@ -131,28 +196,22 @@ export function initSettings(s) {
     const b = e.target.closest("button[data-tab]");
     if (b) showTab(b.dataset.tab);
   });
-  // Enter in a field of a method=dialog form would close the dialog
-  el("account-delete-confirm").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      deleteAccount();
-    }
-  });
+  for (const id of Object.values(PROFILE_FIELDS)) {
+    el(id).addEventListener("input", syncProfileActions);
+  }
+  onEnter(Object.values(PROFILE_FIELDS), saveProfile);
+  el("profile-save").addEventListener("click", saveProfile);
+  el("profile-reset").addEventListener("click", resetProfile);
+  onEnter(["account-delete-confirm"], deleteAccount);
   el("account-delete-confirm").addEventListener("input", (e) => {
     el("account-delete").disabled = e.target.value.trim().toLowerCase() !== CONFIRM_WORD;
   });
   el("account-delete").addEventListener("click", deleteAccount);
   el("password-change").addEventListener("click", changePassword);
-  for (const id of ["password-current", "password-new", "password-again"]) {
-    el(id).addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        changePassword();
-      }
-    });
-  }
+  onEnter(PASSWORD_FIELDS, changePassword);
   el("dlg-settings").addEventListener("close", () => {
     if (mcpOffered()) forgetMinted();
     forgetPasswords();
+    resetProfile();
   });
 }

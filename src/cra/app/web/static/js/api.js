@@ -27,18 +27,15 @@ async function parse(res) {
 
 export const getJSON = (path) =>
   fetch(path, { headers: { accept: "application/json" } }).then(parse);
-export const postJSON = (path, body) =>
+const sendJSON = (method) => (path, body) =>
   fetch(path, {
-    method: "POST",
+    method,
     headers: { "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify(body ?? {}),
   }).then(parse);
-export const putJSON = (path, body) =>
-  fetch(path, {
-    method: "PUT",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify(body ?? {}),
-  }).then(parse);
+export const postJSON = sendJSON("POST");
+export const putJSON = sendJSON("PUT");
+export const patchJSON = sendJSON("PATCH");
 export const del = (path) =>
   fetch(path, { method: "DELETE", headers: { accept: "application/json" } }).then(parse);
 

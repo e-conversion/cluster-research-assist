@@ -1,5 +1,5 @@
-"""One's own account: what is stored about it, its password, a copy of all
-of it, and deleting it.
+"""One's own account: what is stored about it, changing its name, username,
+email address and password, a copy of all of it, and deleting it.
 
 Deleting removes the account, everything that cascades from it, and the
 invitation that let it in: signing in again needs a new invitation. Two
@@ -22,6 +22,8 @@ bp = Blueprint("account", __name__)
 
 # a stolen session must not be a way to guess the current password
 PASSWORD_CHANGES_PER_ACCOUNT = (10, 15 * 60)
+# "taken" and "another account uses that address" tell who has an account
+PROFILE_CHANGES_PER_ACCOUNT = (20, 15 * 60)
 
 
 def _ctx():
@@ -53,25 +55,53 @@ async def deletion_blocked(ctx: Any, principal: Any) -> tuple[int, str] | None:
     return None
 
 
-@bp.get("/api/me")
-async def me() -> dict[str, Any]:
-    ctx = _ctx()
-    principal = g.principal
+async def _account(ctx: Any, principal: Any) -> dict[str, Any]:
     user = await ctx.repo.get_user(principal.user_id)
     blocked = await deletion_blocked(ctx, principal)
     credential = await ctx.repo.get_credential(user.id)
-    emails = await ctx.repo.emails_of(user.id)
-    if user.email and user.email not in emails:
-        emails.insert(0, user.email)
     return {
         "id": user.id,
         "name": user.display_name,
         "username": credential.username if credential else None,
-        "emails": emails,
+        # the contact address, which the person may change
+        "email": user.email,
+        # the invitations the account was claimed with, which they may not
+        "sign_in_emails": await ctx.repo.emails_of(user.id),
         "role": user.role,
         "created_at": _iso(user.created_at),
         "delete_blocked": blocked[1] if blocked else "",
     }
+
+
+@bp.get("/api/me")
+async def me() -> dict[str, Any]:
+    return await _account(_ctx(), g.principal)
+
+
+@bp.patch("/api/me")
+async def update_profile() -> Any:
+    ctx = _ctx()
+    allowance = ctx.limiter.check(
+        f"profile-change:{g.principal.user_id}", *PROFILE_CHANGES_PER_ACCOUNT
+    )
+    if not allowance.allowed:
+        return {
+            "error": "Too many attempts.",
+            "retry_after": allowance.retry_after,
+        }, 429
+    body = await body_of()
+    fields = {
+        key: str(body[key])
+        for key in ("name", "username", "email")
+        if body.get(key) is not None
+    }
+    try:
+        changed = await local.update_profile(ctx.repo, g.principal.user_id, **fields)
+    except local.CredentialError as exc:
+        return {"error": str(exc)}, 400
+    if changed:
+        auditlog.record("change_profile", fields=sorted(changed))
+    return await _account(ctx, g.principal)
 
 
 @bp.put("/api/me/password")

@@ -110,14 +110,59 @@ class Repository:
             )
             return result.rowcount == 1
 
-    async def set_user_email(self, user_id: str, email: str) -> bool:
-        async with self._sessions() as s, s.begin():
-            result = await s.execute(
-                update(User)
-                .where(User.id == user_id)
-                .values(email=normalise_email(email))
+    async def update_profile(
+        self,
+        user_id: str,
+        *,
+        display_name: str | None = None,
+        email: str | None = None,
+        username: str | None = None,
+    ) -> bool:
+        """Changes the fields given, all or none of them. False when another
+        account has the username."""
+        account = {
+            key: value
+            for key, value in (
+                ("display_name", display_name),
+                ("email", None if email is None else normalise_email(email)),
             )
-            return result.rowcount == 1
+            if value is not None
+        }
+        try:
+            async with self._sessions() as s, s.begin():
+                if account:
+                    await s.execute(
+                        update(User).where(User.id == user_id).values(**account)
+                    )
+                if username is not None:
+                    await s.execute(
+                        update(LocalCredential)
+                        .where(LocalCredential.user_id == user_id)
+                        .values(username=username)
+                    )
+        except IntegrityError:
+            return False
+        return True
+
+    async def accounts_named(self, address: str) -> set[str]:
+        """The accounts an email address stands for at sign-in: as contact
+        address, as a registered email, or as the username itself."""
+        address = normalise_email(address)
+        async with self._sessions() as s:
+            rows = await s.scalars(
+                select(User.id)
+                .where(func.lower(User.email) == address)
+                .union(
+                    select(RegisteredEmail.user_id).where(
+                        RegisteredEmail.email == address,
+                        RegisteredEmail.user_id.is_not(None),
+                    ),
+                    select(LocalCredential.user_id).where(
+                        LocalCredential.username == address
+                    ),
+                )
+            )
+            return set(rows)
 
     async def touch_login(self, user_id: str) -> None:
         async with self._sessions() as s, s.begin():

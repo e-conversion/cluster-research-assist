@@ -2138,6 +2138,35 @@ body:not([data-route="chat"]) #new-chat {
   color: var(--heading-ink);
 }
 
+.set-section > .set-heading:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* name and username side by side while there is room for both; an account
+   without a username gives the name the whole row */
+.profile-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 12px;
+}
+
+.profile-fields .wide {
+  grid-column: 1 / -1;
+}
+
+.profile-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.password-change {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .token-create {
   display: flex;
   flex-direction: column;
