@@ -9,6 +9,7 @@ on:
 
 jobs:
   tests:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -39,6 +40,7 @@ jobs:
           fail_ci_if_error: false
 
   tests-postgres:
+    name: PostgreSQL
     runs-on: ubuntu-latest
     services:
       postgres:

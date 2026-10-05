@@ -2,7 +2,7 @@
 # required reviewers must approve it before it receives the key and runs: the
 # approval hands the key to the code of the pull request, so it comes after
 # reading the diff.
-name: Tests (LLM)
+name: Tests LLM
 
 on:
   pull_request:
@@ -15,6 +15,7 @@ concurrency:
 
 jobs:
   tests-llm:
+    name: live endpoint
     # Forks and Dependabot never receive the environment's secrets; for those,
     # a maintainer dispatches the workflow on the branch instead.
     if: >-
