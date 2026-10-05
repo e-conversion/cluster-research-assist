@@ -313,11 +313,15 @@ run: `tox -e tests-postgres` (a PostgreSQL server at `CRA_TEST_POSTGRES_URL`)
 and `tox -e tests-llm` (a real model endpoint through `CRA_LLM_API_KEY`,
 `CRA_LLM_BASE_URL` and `CRA_LLM_MODEL`).
 
-In CI the LLM suite is the `tests-llm` job, bound to the GitHub Environment
-`llm`. Its required reviewers approve the job as the last action of a review;
-only then does it receive the secrets and run. It is a required status check,
-so a pull request cannot be merged before that.
-`developer/set_branch_protection.sh` configures the required checks.
+In CI the LLM suite is the `tests-llm` job, which starts on every pull request
+and waits: it is bound to the GitHub Environment `llm`, whose required
+reviewers approve it as the last action of a review, and only then does it
+receive the secret `OPENROUTER_API_KEY` and run. Approving hands the key to
+the code of the pull request, so read the diff first. Pull requests from forks
+and from Dependabot get no secrets and skip the job; dispatch the workflow on
+their branch instead. Endpoint and model default to OpenRouter in the workflow
+and can be overridden by the variables `CRA_LLM_BASE_URL` and `CRA_LLM_MODEL`
+of the environment.
 
 Tests mirror the package: the tests of `src/cra/app/web/factory.py` are
 `tests/app/web/test_factory.py`. Shared fixtures are in `tests/conftest.py`,

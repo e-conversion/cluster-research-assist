@@ -1,22 +1,41 @@
 # Real-endpoint tests. The job is bound to the GitHub Environment `llm`, whose
-# required reviewers must approve it before it receives the secrets and runs.
-# Manual only for now: the endpoint and model are not configured yet, so on
-# every pull request the job failed without saying anything about the change.
-# Put `pull_request:` back once CRA_LLM_BASE_URL and CRA_LLM_MODEL are set.
+# required reviewers must approve it before it receives the key and runs: the
+# approval hands the key to the code of the pull request, so it comes after
+# reading the diff.
 name: Tests (LLM)
 
 on:
+  pull_request:
   workflow_dispatch:
+
+# a new push supersedes the run still waiting for approval
+concurrency:
+  group: tests-llm-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   tests-llm:
+    # Forks and Dependabot never receive the environment's secrets; for those,
+    # a maintainer dispatches the workflow on the branch instead.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     environment: llm
     env:
-      CRA_LLM_API_KEY: ${{ secrets.CRA_LLM_API_KEY }}
-      CRA_LLM_BASE_URL: ${{ vars.CRA_LLM_BASE_URL }}
-      CRA_LLM_MODEL: ${{ vars.CRA_LLM_MODEL }}
+      CRA_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      # the variables of the environment `llm` override endpoint and model
+      CRA_LLM_BASE_URL: ${{ vars.CRA_LLM_BASE_URL || 'https://openrouter.ai/api/v1' }}
+      CRA_LLM_MODEL: ${{ vars.CRA_LLM_MODEL || 'deepseek/deepseek-v4-flash-0731' }}
     steps:
+      # without the key every test is skipped and the job would pass
+      - name: Require the endpoint key
+        run: |
+          if [ -z "$CRA_LLM_API_KEY" ]; then
+            echo "::error::secret OPENROUTER_API_KEY is not set in the environment llm"
+            exit 1
+          fi
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
