@@ -68,6 +68,15 @@ def test_library_manifest_then_check(tmp_path, capsys):
     assert "papers       3" in capsys.readouterr().out
 
 
+def test_library_directory_stands_in_for_library_path(tmp_path, capsys):
+    from library_builder import write_library
+
+    directory = write_library(tmp_path / "c")
+    env = tmp_path / "absent"
+    assert main(["--env-file", str(env), "library", "check", str(directory)]) == 0
+    assert "papers       3" in capsys.readouterr().out
+
+
 def an_account(env, name: str) -> str:
     """A migrated database with one account in it, and that account's id."""
     from cra.app.history.engine import make_engine, make_session_factory

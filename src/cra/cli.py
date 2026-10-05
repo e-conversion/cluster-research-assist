@@ -21,8 +21,11 @@ def tokens_default_days() -> int:
     return tokens.DEFAULT_DAYS
 
 
-def load_settings(args: argparse.Namespace) -> Settings:
-    """Settings for a subcommand; validation problems end the process with exit 2."""
+def load_settings(args: argparse.Namespace, **overrides: object) -> Settings:
+    """Settings for a subcommand; validation problems end the process with exit 2.
+
+    ``overrides`` win over the file and the environment.
+    """
     unknown = unknown_keys(args.env_file)
     if unknown:
         sys.stderr.write("unknown configuration keys: " + ", ".join(unknown) + "\n")
@@ -31,10 +34,21 @@ def load_settings(args: argparse.Namespace) -> Settings:
                 sys.stderr.write(f"  {key} was removed: {RETIRED_KEYS[key]}\n")
         sys.exit(EXIT_CONFIG)
     try:
-        return Settings.load(args.env_file)
+        return Settings.load(args.env_file, **overrides)
     except ValidationError as exc:
         sys.stderr.write(f"invalid configuration:\n{exc}\n")
         sys.exit(EXIT_CONFIG)
+
+
+def load_library_settings(args: argparse.Namespace) -> Settings:
+    """Settings whose ``library_path`` is the directory on the command line, if any.
+
+    A bundle is built and checked on a machine that serves nothing, so a
+    directory given there has to do without CRA_LIBRARY_PATH.
+    """
+    if args.directory is None:
+        return load_settings(args)
+    return load_settings(args, library_path=args.directory)
 
 
 def _out(line: str = "") -> None:
@@ -80,8 +94,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
 def cmd_library_check(args: argparse.Namespace) -> int:
     from cra.core.library.library import Library, LibraryError
 
-    settings = load_settings(args)
-    directory = args.directory or settings.library_path
+    settings = load_library_settings(args)
+    directory = settings.library_path
     try:
         library = Library.load(
             directory, required_schema=settings.library_require_schema
@@ -106,8 +120,8 @@ def cmd_library_build(args: argparse.Namespace) -> int:
     from cra.core.library.derive import build_map
     from cra.core.library.library import FILES, Library, LibraryError
 
-    settings = load_settings(args)
-    directory = Path(args.directory or settings.library_path)
+    settings = load_library_settings(args)
+    directory = settings.library_path
     try:
         library = Library.load(directory, verify=False)
     except LibraryError as exc:
@@ -143,8 +157,8 @@ def cmd_library_manifest(args: argparse.Namespace) -> int:
     from cra.core.library import manifest
     from cra.core.library.library import Library, LibraryError
 
-    settings = load_settings(args)
-    directory = Path(args.directory or settings.library_path)
+    settings = load_library_settings(args)
+    directory = settings.library_path
     try:
         library = Library.load(directory, verify=False)
     except LibraryError as exc:
@@ -161,8 +175,8 @@ def cmd_library_manifest(args: argparse.Namespace) -> int:
 def cmd_library_versions(args: argparse.Namespace) -> int:
     from cra.core.library import versions as versioning
 
-    settings = load_settings(args)
-    root = Path(args.directory or settings.library_path)
+    settings = load_library_settings(args)
+    root = settings.library_path
     found = versioning.versions(root)
     if not found:
         sys.stderr.write(f"{root} holds no versions; see `cra library init-root`\n")
@@ -177,8 +191,8 @@ def cmd_library_activate(args: argparse.Namespace) -> int:
     from cra.core.library import versions as versioning
     from cra.core.library.library import Library, LibraryError
 
-    settings = load_settings(args)
-    root = Path(args.directory or settings.library_path)
+    settings = load_library_settings(args)
+    root = settings.library_path
     target = root / versioning.VERSIONS / args.version
     try:
         Library.load(target, required_schema=settings.library_require_schema)
@@ -194,8 +208,8 @@ def cmd_library_init_root(args: argparse.Namespace) -> int:
     """Turn a plain bundle into a root that can be updated while serving."""
     from cra.core.library import versions as versioning
 
-    settings = load_settings(args)
-    root = Path(args.directory or settings.library_path)
+    settings = load_library_settings(args)
+    root = settings.library_path
     bundle = Path(args.bundle) if args.bundle else root
     if versioning.is_root(root) and not args.bundle:
         sys.stderr.write(f"{root} is already a versioned root\n")

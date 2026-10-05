@@ -294,11 +294,14 @@ class Settings(BaseSettings):
         )
 
     @classmethod
-    def load(cls, env_file: Path | None = Path(".env")) -> "Settings":
-        """Settings from the environment plus ``env_file`` (skipped when missing)."""
+    def load(cls, env_file: Path | None = Path(".env"), **overrides: Any) -> "Settings":
+        """Settings from the environment plus ``env_file`` (skipped when missing).
+
+        ``overrides`` are field values that win over both.
+        """
         if env_file is not None and not env_file.exists():
             env_file = None
-        return cls(_env_file=env_file)  # type: ignore[call-arg]
+        return cls(_env_file=env_file, **overrides)  # type: ignore[call-arg]
 
     def dump(self, redact: bool = True) -> dict[str, str]:
         """``CRA_KEY -> value`` for every field, secrets replaced unless ``redact`` is off."""
