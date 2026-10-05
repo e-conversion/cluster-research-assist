@@ -65,7 +65,7 @@ so rolling back is moving the link again.
 Everything expensive is computed when the bundle is built, never while serving:
 
 ```bash
-pip install "cluster-research-assist[build]"
+pip install "cluster-research-assist[build] @ git+https://github.com/e-conversion/cluster-research-assist"
 cra library build          # projection and clusterings for the publication map
 cra library manifest       # refresh checksums and counts
 ```
