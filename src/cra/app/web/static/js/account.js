@@ -20,7 +20,7 @@ function showError(id, message) {
   p.hidden = !message;
 }
 
-// Enter in a field of a method=dialog form would close the dialog
+// Settings has no single apply: Enter in a field runs its own section's action
 function onEnter(ids, action) {
   for (const id of ids) {
     el(id).addEventListener("keydown", (e) => {

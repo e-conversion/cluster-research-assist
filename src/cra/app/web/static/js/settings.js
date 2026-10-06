@@ -47,6 +47,7 @@ function openConnect(kind) {
     select.append(o);
   }
   el("dlg-connect").showModal();
+  el(src.base_url ? "connect-key" : "connect-base").focus();
 }
 
 /** Run one connect attempt, keeping the dialog open on a refusal. */
@@ -178,6 +179,7 @@ function openParams() {
     ...spec.filter((f) => !f.hidden).map((f) => paramField(f, effective, defaults)),
   );
   document.getElementById("dlg-params").showModal();
+  body.querySelector("[data-key]")?.focus();
 }
 
 function readParams() {
@@ -292,22 +294,62 @@ function renderStats(s) {
     `;
 }
 
-/** Native dialogs only close on Escape or the ✕; make the backdrop dismiss them
- *  too. The mousedown check keeps a selection drag that ends on the backdrop
- *  from closing the dialog. */
-function closeOnBackdropClick(dlg) {
+/** Native dialogs only close on Escape; make the ✕ and the backdrop dismiss
+ *  them the same way. The mousedown check keeps a selection drag that ends on
+ *  the backdrop from closing the dialog. */
+function dismissable(dlg) {
   let fromBackdrop = false;
   dlg.addEventListener("mousedown", (e) => {
     fromBackdrop = e.target === dlg;
   });
   dlg.addEventListener("click", (e) => {
-    if (fromBackdrop && e.target === dlg) dlg.close("cancel");
+    if ((fromBackdrop && e.target === dlg) || e.target.closest("[data-close]")) dlg.close("cancel");
+  });
+}
+
+// :open is recent; where it is unknown an Enter that picks an option must not apply
+function listIsOpen(select) {
+  try {
+    return select.matches(":open");
+  } catch {
+    return true;
+  }
+}
+
+/** Enter applies the dialog. The primary button is the form's only submit
+ *  button, so Enter in a text field reaches it by itself; a closed select does
+ *  not submit on its own, and a textarea needs ⌘/Ctrl since Enter is a newline
+ *  there. Without an action Enter does nothing rather than close the dialog. */
+function applyOnEnter(dlg, action) {
+  const form = dlg.querySelector("form");
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    action?.();
+  });
+  if (!action) return;
+  dlg.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || e.isComposing || e.defaultPrevented) return;
+    const t = e.target;
+    const applies = t.matches("select")
+      ? !listIsOpen(t)
+      : t.matches("textarea") && (e.metaKey || e.ctrlKey);
+    if (!applies) return;
+    e.preventDefault();
+    form.requestSubmit();
   });
 }
 
 export function initDialogs(s) {
   store = s;
-  for (const dlg of document.querySelectorAll("dialog.dlg")) closeOnBackdropClick(dlg);
+  const actions = {
+    "dlg-connect": submitRegister,
+    "dlg-params": applyParams,
+    "dlg-feedback": submitFeedback,
+  };
+  for (const dlg of document.querySelectorAll("dialog.dlg")) {
+    dismissable(dlg);
+    applyOnEnter(dlg, actions[dlg.id]);
+  }
   syncControls(currentTheme());
   document.getElementById("theme-seg").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-theme]");
@@ -341,23 +383,14 @@ export function initDialogs(s) {
       f.addEventListener("load", () => propagateTheme(f), { once: true });
     }
   });
-  document.getElementById("connect-submit").addEventListener("click", submitRegister);
   document.getElementById("connect-token-submit").addEventListener("click", submitToken);
   document.getElementById("connect-disconnect").addEventListener("click", disconnect);
-  document.getElementById("connect-key").addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      submitRegister();
-    }
-  });
   document.getElementById("connect-token").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       submitToken();
     }
   });
-  document.getElementById("feedback-submit").addEventListener("click", submitFeedback);
-  document.getElementById("params-apply").addEventListener("click", applyParams);
   document.getElementById("params-reset").addEventListener("click", resetParams);
 }
 

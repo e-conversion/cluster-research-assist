@@ -52,10 +52,10 @@
 <main id="view" class="view"></main>
 
 <dialog id="dlg-connect" class="dlg">
-  <form method="dialog" class="dlg-body">
+  <form method="dialog" novalidate class="dlg-body">
     <header class="dlg-head">
       <h2 id="connect-title">Connect</h2>
-      <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">✕</button>
     </header>
     <p class="muted" id="connect-hint">Register your account once; the tools it unlocks are then available in the chat.</p>
     <label class="field">
@@ -83,16 +83,16 @@
     <footer class="dlg-foot">
       <button type="button" class="btn danger ghost" id="connect-disconnect">Disconnect</button>
       <span class="spacer"></span>
-      <button type="button" class="btn primary" id="connect-submit">Register &amp; connect</button>
+      <button type="submit" class="btn primary" id="connect-submit">Register &amp; connect</button>
     </footer>
   </form>
 </dialog>
 
 <dialog id="dlg-params" class="dlg">
-  <form method="dialog" class="dlg-body">
+  <form method="dialog" novalidate class="dlg-body">
     <header class="dlg-head">
       <h2>Parameters</h2>
-      <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">✕</button>
     </header>
     <p class="muted small">This session only. “default” means the field is not sent, so the
       provider's own value is used.</p>
@@ -101,16 +101,16 @@
     <footer class="dlg-foot">
       <button type="button" class="btn danger ghost" id="params-reset">Reset</button>
       <span class="spacer"></span>
-      <button type="button" class="btn primary" id="params-apply">Apply</button>
+      <button type="submit" class="btn primary" id="params-apply">Apply</button>
     </footer>
   </form>
 </dialog>
 
 <dialog id="dlg-feedback" class="dlg">
-  <form method="dialog" class="dlg-body" id="feedback-form">
+  <form method="dialog" novalidate class="dlg-body" id="feedback-form">
     <header class="dlg-head">
       <h2>Feedback</h2>
-      <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">✕</button>
     </header>
     <p class="muted">Report a bug or leave a note about an answer. This conversation is attached so we
     can see what happened; an administrator can read it.</p>
@@ -125,16 +125,16 @@
     <p class="error" id="feedback-error" hidden></p>
     <footer class="dlg-foot">
       <span class="spacer"></span>
-      <button type="button" class="btn primary" id="feedback-submit">Submit</button>
+      <button type="submit" class="btn primary" id="feedback-submit">Submit</button>
     </footer>
   </form>
 </dialog>
 
 <dialog id="dlg-settings" class="dlg wide tall">
-  <form method="dialog" class="dlg-body">
+  <form method="dialog" novalidate class="dlg-body">
     <header class="dlg-head">
       <h2>Settings</h2>
-      <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">✕</button>
     </header>
     <div class="side-layout">
     <nav class="tabs side" id="settings-tabs" role="tablist" aria-orientation="vertical">
@@ -258,10 +258,10 @@
 </dialog>
 
 <dialog id="dlg-stats" class="dlg wide tall">
-  <form method="dialog" class="dlg-body">
+  <form method="dialog" novalidate class="dlg-body">
     <header class="dlg-head">
       <h2>Stats for nerds</h2>
-      <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
+      <button type="button" class="btn ghost icon" data-close aria-label="Close">✕</button>
     </header>
     <div id="stats-body" class="stats"><p class="muted">Loading…</p></div>
     {% if brand.manifest.pipeline %}
