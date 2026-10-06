@@ -25,6 +25,20 @@ export function loadScript(url, integrity, global) {
   return loading.get(url);
 }
 
+/** Escape dismisses what is pinned in a frame. `dismiss` returns whether there
+ *  was something to close; if so the key stops there, so a full-window frame
+ *  only collapses on the next press. Returns the cleanup. */
+export function dismissOnEscape(dismiss) {
+  const onKey = (e) => {
+    // a dialog on top takes the key for itself
+    if (e.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    if (dismiss()) e.stopImmediatePropagation();
+  };
+  // capture, to run before the frame's own Escape listener
+  addEventListener("keydown", onKey, true);
+  return () => removeEventListener("keydown", onKey, true);
+}
+
 /** Add the full-window toggle to a .viz-frame; returns the cleanup. */
 export function expandable(frame) {
   const button = document.createElement("button");

@@ -2,7 +2,7 @@
 // scrolls, pinches and follows the theme, which a framed page did not.
 import { getJSON } from "../api.js";
 import { escapeHtml } from "../markdown.js";
-import { expandable, loadScript } from "./viz.js";
+import { dismissOnEscape, expandable, loadScript } from "./viz.js";
 
 const D3_URL = "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js";
 // pinned build; bump both together
@@ -293,6 +293,12 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
     pin = null;
     apply(null);
   });
+  const offEscape = dismissOnEscape(() => {
+    if (!pin) return false;
+    pin = null;
+    apply(null);
+    return true;
+  });
 
   function showCard(id) {
     const n = byId[id],
@@ -338,6 +344,7 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
   });
   sizer.observe(frame);
   return () => {
+    offEscape();
     sizer.disconnect();
     sim.stop();
   };
