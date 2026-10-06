@@ -317,11 +317,13 @@ In CI the LLM suite is the check `Tests LLM / live endpoint`, which starts on
 every pull request and waits: it is bound to the GitHub Environment `llm`,
 whose required reviewers approve it as the last action of a review, and only
 then does it receive the secret `OPENROUTER_API_KEY` and run. Approving hands
-the key to the code of the pull request, so read the diff first. Pull requests
-from forks and from Dependabot get no secrets and skip the job; dispatch the
-workflow on their branch instead. Endpoint and model default to OpenRouter in
-the workflow and can be overridden by the variables `CRA_LLM_BASE_URL` and
-`CRA_LLM_MODEL` of the environment.
+the key to the code of the pull request, so read the diff first. This holds
+for pull requests from forks and from Dependabot as well: the workflow runs on
+`pull_request_target` and tests the commit that was approved, and a later push
+needs a new approval. The environment MUST keep its required reviewers, as
+they are all that stands between a fork and the key. Endpoint and model
+default to OpenRouter in the workflow and can be overridden by the variables
+`CRA_LLM_BASE_URL` and `CRA_LLM_MODEL` of the environment.
 
 Tests mirror the package: the tests of `src/cra/app/web/factory.py` are
 `tests/app/web/test_factory.py`. Shared fixtures are in `tests/conftest.py`,

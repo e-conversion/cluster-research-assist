@@ -2,26 +2,30 @@
 # required reviewers must approve it before it receives the key and runs: the
 # approval hands the key to the code of the pull request, so it comes after
 # reading the diff.
+#
+# `pull_request_target` instead of `pull_request`, because only it passes the
+# environment's secrets to pull requests from forks and from Dependabot. It
+# takes this file from the base branch, so a pull request cannot change what
+# the approval releases. The environment `llm` MUST keep its required
+# reviewers: without them every fork pull request would get the key unasked.
 name: Tests LLM
 
 on:
-  pull_request:
+  pull_request_target:
   workflow_dispatch:
 
-# a new push supersedes the run still waiting for approval
+permissions:
+  contents: read
+
+# a new push supersedes the run still waiting for approval; `github.ref` is the
+# base branch under `pull_request_target`, hence the number
 concurrency:
-  group: tests-llm-${{ github.ref }}
+  group: tests-llm-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   tests-llm:
     name: live endpoint
-    # Forks and Dependabot never receive the environment's secrets; for those,
-    # a maintainer dispatches the workflow on the branch instead.
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'dependabot[bot]')
     runs-on: ubuntu-latest
     environment: llm
     env:
@@ -39,7 +43,11 @@ jobs:
           fi
       - uses: actions/checkout@v7
         with:
+          # the commit the reviewer approved, not whatever the branch points
+          # to once the job starts
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
