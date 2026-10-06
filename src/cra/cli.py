@@ -146,6 +146,7 @@ def cmd_library_build(args: argparse.Namespace) -> int:
     manifest.write(
         directory,
         library.counts,
+        schema_version=library.schema_version,
         embedding_model=library.embeddings.model if library.embeddings else "",
         builder=f"cra {__version__}",
     )
@@ -166,9 +167,28 @@ def cmd_library_manifest(args: argparse.Namespace) -> int:
         return 1
     model = library.embeddings.model if library.embeddings is not None else ""
     manifest.write(
-        directory, library.counts, embedding_model=model, builder=f"cra {__version__}"
+        directory,
+        library.counts,
+        schema_version=library.schema_version,
+        embedding_model=model,
+        builder=f"cra {__version__}",
     )
     _out(f"wrote {directory / manifest.MANIFEST}")
+    return 0
+
+
+def cmd_library_migrate(args: argparse.Namespace) -> int:
+    from cra.core.library.bundle import migrate
+    from cra.core.library.library import LibraryError
+
+    try:
+        library = migrate(args.source, args.target, builder=f"cra {__version__}")
+    except LibraryError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    _out(f"wrote a {library.schema_version} bundle to {args.target}")
+    for key, value in library.counts.items():
+        _out(f"{key:12} {value}")
     return 0
 
 
@@ -780,6 +800,13 @@ def build_parser() -> argparse.ArgumentParser:
             "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
         )
         p.set_defaults(func=func)
+
+    migrate = library.add_parser(
+        "migrate", help="convert a 1.x bundle into a 2.0 bundle in a new directory"
+    )
+    migrate.add_argument("source", type=Path, help="the 1.x bundle, with a manifest")
+    migrate.add_argument("target", type=Path, help="a new or empty directory")
+    migrate.set_defaults(func=cmd_library_migrate)
 
     activate = library.add_parser("activate", help="switch to an installed version")
     activate.add_argument("version")

@@ -121,18 +121,21 @@
     <details>
       <summary class="desc">How to create a library</summary>
       <div class="desc"><ol>
-        <li>Collect the files in one directory on your own machine. <code>papers.csv</code> is
-        required; each of <code>abstracts.json</code>, <code>fulltexts.json</code>,
-        <code>pis.json</code>, <code>embeddings.npz</code>, <code>graph.json</code> and
-        <code>proposal.md</code> switches on the tools that need it.</li>
+        <li>Collect the files in one directory on your own machine, never in a repository.
+        <code>papers.csv</code> is required; each of <code>abstracts.json</code>,
+        <code>fulltexts.json</code>, <code>pis.json</code>, <code>embeddings.npz</code>,
+        <code>graph.json</code> and <code>proposal.md</code> switches on the tools that
+        need it.</li>
         <li>Run <code>pip install "cluster-research-assist[build] @
-        git+https://github.com/e-conversion/cluster-research-assist"</code> and then
-        <code>cra library build &lt;directory&gt;</code>. It computes the publication map from the
-        embeddings and writes <code>manifest.json</code>. Without embeddings,
-        <code>cra library manifest &lt;directory&gt;</code> writes the manifest alone.</li>
-        <li>Run <code>cra library check &lt;directory&gt;</code>. It applies the checks an upload
+        git+https://github.com/e-conversion/cluster-research-assist"</code>, then
+        <code>cra library manifest &lt;directory&gt;</code> and <code>cra library migrate
+        &lt;directory&gt; &lt;bundle&gt;</code>. It merges the files into clean records and
+        checks that nothing was lost.</li>
+        <li>With embeddings, run <code>cra library build &lt;bundle&gt;</code>. It computes the
+        publication map and rewrites <code>manifest.json</code>.</li>
+        <li>Run <code>cra library check &lt;bundle&gt;</code>. It applies the checks an upload
         has to pass and prints what the library holds.</li>
-        <li>Pack it with <code>tar -czf library.tar.gz -C &lt;directory&gt; .</code> and upload the
+        <li>Pack it with <code>tar -czf library.tar.gz -C &lt;bundle&gt; .</code> and upload the
         archive here.</li>
       </ol></div>
     </details>

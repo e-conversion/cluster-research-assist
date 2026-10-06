@@ -311,6 +311,32 @@ async def test_a_broken_upload_leaves_the_running_library_alone(updatable, tmp_p
     assert len(listing["versions"]) == 1, "a rejected upload leaves no version behind"
 
 
+@pytest.mark.parametrize(
+    ("required", "status"), [("1.x,2.x", 200), ("1.x", 400)], ids=["accepted", "pinned"]
+)
+async def test_a_2_0_bundle_replaces_a_1_x_library_only_if_accepted(
+    tmp_path, required, status
+):
+    from library_builder import write_library
+
+    from cra.core.library.versions import init_root
+
+    root = tmp_path / "library"
+    init_root(root, write_library(tmp_path / "old", schema="1.0"))
+    app = create_app(
+        make_settings(tmp_path, library_path=root, library_require_schema=required)
+    )
+    async with app.test_app():
+        client = await sign_in(app, app.test_client(), "ops", role="admin")
+        new = write_library(tmp_path / "new")
+        response = await upload(client, tarball(new, tmp_path / "new.tar.gz"))
+        assert response.status_code == status
+        live = app.extensions["cra"].library
+        assert live.schema_version == ("2.0" if status == 200 else "1.0")
+        if status == 400:
+            assert "schema version '2.0'" in (await json_of(response))["error"]
+
+
 async def test_an_archive_without_a_bundle_is_refused(updatable, tmp_path):
     _, client, _ = updatable
     junk = tmp_path / "junk"

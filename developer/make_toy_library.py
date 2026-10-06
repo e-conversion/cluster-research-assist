@@ -592,10 +592,6 @@ def build_summary(pis: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("out", type=Path)
@@ -747,35 +743,6 @@ def main() -> int:
         model=EMBEDDING_MODEL,
     )
     log(f"[embed] {vectors.shape}")
-
-    files = sorted(
-        f for f in out.iterdir() if f.is_file() and f.name != "manifest.json"
-    )
-    manifest = {
-        "schema_version": "1.0",
-        "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
-        "builder": "developer/make_toy_library.py",
-        "embedding_model": EMBEDDING_MODEL,
-        "files": {
-            f.name: {"sha256": sha256(f), "bytes": f.stat().st_size} for f in files
-        },
-        "counts": {
-            "papers": len(flat),
-            "abstracts": len(abstracts),
-            "fulltexts": len(fulltexts),
-            "pis": len(pis),
-            "graph_nodes": len(graph["nodes"]),
-            "graph_edges": len(graph["links"]),
-            "embeddings": len(flat),
-        },
-        "provenance": {
-            "metadata": "arXiv API (CC0)",
-            "fulltexts": "arXiv CC BY PDFs or synthetic",
-            "pis": "fictional",
-            "proposal": "fictional",
-        },
-    }
-    dump("manifest.json", manifest)
 
     log("\narxiv_id      cluster  fulltext   licence")
     for p in flat:

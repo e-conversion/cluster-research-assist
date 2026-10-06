@@ -77,6 +77,32 @@ def test_library_directory_stands_in_for_library_path(tmp_path, capsys):
     assert "papers       3" in capsys.readouterr().out
 
 
+def test_library_migrate_writes_a_bundle_that_checks(tmp_path, capsys):
+    from library_builder import write_library
+
+    old = write_library(tmp_path / "old", schema="1.0")
+    new = tmp_path / "new"
+    env = tmp_path / "e"
+    env.write_text(f"CRA_LIBRARY_PATH={old}\n")
+    assert main(["--env-file", str(env), "library", "migrate", str(old), str(new)]) == 0
+    assert "wrote a 2.0 bundle" in capsys.readouterr().out
+    assert main(["--env-file", str(env), "library", "check", str(new)]) == 0
+    assert main(["--env-file", str(env), "library", "migrate", str(old), str(new)]) == 1
+    assert "not empty" in capsys.readouterr().err
+
+
+def test_library_manifest_keeps_the_schema_of_the_files(tmp_path):
+    from library_builder import write_library
+
+    from cra.core.library import manifest
+
+    old = write_library(tmp_path / "old", schema="1.0", with_manifest=False)
+    env = tmp_path / "e"
+    env.write_text(f"CRA_LIBRARY_PATH={old}\n")
+    assert main(["--env-file", str(env), "library", "manifest"]) == 0
+    assert manifest.read(old)["schema_version"] == "1.0"
+
+
 def an_account(env, name: str) -> str:
     """A migrated database with one account in it, and that account's id."""
     from cra.app.history.engine import make_engine, make_session_factory

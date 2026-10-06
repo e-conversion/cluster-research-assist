@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     # library
     library_path: Path
-    library_require_schema: str = "1.x"
+    library_require_schema: str = "1.x,2.x"
     library_max_upload_mb: int = Field(default=256, ge=1)
     # versions kept when a new one is installed, so a rollback has somewhere to go
     library_keep_versions: int = Field(default=3, ge=1)

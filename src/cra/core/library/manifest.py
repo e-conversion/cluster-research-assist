@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "2.0"
 MANIFEST = "manifest.json"
 
 
@@ -19,24 +19,27 @@ def sha256(path: Path) -> str:
 
 
 def schema_matches(version: str, required: str) -> bool:
-    """``required`` is exact (``1.0``) or major-only (``1.x``)."""
-    major, _, minor = required.partition(".")
-    if minor == "x":
-        return version.split(".")[0] == major
-    return version == required
+    """``required`` is exact (``1.0``) or major-only (``1.x``), or several of
+    those separated by commas (``1.x,2.x``)."""
+    for one in (part.strip() for part in required.split(",")):
+        major, _, minor = one.partition(".")
+        if (minor == "x" and version.split(".")[0] == major) or version == one:
+            return True
+    return False
 
 
 def write(
     directory: Path,
     counts: dict[str, int],
     *,
+    schema_version: str = SCHEMA_VERSION,
     embedding_model: str = "",
     builder: str = "cra library manifest",
     provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     files = sorted(p for p in directory.iterdir() if p.is_file() and p.name != MANIFEST)
     manifest = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": schema_version,
         "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "builder": builder,
         "embedding_model": embedding_model,
@@ -59,7 +62,7 @@ def read(directory: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def check(directory: Path, required_schema: str = "1.x") -> list[str]:
+def check(directory: Path, required_schema: str = "1.x,2.x") -> list[str]:
     """Every problem found, empty when the bundle is intact."""
     manifest = read(directory)
     if manifest is None:
