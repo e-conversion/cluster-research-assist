@@ -1,13 +1,8 @@
 # Real-endpoint tests. The job is bound to the GitHub Environment `llm`, whose
 # required reviewers must approve it before it receives the key and runs: the
 # approval hands the key to the code of the pull request, so it comes after
-# reading the diff.
-#
-# `pull_request_target` instead of `pull_request`, because only it passes the
-# environment's secrets to pull requests from forks. It
-# takes this file from the base branch, so a pull request cannot change what
-# the approval releases. The environment `llm` MUST keep its required
-# reviewers: without them every fork pull request would get the key unasked.
+# reading the diff. The environment MUST keep its required reviewers: without
+# them every pull request from a fork would get the key unasked.
 name: Tests LLM
 
 on:
@@ -17,8 +12,7 @@ on:
 permissions:
   contents: read
 
-# a new push supersedes the run still waiting for approval; `github.ref` is the
-# base branch under `pull_request_target`, hence the number
+# a new push supersedes the run still waiting for approval
 concurrency:
   group: tests-llm-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -26,8 +20,6 @@ concurrency:
 jobs:
   tests-llm:
     name: live endpoint
-    # dependency bumps are not worth an approval and a paid run each; dispatch
-    # the workflow on the branch when one needs the suite
     if: github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment: llm
@@ -46,8 +38,7 @@ jobs:
           fi
       - uses: actions/checkout@v7
         with:
-          # the commit the reviewer approved, not whatever the branch points
-          # to once the job starts
+          # the commit the reviewer approved
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
