@@ -2701,8 +2701,11 @@ html:has(.viz-frame.expanded) {
   pointer-events: auto;
 }
 
-.graph-card:has(.close) {
-  padding-right: 38px;
+/* The first two lines always leave the corner to the close button, which only a
+   pinned card has: pinning a hovered card then moves nothing in it. */
+.graph-card .cinst,
+.graph-card h3 {
+  padding-right: 24px;
 }
 
 .graph-card .cinst {

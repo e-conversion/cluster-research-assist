@@ -2,7 +2,7 @@
 import { getJSON, postJSON } from "../api.js";
 import { escapeHtml } from "../markdown.js";
 import { toast } from "../toast.js";
-import { expandable, loadScript } from "./viz.js";
+import { dismissOnEscape, expandable, loadScript } from "./viz.js";
 
 const DECK_URL = "https://cdn.jsdelivr.net/npm/deck.gl@9.0.38/dist.min.js";
 // pinned build; bump both together
@@ -801,6 +801,11 @@ export function libraryMapView(store) {
       });
       sizer.observe(wrap);
       const unexpand = expandable(wrap);
+      const offEscape = dismissOnEscape(() => {
+        if (!selected) return false;
+        select(null);
+        return true;
+      });
       const themed = new MutationObserver(relayer);
       themed.observe(document.documentElement, {
         attributes: true,
@@ -814,6 +819,7 @@ export function libraryMapView(store) {
       return () => {
         disposed = true;
         unexpand();
+        offEscape();
         sizer.disconnect();
         themed.disconnect();
         scheme.removeEventListener("change", relayer);
