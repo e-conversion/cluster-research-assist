@@ -264,12 +264,10 @@
       <button type="submit" class="btn ghost icon" value="cancel" aria-label="Close">✕</button>
     </header>
     <div id="stats-body" class="stats"><p class="muted">Loading…</p></div>
-    {% if brand.manifest.pipeline %}
     <details class="pipeline-box" id="pipeline-box">
-      <summary>Pipeline map — every source, script, cache and tool behind the assistant. Click a box to trace what it is built from.</summary>
+      <summary>Pipeline map — every source, library file, tool and way in behind the assistant. Click a box to trace what it is built from.</summary>
       <iframe id="pipeline-frame" title="Pipeline map" data-src="static/pipeline_map.html"></iframe>
     </details>
-    {% endif %}
   </form>
 </dialog>
 
