@@ -27,6 +27,11 @@ const NAME = { padX: 9, padY: 5, step: 0.25 };
 // After a release the view keeps moving this long, as a touch screen leads one to expect.
 const INERTIA_MS = 300;
 const GLIDE_MS = 450;
+// Dot radius in pixels at the fitted view, a bigger one for a finger, and how
+// much it grows per zoom level in, so zooming in also makes a dot easier to hit.
+const DOT = { r: 4, touch: 6, grow: 1.25, max: 12 };
+// How far from a dot a click or tap still picks it, in pixels.
+const PICK = { mouse: 3, touch: 14 };
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const truncate = (t) => (t.length > LABEL.chars ? t.slice(0, LABEL.chars - 1).trimEnd() + "…" : t);
@@ -47,6 +52,9 @@ function tokenRGB(name) {
   const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const m = /^#([0-9a-f]{6})$/i.exec(v);
   if (m) return [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  // the short form, which tokens.css uses for white
+  const s = /^#([0-9a-f]{3})$/i.exec(v);
+  if (s) return [...s[1]].map((c) => parseInt(c + c, 16));
   const n = /^rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)/i.exec(v);
   return n ? [Number(n[1]), Number(n[2]), Number(n[3])] : [40, 44, 52];
 }
@@ -238,6 +246,7 @@ export function libraryMapView(store) {
       // tooltip left behind where the finger lifted would only repeat it.
       const noHover = matchMedia("(hover: none)");
       const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+      const coarse = matchMedia("(pointer: coarse)");
 
       function frameSize() {
         return [wrap.clientWidth || 700, wrap.clientHeight || 540];
@@ -346,6 +355,10 @@ export function libraryMapView(store) {
         const titleAlpha = (d) =>
           pinned.has(d.doi) ? 1 : clamp01((zoom - (titleAt.get(d.doi) ?? Infinity)) / FADE);
         const titled = data.filter((d) => titleAlpha(d) > 0);
+        const dot = Math.min(
+          (coarse.matches ? DOT.touch : DOT.r) * DOT.grow ** Math.max(0, depth),
+          DOT.max,
+        );
 
         const L = [
           new ScatterplotLayer({
@@ -353,10 +366,12 @@ export function libraryMapView(store) {
             data,
             getPosition: (d) => [d.x, d.y],
             getFillColor: (d) => d.color,
-            getRadius: 4,
+            // a uniform scale, so a zoom step does not rebuild a per-paper attribute
+            getRadius: 1,
+            radiusScale: dot,
             radiusUnits: "pixels",
             radiusMinPixels: 2.5,
-            radiusMaxPixels: 9,
+            radiusMaxPixels: DOT.max,
             opacity: 0.85,
             pickable: true,
             autoHighlight: true,
@@ -376,12 +391,11 @@ export function libraryMapView(store) {
               getLineWidth: 2,
               lineWidthMinPixels: 2,
               lineWidthMaxPixels: 2,
-              getRadius: 12,
+              // the rings keep clear of the dot they surround as it grows
+              getRadius: dot + 8,
               radiusUnits: "pixels",
-              radiusMinPixels: 12,
-              radiusMaxPixels: 12,
               pickable: false,
-              updateTriggers: { getLineColor: ink },
+              updateTriggers: { getLineColor: ink, getRadius: dot },
             }),
           );
         if (selected) {
@@ -396,12 +410,10 @@ export function libraryMapView(store) {
               getLineColor: accent,
               lineWidthUnits: "pixels",
               getLineWidth: 2.5,
-              getRadius: 10,
+              getRadius: dot + 5,
               radiusUnits: "pixels",
-              radiusMinPixels: 10,
-              radiusMaxPixels: 10,
               pickable: false,
-              updateTriggers: { getLineColor: accent },
+              updateTriggers: { getLineColor: accent, getRadius: dot },
             }),
           );
         }
@@ -419,12 +431,16 @@ export function libraryMapView(store) {
               sizeUnits: "pixels",
               getTextAnchor: "start",
               getAlignmentBaseline: "center",
-              getPixelOffset: [LABEL.offset, 0],
+              getPixelOffset: [dot + LABEL.offset - DOT.r, 0],
               getColor: (d) => [...muted, Math.round(235 * titleAlpha(d))],
               background: true,
               backgroundPadding: [5, 2],
               getBackgroundColor: (d) => [...panel, Math.round(200 * titleAlpha(d))],
-              updateTriggers: { getColor: [zoom, muted], getBackgroundColor: [zoom, panel] },
+              updateTriggers: {
+                getColor: [zoom, muted],
+                getBackgroundColor: [zoom, panel],
+                getPixelOffset: dot,
+              },
             }),
           );
         if (named.length)
@@ -568,6 +584,7 @@ export function libraryMapView(store) {
               inertia: INERTIA_MS,
             },
             initialViewState: viewState,
+            pickingRadius: coarse.matches ? PICK.touch : PICK.mouse,
             layers: layers(),
             onViewStateChange: ({ viewState: vs }) => {
               // Label visibility is a function of zoom; a hundredth of a level is
