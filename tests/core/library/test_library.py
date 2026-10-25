@@ -29,6 +29,18 @@ def test_papers_merge_csv_rows_and_abstract_metadata(library_dir):
     assert gamma.citation_count is None
 
 
+def test_titles_lose_their_markup_on_load(library_dir):
+    papers = library_dir / "papers.csv"
+    papers.write_text(
+        papers.read_text(encoding="utf-8").replace(
+            "Battery electrolytes", "Li<sub>2</sub>O electrolytes"
+        ),
+        encoding="utf-8",
+    )
+    library = Library.load(library_dir, verify=False)
+    assert library.paper("10.1000/gamma").title == "Li₂O electrolytes at interfaces"
+
+
 def test_counts_and_availability(library_dir):
     library = Library.load(library_dir)
     assert library.counts == {
