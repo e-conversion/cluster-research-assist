@@ -71,6 +71,15 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
             "matches meaning, so it is right when the question is worded differently from "
             "the papers. When unsure, run both and combine what they return."
         )
+    if "get_paper_by_doi" in tool_names:
+        lines.append(
+            "A DOI is not a search: look it up with get_paper_by_doi"
+            + (
+                ", or locate_paper_by_doi for a paper outside the library."
+                if "locate_paper_by_doi" in tool_names
+                else "."
+            )
+        )
     if "get_similar_papers" in tool_names:
         lines.append(
             "get_similar_papers takes a DOI rather than a query, for 'what else is like this'."

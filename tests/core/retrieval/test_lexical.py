@@ -2,7 +2,7 @@ import pytest
 from library_builder import write_library
 
 from cra.core.library.library import Library
-from cra.core.retrieval.lexical import BM25, LexicalIndex
+from cra.core.retrieval.lexical import BM25, LexicalIndex, stem, tokenize
 
 
 @pytest.fixture
@@ -71,3 +71,44 @@ def test_the_same_count_weighs_more_in_a_shorter_document():
 
 def test_an_empty_corpus_scores_nothing():
     assert len(BM25([]).scores(["anode"])) == 0
+
+
+@pytest.mark.parametrize(
+    ("written", "typed", "shared"),
+    [
+        ("Li–O₂ batteries", "Li-O2 battery", "o2"),  # dash, subscript, plural
+        ("LiO2 cathodes", "Li-O2", "lio2"),  # the compound written together
+        ("α-Fe₂O₃ photoanodes", "alpha-Fe2O3", "fe2o3"),  # Greek typed as its name
+        ("Müller's catalysts", "muller catalyst", "catalyst"),
+    ],
+)
+def test_the_ways_a_term_is_written_meet(written, typed, shared):
+    assert shared in set(tokenize(typed)) & set(tokenize(written))
+    # in a corpus of two, a term in one document has an idf of exactly zero
+    others = ["an unrelated film", "copper surfaces", "graph networks"]
+    corpus = [tokenize(written), *map(tokenize, others)]
+    scores = BM25(corpus).scores(tokenize(typed))
+    assert scores[0] > max(scores[1:]) == 0
+
+
+@pytest.mark.parametrize(
+    ("word", "expected"),
+    [
+        ("catalysts", "catalyst"),
+        ("batteries", "battery"),
+        ("electrodes", "electrode"),
+        ("glass", "glass"),
+        ("gas", "gas"),
+        ("co2", "co2"),
+    ],
+)
+def test_only_plural_endings_are_stemmed(word, expected):
+    assert stem(word) == expected
+
+
+def test_a_paper_holding_the_phrase_outranks_one_holding_the_words():
+    phrase = tokenize("solar cells for hydrogen")
+    words = tokenize("cells in the solar hydrogen")
+    other = tokenize("an unrelated film")
+    scores = BM25([words, phrase, other]).scores(tokenize("solar cells"))
+    assert scores[1] > scores[0] > scores[2]
