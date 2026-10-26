@@ -1,5 +1,6 @@
 """Finding papers: by keyword, by meaning, by metadata, and by their text."""
 
+import re
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -18,6 +19,7 @@ Doi = Annotated[
     str, Field(description="DOI of the paper, e.g. 10.1038/s41586-021-03819-2")
 ]
 Limit = Annotated[int, Field(description="How many papers to return.", ge=1, le=50)]
+_DOI_IN_TEXT = re.compile(r"10\.\d{4,9}/\S+")
 
 
 @tool(tier=Tier.PUBLIC)
@@ -27,9 +29,26 @@ def search_papers(
     limit: Limit = 5,
 ) -> dict[str, Any]:
     """Keyword search over titles and abstracts. Best for exact terms,
-    acronyms, formulas and author names. Reports which field matched."""
-    hits = ctx.indexes.lexical.search(query, limit)
+    acronyms, formulas and author names. Case, accents, Greek letters,
+    subscripts, hyphens and plurals are folded, so "Li-O2" finds "Li–O₂" and
+    "catalysts" finds "catalyst"; a paper holding the exact phrase ranks
+    higher. It knows no synonyms: for other wording use
+    semantic_search_papers. A DOI in the query returns that paper. Reports
+    which field matched."""
     papers = ctx.indexes.library.papers
+    named = _DOI_IN_TEXT.search(query)
+    if named:
+        # A DOI never occurs in a title or an abstract, so a keyword search
+        # for one could only come back empty.
+        doi = normalise_doi(named[0].rstrip(".,;:)]}'\""))
+        paper = ctx.indexes.library.paper(doi)
+        if paper is None:
+            raise ToolError(
+                f"{doi} is not in the library. Use locate_paper_by_doi, which "
+                "finds the closest papers here."
+            )
+        return {"count": 1, "matched_on": "doi", "results": [paper_view(paper)]}
+    hits = ctx.indexes.lexical.search(query, limit)
     return {
         "count": len(hits),
         "matched_on": hits[0].matched_on if hits else None,

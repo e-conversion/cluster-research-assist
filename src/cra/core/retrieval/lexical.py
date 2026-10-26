@@ -5,17 +5,27 @@ abstract match mean different things, and the caller is told which it got. The
 index with the stronger best hit wins the query outright. Blending the two with
 reciprocal rank fusion is a known improvement, deferred until there is a
 regression baseline to measure it against.
+
+Documents and queries go through the same ``tokenize``, which is what lets the
+spellings of this field meet: "Li-O2", "Li–O₂" and "LiO2", "α-Fe2O3" and
+"alpha-Fe2O3", "catalysts" and "catalyst". Adjacent word pairs are indexed as
+terms of their own, so a paper holding a query's phrase outranks one that only
+holds its words.
 """
 
 import math
+import re
+import unicodedata
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
+from itertools import pairwise
 from typing import Literal
 
 import numpy as np
 
 from cra.core.library.records import Paper
+from cra.core.library.text import fold
 
 Field = Literal["title", "abstract"]
 
@@ -33,8 +43,48 @@ class Hit:
     matched_on: str
 
 
+# α -> "alpha", by Unicode name, so a query typed without Greek finds it
+_GREEK = {
+    chr(c): unicodedata.name(chr(c)).split()[-1].lower().replace("lamda", "lambda")
+    for c in range(0x3B1, 0x3CA)
+}
+# A word, or words joined by hyphens, dashes or slashes: "li-o2", "n/c".
+_COMPOUND = re.compile(r"\w+(?:[-/‐-―]\w+)*")
+_WORD = re.compile(r"\w+")
+
+
+def stem(word: str) -> str:
+    """Plural endings off, as Harman's S-stemmer does: "catalysts" ->
+    "catalyst", "batteries" -> "battery". Conservative on purpose: a heavier
+    stemmer conflates terms a chemist keeps apart, and formulas are left as
+    they are."""
+    if len(word) <= 3 or not word.isalpha():
+        return word
+    if word.endswith("ies") and not word.endswith(("eies", "aies")):
+        return word[:-3] + "y"
+    if word.endswith("es") and not word.endswith(("aes", "ees", "oes")):
+        return word[:-1]
+    if word.endswith("s") and not word.endswith(("us", "ss")):
+        return word[:-1]
+    return word
+
+
 def tokenize(text: str) -> list[str]:
-    return text.lower().split()
+    """Search terms: folded words, adjacent pairs, and joined compounds.
+
+    Folding takes case, accents and sub- and superscripts off ("Li₂O" is
+    "li2o"). A compound counts as its parts and as one word, so "Li-O2" meets
+    both "Li–O₂" and "LiO2".
+    """
+    folded = "".join(_GREEK.get(ch, ch) for ch in fold(text))
+    words: list[str] = []
+    joined: list[str] = []
+    for compound in _COMPOUND.findall(folded):
+        parts = _WORD.findall(compound)
+        words.extend(stem(p) for p in parts)
+        if len(parts) > 1:
+            joined.append("".join(parts))
+    return words + [f"{a} {b}" for a, b in pairwise(words)] + joined
 
 
 class BM25:
