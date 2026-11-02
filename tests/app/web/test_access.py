@@ -48,6 +48,7 @@ USER_ROUTES = {
     "/api/me/export",
     "/api/me/password",
     "/api/stats",
+    "/api/pipeline",
     "/oauth/consent/answer",
 }
 
