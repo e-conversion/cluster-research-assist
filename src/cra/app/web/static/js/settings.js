@@ -374,9 +374,8 @@ export function initDialogs(s) {
     menu.open = false;
     openSettings();
   });
-  // absent when the deployment describes no pipeline
   const box = document.getElementById("pipeline-box");
-  box?.addEventListener("toggle", () => {
+  box.addEventListener("toggle", () => {
     const f = document.getElementById("pipeline-frame");
     if (box.open && !f.src) {
       f.src = f.dataset.src;

@@ -280,7 +280,7 @@ from it comes from the package's own brand in `src/cra/app/web/brand/`:
 | `logo-wide-light.svg`, `logo-wide-dark.svg` | A logo that includes the name. When present it replaces mark and name in the header. |
 | `favicon.svg` | The tab icon. Defaults to the square light logo. |
 | `theme.css` | Overrides of the design tokens, loaded after the package's stylesheets. It MAY `@import` fonts from Google Fonts, the only font source the Content-Security-Policy admits. |
-| `brand.json` | `examples`: the questions offered on an empty chat. `institutions`: `{key, label, name}` for each institution the collaboration graph tells apart, `key` matching the institution recorded for a PI. `pipeline`: `{intro, stages, nodes, edges}` for the pipeline map under "Stats for nerds", which is hidden without one. |
+| `brand.json` | `examples`: the questions offered on an empty chat. `institutions`: `{key, label, name}` for each institution the collaboration graph tells apart, `key` matching the institution recorded for a PI. |
 
 The tokens are the custom properties in `src/cra/app/web/static/css/tokens.css`:
 colours (`--ground`, `--panel`, `--ink`, `--accent`, `--accent-2`,
@@ -292,7 +292,10 @@ The page always sets `data-theme` to the theme in effect, including when it
 follows the system.
 
 The brand is read at startup: an invalid `brand.json` stops the server with
-the reason.
+the reason. A `pipeline` key, which brands once used for the pipeline map, is
+ignored with a warning: the map describes the package, so the package keeps it
+in `src/cra/app/web/pipeline.json` and leaves out what a deployment does not
+run. A test fails when a tool or library file has no box on it.
 
 ## Develop
 

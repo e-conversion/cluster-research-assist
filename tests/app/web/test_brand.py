@@ -10,15 +10,6 @@ from cra.app.web.brand import DEFAULT_DIR, Brand, BrandError
 from cra.app.web.factory import create_app
 
 OWN_LOGO = '<svg xmlns="http://www.w3.org/2000/svg"><title>own</title></svg>'
-PIPELINE = {
-    "intro": "From sources to tools.",
-    "stages": [{"key": "src", "label": "Sources"}, {"key": "tool", "label": "Tools"}],
-    "nodes": [
-        {"id": "csv", "stage": "src", "name": "papers.csv"},
-        {"id": "search", "stage": "tool", "name": "search_papers"},
-    ],
-    "edges": [["csv", "search"]],
-}
 
 
 def write_brand(root, **files: str):
@@ -39,7 +30,6 @@ async def branded(tmp_path):
                 {
                     "examples": ["Only this?"],
                     "institutions": [{"key": "TUM", "label": "TUM"}],
-                    "pipeline": PIPELINE,
                 }
             ),
         },
@@ -75,7 +65,6 @@ async def test_a_file_neither_brand_offers_is_not_found(branded, name):
 async def test_the_pages_read_the_manifest_without_its_examples(branded):
     manifest = await (await branded.test_client().get("/brand/brand.json")).get_json()
     assert manifest["institutions"] == [{"key": "TUM", "label": "TUM", "name": ""}]
-    assert manifest["pipeline"]["edges"] == [["csv", "search"]]
     assert "examples" not in manifest
 
 
@@ -106,15 +95,16 @@ async def test_the_header_shows_the_name_only_without_a_wide_logo(
     assert header in page
 
 
-@pytest.mark.parametrize("pipeline", [None, PIPELINE], ids=["without", "with"])
-async def test_the_pipeline_map_is_offered_only_when_described(tmp_path, pipeline):
+def test_an_old_pipeline_block_is_ignored_not_refused(tmp_path, caplog):
+    # brands used to describe the map; upgrading must not need a brand change
     brand = write_brand(
-        tmp_path / "brand", **{"brand.json": json.dumps({"pipeline": pipeline})}
+        tmp_path / "brand",
+        **{"brand.json": json.dumps({"pipeline": {"stages": [], "nodes": "?"}})},
     )
-    app = create_app(make_settings(tmp_path, brand_dir=brand))
-    async with app.test_app():
-        page = await (await app.test_client().get("/")).get_data(as_text=True)
-    assert ('id="pipeline-box"' in page) == (pipeline is not None)
+    with caplog.at_level("WARNING", logger="cra.app.web.brand"):
+        loaded = Brand.load(brand)
+    assert "pipeline" not in loaded.public()
+    assert "no longer read" in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -122,17 +112,8 @@ async def test_the_pipeline_map_is_offered_only_when_described(tmp_path, pipelin
     [
         "{not json",
         json.dumps({"colour": "red"}),
-        json.dumps({"pipeline": {**PIPELINE, "edges": [["csv", "nowhere"]]}}),
-        json.dumps(
-            {
-                "pipeline": {
-                    **PIPELINE,
-                    "nodes": [{"id": "x", "stage": "?", "name": "x"}],
-                }
-            }
-        ),
     ],
-    ids=["malformed", "unknown key", "edge to no node", "node in no stage"],
+    ids=["malformed", "unknown key"],
 )
 def test_a_broken_manifest_stops_the_server_from_starting(tmp_path, manifest):
     brand = write_brand(tmp_path / "brand", **{"brand.json": manifest})
