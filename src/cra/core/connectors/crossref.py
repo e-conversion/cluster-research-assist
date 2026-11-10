@@ -21,6 +21,7 @@ from urllib.parse import quote
 import httpx
 
 from cra.core.library.citation import compose
+from cra.core.library.markup import plain
 from cra.core.library.records import normalise_doi
 
 log = logging.getLogger(__name__)
@@ -128,10 +129,10 @@ def _authors(entries: Any) -> tuple[str, ...]:
 def parse_work(message: dict[str, Any]) -> Work:
     return Work(
         doi=normalise_doi(str(message.get("DOI") or "")),
-        title=_first(message.get("title")),
+        title=plain(_first(message.get("title"))),
         authors=_authors(message.get("author")),
         year=_year(message.get("issued")),
-        journal=_first(message.get("container-title")),
+        journal=plain(_first(message.get("container-title"))),
         abstract=strip_jats(str(message.get("abstract") or "")),
         source="crossref",
     )

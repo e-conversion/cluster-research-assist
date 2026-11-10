@@ -15,6 +15,7 @@ import numpy as np
 from networkx.readwrite import json_graph
 
 from cra.core.library import manifest as manifest_
+from cra.core.library.markup import plain
 from cra.core.library.records import (
     PI,
     Dataset,
@@ -168,7 +169,7 @@ def _load_papers(path: Path, abstracts: dict[str, dict[str, Any]]) -> dict[str, 
             paper = rows.setdefault(
                 doi,
                 {
-                    "title": row.get("article_title", "").strip(),
+                    "title": plain(row.get("article_title", "")),
                     "authors": _split_authors(row.get("article_authors", "")),
                     "year": row.get("article_year", "").strip(),
                     "datasets": [],
@@ -191,7 +192,7 @@ def _load_papers(path: Path, abstracts: dict[str, dict[str, Any]]) -> dict[str, 
             title=raw["title"],
             authors=authors,
             year=raw["year"],
-            journal=cached.get("journal") or "",
+            journal=plain(cached.get("journal") or ""),
             citation_count=cached.get("citation_count"),
             abstract=cached.get("abstract") or "",
             abstract_source=cached.get("source") or "",

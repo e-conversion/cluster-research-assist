@@ -5,7 +5,7 @@ import pytest
 import respx
 
 from cra.core.connectors import openalex
-from cra.core.connectors.openalex import rebuild_abstract
+from cra.core.connectors.openalex import parse_work, rebuild_abstract
 
 OPENALEX = "https://api.openalex.org"
 
@@ -29,6 +29,18 @@ def test_an_inverted_index_is_rebuilt_in_order():
 )
 def test_a_hostile_or_broken_index_yields_nothing(inverted):
     assert rebuild_abstract(inverted) == ""
+
+
+def test_title_and_journal_markup_is_resolved():
+    work = parse_work(
+        {
+            "doi": f"https://doi.org/{DOI}",
+            "display_name": "Fe<sub>2</sub>O<sub>3</sub> photoanodes",
+            "primary_location": {"source": {"display_name": "Energy &amp; Fuels"}},
+        }
+    )
+    assert work.title == "Fe₂O₃ photoanodes"
+    assert work.journal == "Energy & Fuels"
 
 
 @respx.mock

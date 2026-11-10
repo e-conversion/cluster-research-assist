@@ -27,6 +27,17 @@ def test_a_full_record_parses_into_every_field():
     assert work.citation.startswith("Jumper et al., ")
 
 
+def test_title_and_journal_markup_is_resolved():
+    work = parse_work(
+        crossref_message(
+            title=["Li<sub>2</sub>O &amp; Fe<sup>3+</sup>"],
+            **{"container-title": ["Energy &amp; Environmental Science"]},
+        )
+    )
+    assert work.title == "Li₂O & Fe³⁺"
+    assert work.journal == "Energy & Environmental Science"
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
