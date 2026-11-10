@@ -63,6 +63,11 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         "a number a tool could have given you. When a name matches nobody exactly, say so "
         "first, then offer the closest people the tools return as possibilities."
     )
+    if counts["pis"]:
+        lines.append(
+            "When you name a principal investigator, link the name to the profile_url "
+            "(else the website) the tool result gives, if it has one."
+        )
 
     if {"search_papers", "semantic_search_papers"} <= tool_names:
         lines.append(
