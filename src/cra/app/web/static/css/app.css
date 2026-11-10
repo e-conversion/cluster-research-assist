@@ -1871,6 +1871,50 @@ body:not([data-route="chat"]) #new-chat {
   border-color: var(--accent);
 }
 
+/* a password field with its Show/Hide toggle (reveal.js) sitting inside it */
+.reveal {
+  position: relative;
+  display: flex;
+}
+
+.reveal input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 64px;
+}
+
+/* Edge draws its own eye in the field; one control is enough */
+.reveal input::-ms-reveal {
+  display: none;
+}
+
+.reveal-toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  min-width: 54px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(7px * var(--radius-scale));
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .reveal-toggle:hover {
+    background: var(--hair);
+    color: var(--ink);
+  }
+}
+
+.reveal-toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
+
 .radio-row {
   display: flex;
   gap: 18px;
@@ -2906,6 +2950,14 @@ html:has(.viz-frame.expanded) {
   .graph-frame .reset {
     padding: 8px 14px;
     font-size: 13px;
+  }
+
+  /* the whole height of the field, for a thumb */
+  .reveal-toggle {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    min-width: 60px;
   }
 
   /* iOS zooms the whole page into any field under 16px when it takes focus */
