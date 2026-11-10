@@ -309,13 +309,17 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
       .slice(0, 5)
       .map(
         (x) =>
-          `<li><span class="co">${escapeHtml(untitled(byId[x.id].name))}</span><span class="w">${x.w} paper${x.w === 1 ? "" : "s"}</span></li>`,
+          `<li><button type="button" class="co" data-id="${escapeHtml(x.id)}">${escapeHtml(untitled(byId[x.id].name))}</button><span class="w">${x.w} paper${x.w === 1 ? "" : "s"}</span></li>`,
       )
       .join("");
+    // the name leads to the person's own page; only a web link becomes one
+    const name = /^https?:\/\//i.test(n.url || "")
+      ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(n.name)}</a>`
+      : escapeHtml(n.name);
     // a pinned card can be closed where it is; a hovered one goes with the pointer
     const close = pin ? '<button type="button" class="close" aria-label="Close">✕</button>' : "";
     card.innerHTML = `${close}<div class="cinst" style="color:${c}">${escapeHtml(meta ? [meta.l, meta.n].filter(Boolean).join(" · ") : n.inst || "—")}</div>
-      <h3>${escapeHtml(n.name)}</h3><div class="grp">${escapeHtml(n.group || "—")}</div>
+      <h3>${name}</h3><div class="grp">${escapeHtml(n.group || "—")}</div>
       <div class="nums"><div><div class="n" style="color:${c}">${n.deg}</div><div class="l">collaborator${n.deg === 1 ? "" : "s"}</div></div>
         <div><div class="n">${n.papers}</div><div class="l">papers</div></div></div>
       ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : '<div class="hintline">No co-authorships recorded in the library.</div>'}`;
@@ -323,6 +327,14 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
       pin = null;
       apply(null);
     });
+    // a collaborator selects their node, as a click on it would, so one card
+    // leads to the next
+    card.querySelectorAll("button.co").forEach((b) =>
+      b.addEventListener("click", () => {
+        pin = b.dataset.id;
+        apply(pin);
+      }),
+    );
     card.classList.add("on");
   }
   // settle the layout before first paint so it opens at rest, not mid-jitter

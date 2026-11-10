@@ -41,7 +41,9 @@ def pi_view(pi: PI, *, full: bool = False) -> dict[str, Any]:
         "application_fields": list(pi.application_fields),
         "publication_count": len(pi.publication_dois),
     }
-    if full:
-        view["website"] = pi.website
-        view["profile_url"] = pi.profile_url
+    # The links travel in every view, so a list of people can be followed up
+    # without a get_pi per name; the compact view leaves out the empty ones.
+    for key in ("website", "profile_url"):
+        if full or getattr(pi, key):
+            view[key] = getattr(pi, key)
     return view

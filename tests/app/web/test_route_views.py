@@ -74,6 +74,40 @@ async def test_every_point_carries_a_citation_and_its_surnames(client):
     assert {"doi", "title", "year", "x", "y", "cluster", "color"} <= point.keys()
 
 
+# ---------- the collaboration graph ----------
+
+
+async def test_every_person_in_the_graph_carries_a_link_to_their_profile(client):
+    """The card names a person; the name leads to their page."""
+    body = await (await client.get("/api/collaboration-graph")).get_json()
+    lovelace = next(n for n in body["nodes"] if n["id"] == "1")
+    assert lovelace["url"] == "https://example.org/members/1"
+
+
+def test_the_graph_falls_back_to_the_website_and_never_links_anything_else(tmp_path):
+    from dataclasses import replace
+
+    from cra.app.viz import collaboration_map
+    from cra.core.library.library import Library
+
+    library = Library.load(write_library(tmp_path / "lib"))
+    first, second, third = library.pis
+    pis = [
+        replace(first, profile_url=""),
+        replace(second, profile_url="javascript:alert(1)", website=""),
+        third,
+    ]
+    urls = {
+        n["id"]: n["url"]
+        for n in collaboration_map.payload(library.graph, pis)["nodes"]
+    }
+    assert urls == {
+        "1": "https://example.org/lovelace",
+        "2": "",
+        "3": "https://example.org/members/3",
+    }
+
+
 # ---------- a paper the library already has ----------
 
 
