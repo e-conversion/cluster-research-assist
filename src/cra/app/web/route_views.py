@@ -132,3 +132,14 @@ async def collaboration_graph() -> Any:
             "hint": "It is built from the principal investigators' publications.",
         }, 404
     return collaboration_map.payload(ctx.library.graph)
+
+
+@bp.get("/api/collaboration-graph/<node>/papers")
+async def papers_of_a_pi(node: str) -> Any:
+    ctx = current_app.extensions["cra"]
+    found = (
+        collaboration_map.papers(ctx.library, node) if ctx.library is not None else None
+    )
+    if found is None:
+        return {"error": "No such principal investigator in the library."}, 404
+    return {"papers": found}
