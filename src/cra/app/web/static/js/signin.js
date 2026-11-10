@@ -4,6 +4,7 @@
 // the person sent is set as text, never as markup.
 import { ApiError, getJSON, postJSON } from "./api.js";
 import { logo } from "./brand.js";
+import { conceal, revealable } from "./reveal.js";
 
 const SET_PASSWORD = "#/set-password/";
 const REQUEST_ACCESS = "#/request-access";
@@ -15,7 +16,9 @@ function make(tag, props = {}, ...children) {
 }
 
 function field(label, input) {
-  return make("label", { className: "field" }, make("span", { textContent: label }), input);
+  const node = make("label", { className: "field" }, make("span", { textContent: label }), input);
+  if (input.type === "password") revealable(input);
+  return node;
 }
 
 function errorLine() {
@@ -91,6 +94,7 @@ function passwordForm() {
   );
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
+    conceal(form);
     submit.disabled = true;
     showError(error, "");
     try {
@@ -234,6 +238,7 @@ export async function renderSetPassword(view, config) {
       showError(error, "The two passwords differ.");
       return;
     }
+    conceal(form);
     submit.disabled = true;
     showError(error, "");
     try {

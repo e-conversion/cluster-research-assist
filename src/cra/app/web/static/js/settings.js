@@ -4,6 +4,7 @@ import { getJSON, postJSON, del } from "./api.js";
 import { initSettings, openSettings } from "./account.js";
 import { refreshSession } from "./app.js";
 import { escapeHtml } from "./markdown.js";
+import { conceal, revealable } from "./reveal.js";
 import { applyTheme, currentTheme, propagateTheme, syncControls } from "./theme.js";
 import { toast } from "./toast.js";
 
@@ -53,6 +54,7 @@ function openConnect(kind) {
 /** Run one connect attempt, keeping the dialog open on a refusal. */
 async function attempt(button, label, call) {
   const err = el("connect-error");
+  conceal(el("dlg-connect"));
   const was = button.textContent;
   button.disabled = true;
   button.textContent = label;
@@ -382,6 +384,8 @@ export function initDialogs(s) {
       f.addEventListener("load", () => propagateTheme(f), { once: true });
     }
   });
+  for (const id of ["connect-key", "connect-token"]) revealable(el(id));
+  el("dlg-connect").addEventListener("close", () => conceal(el("dlg-connect")));
   document.getElementById("connect-token-submit").addEventListener("click", submitToken);
   document.getElementById("connect-disconnect").addEventListener("click", disconnect);
   document.getElementById("connect-token").addEventListener("keydown", (e) => {
