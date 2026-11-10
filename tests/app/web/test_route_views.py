@@ -8,6 +8,7 @@ from fakes import FakeEncoder
 from library_builder import write_library
 
 from cra.app.web.factory import create_app
+from cra.app.web.route_views import NEIGHBOURS_SHOWN
 from cra.core.retrieval.indexes import Indexes
 
 CROSSREF = "https://api.crossref.org"
@@ -115,6 +116,19 @@ async def test_an_outside_paper_is_placed_among_its_neighbours(client):
     assert body["has_abstract"] is True
     assert body["neighbours"]
     assert body["point"]["cite"].startswith("Lovelace, ")
+
+
+@respx.mock
+async def test_every_neighbour_carries_what_its_row_shows(client):
+    """The closest list shows citation, title, year, similarity and a DOI link."""
+    respx.get(WORK_URL).mock(return_value=crossref_ok())
+    _, body = await lookup(client, OUTSIDE)
+    assert 0 < len(body["neighbours"]) <= NEIGHBOURS_SHOWN
+    for n in body["neighbours"]:
+        assert {"doi", "cite", "title", "year", "score", "x", "y"} <= n.keys()
+        assert isinstance(n["score"], float)
+    scores = [n["score"] for n in body["neighbours"]]
+    assert scores == sorted(scores, reverse=True)
 
 
 @respx.mock
