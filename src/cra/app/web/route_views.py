@@ -131,7 +131,7 @@ async def collaboration_graph() -> Any:
             "error": "This library has no collaboration graph.",
             "hint": "It is built from the principal investigators' publications.",
         }, 404
-    return collaboration_map.payload(ctx.library.graph)
+    return collaboration_map.payload(ctx.library.graph, ctx.library.pis)
 
 
 @bp.get("/api/collaboration-graph/<node>/papers")

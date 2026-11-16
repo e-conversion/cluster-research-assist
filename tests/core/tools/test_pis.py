@@ -38,6 +38,41 @@ async def test_every_pi_comes_at_once_with_what_the_library_holds_of_them(
     assert "publications" not in lovelace, "the detail is get_pi's job"
 
 
+async def test_a_list_of_people_carries_their_links(registry, ctx, words_only):
+    """A name alone leaves the reader to look the person up; every list of
+    people comes with the profile and website get_pi has."""
+    found = [
+        (await call_tool(registry, ctx, "search_pis", query="lovelace"))["results"][0],
+        next(
+            p
+            for p in (await call_tool(registry, ctx, "list_pis"))["results"]
+            if "Lovelace" in p["name"]
+        ),
+        next(
+            p
+            for p in (await call_tool(*words_only, "find_experts", topic="perovskite"))[
+                "results"
+            ]
+            if "Lovelace" in p["name"]
+        ),
+    ]
+    for person in found:
+        assert person["profile_url"] == "https://example.org/members/1"
+        assert person["website"] == "https://example.org/lovelace"
+
+
+def test_the_compact_view_leaves_out_a_link_nobody_recorded(ctx):
+    from dataclasses import replace
+
+    from cra.core.tools.views import pi_view
+
+    pi = replace(ctx.indexes.library.pis[0], website="", profile_url="")
+    assert "website" not in pi_view(pi)
+    assert "profile_url" not in pi_view(pi)
+    # the full view says so explicitly
+    assert pi_view(pi, full=True)["profile_url"] == ""
+
+
 async def test_papers_are_ranked_by_how_many_pis_they_join(registry, ctx):
     """'Which paper has the most co-authors from the cluster' has no search
     that answers it; this ranks the attributed papers directly."""
