@@ -12,6 +12,9 @@ from pydantic import ValidationError
 from cra import __version__
 from cra.config.settings import RETIRED_KEYS, Settings, unknown_keys
 
+# how many summaries come in between two writes of the file
+SAVE_EVERY = 10
+
 EXIT_CONFIG = 2
 
 
@@ -212,6 +215,121 @@ def _name_groups(
             f"  {group['id']:>4} {group['size']:>5} papers  {round(100 * group['coverage']):>3}%  "
             f"{group['name']}  [{', '.join(group['terms'])}]"
         )
+
+
+def cmd_library_summarise(args: argparse.Namespace) -> int:
+    """Have the model summarise each paper's methods into summaries.json."""
+    import time
+
+    import httpx
+
+    from cra.assistant.llm.client import ChatClient
+    from cra.assistant.summarise import request_for, summarise
+    from cra.core.library import manifest, summaries
+    from cra.core.library.library import FILES, Library, LibraryError
+    from cra.core.library.records import normalise_doi
+
+    settings = load_library_settings(args)
+    directory = settings.library_path
+    try:
+        library = Library.load(directory, verify=False)
+    except LibraryError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    target = directory / FILES["summaries"]
+    # papers no longer in the library drop out; the rest are kept until they change
+    kept = summaries.read(target)["records"]
+    records = {doi: record for doi, record in kept.items() if doi in library.papers}
+    dropped = len(kept) - len(records)
+    only = {normalise_doi(d) for d in args.only} if args.only else None
+    if only and (unknown := sorted(only - set(library.papers))):
+        sys.stderr.write(f"not in the library: {', '.join(unknown)}\n")
+        return 1
+    work = summaries.plan(
+        library.papers, library.fulltexts, records, force=args.force, only=only
+    )
+    jobs = work.jobs[: args.limit] if args.limit else work.jobs
+    _out(
+        f"{len(library.papers)} papers: {len(work.jobs)} to summarise, "
+        f"{len(work.no_text)} with no text to read, {work.unchanged} already current"
+    )
+    tokens = sum(len(job.text) for job in jobs) // 4
+    _out(f"this run: {len(jobs)} requests, about {tokens:,} input tokens")
+
+    if not jobs and not work.no_text and not dropped:
+        _out("nothing to do: every paper's summary is current")
+        return 0
+    model = args.model or settings.llm_model or next(iter(settings.llm_models), "")
+    if args.dry_run:
+        if jobs:
+            first = request_for(settings, model or "<model>", jobs[0])["messages"]
+            _out(f"first request, {jobs[0].doi} ({jobs[0].source}):")
+            _out(first[0]["content"])
+            _out(first[1]["content"][:1500])
+        return 0
+    if jobs and (not model or not settings.llm_api_key.get_secret_value()):
+        sys.stderr.write(
+            "set CRA_LLM_API_KEY and CRA_LLM_MODEL (or pass --model) to summarise\n"
+        )
+        return 2
+
+    for doi in work.no_text:
+        records[doi] = summaries.no_text_record()
+    done = failed = 0
+
+    def save() -> None:
+        summaries.write(target, records, model)
+
+    def keep(job: summaries.Job, fields: dict | None) -> None:
+        nonlocal done, failed
+        if fields is None:
+            failed += 1
+        else:
+            records[job.doi] = summaries.record(fields, job, model)
+        done += 1
+        _out(f"[{done}/{len(jobs)}] {job.doi} {'failed' if fields is None else 'ok'}")
+        if done % SAVE_EVERY == 0:
+            save()
+
+    started = time.perf_counter()
+    if jobs:
+
+        async def run():
+            async with httpx.AsyncClient() as http:
+                client = ChatClient(settings, http)
+                await summarise(
+                    client, settings, model, jobs, keep, concurrency=args.concurrency
+                )
+
+        try:
+            asyncio.run(run())
+        except KeyboardInterrupt:
+            _out("stopped; what is done is kept")
+    save()
+    _out(
+        f"wrote {target} in {time.perf_counter() - started:.0f}s: "
+        f"{done - failed} summarised"
+        + (f", {failed} failed (asked for again next run)" if failed else "")
+    )
+
+    library = Library.load(directory, verify=False)
+    provenance = (manifest.read(directory) or {}).get("provenance") or {}
+    header = summaries.read(target)
+    provenance["summaries"] = {
+        "model": model,
+        "prompt_version": header.get("prompt_version"),
+        "built_at": header.get("built_at"),
+    }
+    manifest.write(
+        directory,
+        library.counts,
+        schema_version=library.schema_version,
+        embedding_model=library.embeddings.model if library.embeddings else "",
+        builder=f"cra {__version__}",
+        provenance=provenance,
+    )
+    _out(f"wrote {directory / manifest.MANIFEST}")
+    return 1 if failed else 0
 
 
 def cmd_library_manifest(args: argparse.Namespace) -> int:
@@ -868,6 +986,11 @@ def build_parser() -> argparse.ArgumentParser:
             cmd_library_manifest,
             "write manifest.json for a library directory",
         ),
+        (
+            "summarise",
+            cmd_library_summarise,
+            "have the model summarise each paper's methods (needs CRA_LLM_API_KEY)",
+        ),
         ("versions", cmd_library_versions, "list the installed versions"),
     ):
         p = library.add_parser(name, help=help_text)
@@ -883,6 +1006,33 @@ def build_parser() -> argparse.ArgumentParser:
                 "--no-names",
                 action="store_true",
                 help="label the map's groups with their common words only",
+            )
+        if name == "summarise":
+            p.add_argument(
+                "--model", help="the model that writes them (default: CRA_LLM_MODEL)"
+            )
+            p.add_argument(
+                "--only",
+                action="append",
+                metavar="DOI",
+                help="only this paper; repeatable",
+            )
+            p.add_argument(
+                "--limit", type=int, help="stop after this many requests, for a trial"
+            )
+            p.add_argument(
+                "--force", action="store_true", help="ask again for papers already done"
+            )
+            p.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="print what would be asked and the first request; call nothing",
+            )
+            p.add_argument(
+                "--concurrency",
+                type=int,
+                default=2,
+                help="requests at a time (default 2)",
             )
         p.set_defaults(func=func)
 

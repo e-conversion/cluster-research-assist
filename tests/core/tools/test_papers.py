@@ -1,6 +1,7 @@
 """The paper tools, against the small library the builder writes."""
 
 import httpx
+import pytest
 import respx
 from conftest import call_tool, make_settings
 from fakes import FakeEncoder
@@ -8,7 +9,8 @@ from library_builder import write_library
 
 from cra.core.library.library import Library
 from cra.core.retrieval.indexes import Indexes
-from cra.core.tools.registry import load
+from cra.core.tools.registry import ToolContext, load
+from cra.core.tools.tiers import Tier
 
 
 async def test_search_papers_finds_a_paper_and_says_which_field_matched(registry, ctx):
@@ -166,3 +168,117 @@ async def test_similar_papers_points_at_the_tool_for_outside_dois(registry, ctx)
     """So the model reroutes itself instead of reporting a dead end."""
     result = await call_tool(registry, ctx, "get_similar_papers", doi=OUTSIDE_DOI)
     assert "locate_paper_by_doi" in result["error"]
+
+
+SUMMARY_TOOLS = {"get_paper_summary", "find_papers_by_method"}
+
+
+@pytest.fixture
+def summarised(tmp_path):
+    settings = make_settings(tmp_path)
+    indexes = Indexes.build(
+        Library.load(write_library(tmp_path / "lib", summaries=True)), FakeEncoder()
+    )
+    ctx = ToolContext(indexes=indexes, settings=settings, http=httpx.AsyncClient())
+    return load(settings, indexes), ctx
+
+
+def test_the_summary_tools_need_summaries_and_stay_in_the_chat(registry, summarised):
+    assert SUMMARY_TOOLS.isdisjoint(spec.name for spec in registry)
+    with_summaries, _ = summarised
+    assert {s.name for s in with_summaries.specs(Tier.INTERNAL)} >= SUMMARY_TOOLS
+    public = {s.name for s in with_summaries.specs(Tier.PUBLIC)}
+    assert SUMMARY_TOOLS.isdisjoint(public), (
+        "a summary is made from the full text, which the public tier never sees"
+    )
+
+
+async def test_a_paper_summary_says_who_wrote_it_and_from_what(summarised):
+    registry, ctx = summarised
+    got = await call_tool(registry, ctx, "get_paper_summary", doi="10.1000/ALPHA")
+    assert got["approach"] == "computational"
+    assert got["characterization_methods"] == ["radial distribution function"]
+    assert (got["written_by"], got["from"]) == ("test-model", "fulltext")
+    assert "title" in got
+    assert "doi" in got
+    no_text = await call_tool(registry, ctx, "get_paper_summary", doi="10.1000/gamma")
+    assert "no method summary" in no_text["error"]
+    unknown = await call_tool(registry, ctx, "get_paper_summary", doi="10.9/none")
+    assert "not in the library" in unknown["error"]
+
+
+async def test_papers_are_found_by_what_was_done_and_how(summarised):
+    registry, ctx = summarised
+
+    async def found(**filters):
+        result = await call_tool(registry, ctx, "find_papers_by_method", **filters)
+        return [r["doi"] for r in result["results"]]
+
+    assert await found(approach="experimental") == ["10.1000/beta"]
+    assert await found(approach="computational") == ["10.1000/alpha"]
+    assert await found(method="XRD") == ["10.1000/beta"]
+    assert await found(method="molecular dynamics") == ["10.1000/alpha"]
+    assert await found(material="HALIDE") == ["10.1000/alpha"]
+    assert await found(approach="experimental", method="molecular dynamics") == []
+    listed = await call_tool(registry, ctx, "find_papers_by_method", approach="mixed")
+    assert (listed["count"], listed["returned"]) == (0, 0)
+
+
+async def test_a_list_of_summaries_carries_the_short_form_only(summarised):
+    registry, ctx = summarised
+    result = await call_tool(
+        registry, ctx, "find_papers_by_method", approach="experimental"
+    )
+    (paper,) = result["results"]
+    assert set(paper) == {
+        "doi",
+        "title",
+        "year",
+        "summary",
+        "approach",
+        "material_system",
+    }
+    assert result["written_by"] == ["test-model"]
+
+
+async def test_finding_by_method_needs_a_filter_and_a_known_kind_of_work(summarised):
+    registry, ctx = summarised
+    empty = await call_tool(registry, ctx, "find_papers_by_method")
+    assert "Give an approach, a method or a material" in empty["error"]
+    wrong = await call_tool(registry, ctx, "find_papers_by_method", approach="alchemy")
+    assert "approach" in wrong["error"]
+
+
+async def test_papers_are_listed_by_their_area_on_the_map(registry, ctx):
+    async def listed(**filters):
+        result = await call_tool(registry, ctx, "list_papers", **filters)
+        return {r["doi"]: r.get("group") for r in result["results"]}
+
+    # a paper belongs to the group it has at every level of the map
+    assert await listed(category="copper") == {
+        "10.1000/beta": "copper",
+        "10.1000/gamma": "battery",
+    }
+    assert set(await listed(category="BATTERY")) == {"10.1000/gamma"}
+    assert await listed(category="nothing like it") == {}
+    # the area is shown at the finest level the map has
+    assert (await listed())["10.1000/alpha"] == "perovskite"
+
+
+async def test_the_area_of_one_paper_is_in_its_record(registry, ctx):
+    got = await call_tool(registry, ctx, "get_paper_by_doi", doi="10.1000/gamma")
+    assert got["group"] == "battery"
+
+
+async def test_without_a_map_papers_have_no_area(tmp_path):
+    settings = make_settings(tmp_path)
+    indexes = Indexes.build(
+        Library.load(write_library(tmp_path / "lib", publication_map=False)),
+        FakeEncoder(),
+    )
+    ctx = ToolContext(indexes=indexes, settings=settings, http=httpx.AsyncClient())
+    registry = load(settings, indexes)
+    refused = await call_tool(registry, ctx, "list_papers", category="copper")
+    assert "no publication map" in refused["error"]
+    everything = await call_tool(registry, ctx, "list_papers")
+    assert all("group" not in r for r in everything["results"])

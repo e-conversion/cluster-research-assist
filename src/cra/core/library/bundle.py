@@ -18,7 +18,7 @@ from cra.core.library.library import FILES, Library, LibraryError
 from cra.core.library.versions import resolve
 
 # written as received: nothing in them needs cleaning
-COPIED = ("embeddings", "map", "proposal", "proposal_summary")
+COPIED = ("embeddings", "map", "proposal", "proposal_summary", "summaries")
 
 
 def _dump(path: Path, obj: Any) -> None:

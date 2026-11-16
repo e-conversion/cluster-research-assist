@@ -93,3 +93,11 @@ def test_a_failed_migration_leaves_no_half_written_target(old, tmp_path, monkeyp
     with pytest.raises(LibraryError, match="conversion changed the data"):
         migrate(old, tmp_path / "new", builder="test")
     assert not (tmp_path / "new").exists()
+
+
+def test_migrate_keeps_the_summaries(tmp_path):
+    old = write_library(tmp_path / "old", schema="1.0", summaries=True)
+    migrate(old, tmp_path / "new", builder="test")
+    library = Library.load(tmp_path / "new")
+    assert library.summary("10.1000/beta").approach == "experimental"
+    assert library.counts["summaries"] == 2

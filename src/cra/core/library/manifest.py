@@ -37,7 +37,14 @@ def write(
     builder: str = "cra library manifest",
     provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    files = sorted(p for p in directory.iterdir() if p.is_file() and p.name != MANIFEST)
+    files = sorted(
+        p
+        for p in directory.iterdir()
+        if p.is_file() and p.name != MANIFEST and not p.name.endswith(".part")
+    )
+    if provenance is None:
+        # a rewrite for new checksums must not forget who made what
+        provenance = (read(directory) or {}).get("provenance") or {}
     manifest = {
         "schema_version": schema_version,
         "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -47,7 +54,7 @@ def write(
             p.name: {"sha256": sha256(p), "bytes": p.stat().st_size} for p in files
         },
         "counts": counts,
-        "provenance": provenance or {},
+        "provenance": provenance,
     }
     (directory / MANIFEST).write_text(
         json.dumps(manifest, indent=2) + "\n", encoding="utf-8"

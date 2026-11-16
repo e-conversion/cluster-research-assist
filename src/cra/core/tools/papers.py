@@ -1,7 +1,7 @@
 """Finding papers: by keyword, by meaning, by metadata, and by their text."""
 
 import re
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -13,12 +13,19 @@ from cra.core.retrieval.indexes import Indexes
 from cra.core.retrieval.locate import LocateError, locate
 from cra.core.tools.registry import Registry, ToolContext, ToolError, tool
 from cra.core.tools.tiers import Tier
-from cra.core.tools.views import ABSTRACT_IN_LIST, paper_view
+from cra.core.tools.views import ABSTRACT_IN_LIST, paper_view, summary_view
 
 Doi = Annotated[
     str, Field(description="DOI of the paper, e.g. 10.1038/s41586-021-03819-2")
 ]
 Limit = Annotated[int, Field(description="How many papers to return.", ge=1, le=50)]
+Approach = Annotated[
+    Literal["", "experimental", "computational", "theoretical", "mixed", "review"],
+    Field(
+        description="The kind of work: experimental, computational (simulation), "
+        "theoretical, mixed or review. Empty for any."
+    ),
+]
 _DOI_IN_TEXT = re.compile(r"10\.\d{4,9}/\S+")
 
 
@@ -163,11 +170,14 @@ async def locate_paper_by_doi(
 def get_paper_by_doi(ctx: ToolContext, doi: Doi) -> dict[str, Any]:
     """Everything known about one paper: title, authors, year, journal,
     citations, abstract and any deposited datasets."""
-    paper = ctx.indexes.library.paper(doi)
+    library = ctx.indexes.library
+    paper = library.paper(doi)
     if paper is None:
         raise ToolError(f"{doi} is not in the library.")
-    view = paper_view(paper)
-    view["has_fulltext"] = ctx.indexes.library.fulltext(doi) is not None
+    view = paper_view(
+        paper, group=library.map.group_of(paper.doi) if library.map else ""
+    )
+    view["has_fulltext"] = library.fulltext(doi) is not None
     return view
 
 
@@ -177,6 +187,13 @@ def list_papers(
     author: Annotated[str, Field(description="Part of an author's name.")] = "",
     year: Annotated[str, Field(description="Exact publication year.")] = "",
     journal: Annotated[str, Field(description="Part of a journal name.")] = "",
+    category: Annotated[
+        str,
+        Field(
+            description="Part of the name of the paper's area: a group on the "
+            "publication map, at any level of detail."
+        ),
+    ] = "",
     limit: Annotated[
         int, Field(description="How many papers to return.", ge=1, le=200)
     ] = 50,
@@ -187,19 +204,34 @@ def list_papers(
     newest first, up to the limit; the count is always the full number."""
     from cra.core.library.text import fold
 
+    library = ctx.indexes.library
+    if category and library.map is None:
+        raise ToolError("This library has no publication map, so papers have no area.")
     wanted_author, wanted_journal = fold(author), fold(journal)
+    wanted_area = fold(category)
     matches = [
         paper
-        for paper in ctx.indexes.library.papers.values()
+        for paper in library.papers.values()
         if (not year or paper.year == year)
         and (not wanted_author or any(wanted_author in fold(a) for a in paper.authors))
         and (not wanted_journal or wanted_journal in fold(paper.journal))
+        and (
+            not wanted_area
+            or any(wanted_area in fold(g) for g in library.map.groups_of(paper.doi))
+        )
     ]
     matches.sort(key=lambda p: p.year, reverse=True)
     return {
         "count": len(matches),
         "returned": min(len(matches), limit),
-        "results": [paper_view(p, abstract=0) for p in matches[:limit]],
+        "results": [
+            paper_view(
+                p,
+                abstract=0,
+                group=library.map.group_of(p.doi) if library.map else "",
+            )
+            for p in matches[:limit]
+        ],
     }
 
 
@@ -340,6 +372,89 @@ def get_paper_fulltext(
     return view
 
 
+@tool(tier=Tier.INTERNAL)
+def get_paper_summary(ctx: ToolContext, doi: Doi) -> dict[str, Any]:
+    """What a paper did and with which methods: one sentence, the kind of work,
+    the material, the methods and measurements, the main result, what is new and
+    the stated limits. Written by a model when the library was built, from the
+    paper's full text or abstract, not by its authors."""
+    library = ctx.indexes.library
+    paper = library.paper(doi)
+    if paper is None:
+        raise ToolError(f"{doi} is not in the library.")
+    summary = library.summary(doi)
+    if summary is None:
+        raise ToolError(f"{doi} has no method summary.")
+    return {
+        "doi": paper.doi,
+        "title": paper.title,
+        **summary_view(summary),
+        "written_by": summary.model,
+        "from": summary.source,
+    }
+
+
+@tool(tier=Tier.INTERNAL)
+def find_papers_by_method(
+    ctx: ToolContext,
+    approach: Approach = "",
+    method: Annotated[
+        str,
+        Field(
+            description="Part of a method's name, what was done or what was measured, "
+            "e.g. 'XRD', 'DFT' or 'atomic layer deposition'."
+        ),
+    ] = "",
+    material: Annotated[
+        str, Field(description="Part of the name of the material or system studied.")
+    ] = "",
+    limit: Annotated[
+        int, Field(description="How many papers to return.", ge=1, le=200)
+    ] = 50,
+) -> dict[str, Any]:
+    """Papers by what was done and how: experiment or simulation, a method, a
+    material. It reads method summaries that a model wrote when the library was
+    built, so it finds what a paper's summary names, which an abstract can leave
+    out. Give at least one filter; the count is always the full number."""
+    from cra.core.library.text import fold
+
+    library = ctx.indexes.library
+    if not (approach or method or material):
+        raise ToolError("Give an approach, a method or a material.")
+    if library.summaries is None:
+        raise ToolError("This library has no method summaries.")
+    wanted_method, wanted_material = fold(method), fold(material)
+    matches = []
+    for doi, summary in library.summaries.records.items():
+        paper = library.papers.get(doi)
+        if paper is None or (approach and summary.approach != approach):
+            continue
+        methods = " ".join(
+            [summary.processing_method, *summary.characterization_methods]
+        )
+        if wanted_method and wanted_method not in fold(methods):
+            continue
+        if wanted_material and wanted_material not in fold(summary.material_system):
+            continue
+        matches.append((paper, summary))
+    matches.sort(key=lambda m: m[0].year, reverse=True)
+    shown = matches[:limit]
+    return {
+        "count": len(matches),
+        "returned": len(shown),
+        "written_by": sorted({s.model for _, s in shown if s.model}),
+        "results": [
+            {
+                "doi": paper.doi,
+                "title": paper.title,
+                "year": paper.year,
+                **summary_view(summary, compact=True),
+            }
+            for paper, summary in shown
+        ],
+    }
+
+
 def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
     registry.register(search_papers)
     registry.register(get_paper_by_doi)
@@ -354,3 +469,6 @@ def setup(registry: Registry, settings: Settings, indexes: Indexes) -> None:
     if indexes.library.fulltexts:
         registry.register(search_fulltext)
         registry.register(get_paper_fulltext)
+    if indexes.library.summaries:
+        registry.register(get_paper_summary)
+        registry.register(find_papers_by_method)

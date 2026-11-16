@@ -21,7 +21,7 @@ import numpy as np
 from networkx.readwrite import json_graph
 
 from cra.core.library import manifest as manifest_
-from cra.core.library import normalise
+from cra.core.library import normalise, summaries
 from cra.core.library.markup import plain
 from cra.core.library.records import (
     PI,
@@ -31,6 +31,8 @@ from cra.core.library.records import (
     Paper,
     Proposal,
     PublicationMap,
+    Summaries,
+    Summary,
     normalise_doi,
 )
 from cra.core.library.versions import resolve
@@ -46,6 +48,7 @@ FILES = {
     "proposal": "proposal.md",
     "proposal_summary": "proposal_summary.md",
     "map": "publication_map.json",
+    "summaries": "summaries.json",
 }
 # the 1.x layout differs only in how papers arrive
 FILES_1 = {**FILES, "papers": "papers.csv", "abstracts": "abstracts.json"}
@@ -81,6 +84,7 @@ class Library:
         graph: nx.Graph | None,
         map_: PublicationMap | None,
         schema_version: str = SCHEMA_2,
+        summaries: Summaries | None = None,
     ) -> None:
         self.path = path
         self.schema_version = schema_version
@@ -91,6 +95,7 @@ class Library:
         self.embeddings = embeddings
         self.graph = graph
         self.map = map_
+        self.summaries = summaries
 
     @classmethod
     def load(
@@ -134,6 +139,7 @@ class Library:
             graph=_load_graph(_load_json(files["graph"]), clean=clean),
             map_=_load_map(_load_json(files["map"])),
             schema_version=schema,
+            summaries=_load_summaries(_load_json(files["summaries"])),
         )
         if verify:
             problems = manifest_.check_counts(
@@ -158,6 +164,7 @@ class Library:
             "graph": self.graph is not None,
             "proposal": self.proposal is not None,
             "map": self.map is not None,
+            "summaries": bool(self.summaries),
         }
 
     @property
@@ -175,6 +182,7 @@ class Library:
             else 0,
             "embeddings": len(self.embeddings) if self.embeddings is not None else 0,
             "map_points": len(self.map.dois) if self.map is not None else 0,
+            "summaries": len(self.summaries) if self.summaries is not None else 0,
         }
 
     def paper(self, doi: str) -> Paper | None:
@@ -182,6 +190,11 @@ class Library:
 
     def fulltext(self, doi: str) -> FullText | None:
         return self.fulltexts.get(normalise_doi(doi))
+
+    def summary(self, doi: str) -> Summary | None:
+        if self.summaries is None:
+            return None
+        return self.summaries.records.get(normalise_doi(doi))
 
 
 def _load_json(path: Path) -> Any:
@@ -338,6 +351,15 @@ def _load_graph(raw: dict[str, Any] | None, *, clean: bool) -> nx.Graph | None:
         return None
     graph = json_graph.node_link_graph(raw, edges="links")
     return graph if clean else normalise.graph_edges(graph)
+
+
+def _load_summaries(raw: Any) -> Summaries | None:
+    if raw is None:
+        return None
+    try:
+        return summaries.load(raw)
+    except (TypeError, ValueError) as exc:
+        raise LibraryError(f"{FILES['summaries']}: {exc}") from exc
 
 
 def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:

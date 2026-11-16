@@ -33,6 +33,45 @@ class Paper:
 
 
 @dataclass(frozen=True)
+class Summary:
+    """What a model made of one paper when the library was built.
+
+    Written from the full text where there is one, the abstract otherwise, and
+    never by the authors: every view that shows it says so.
+    """
+
+    doi: str
+    summary: str
+    # experimental | computational | theoretical | mixed | review
+    approach: str
+    material_system: str = ""
+    # what was done: the synthesis or deposition, or the simulation method
+    processing_method: str = ""
+    # what was measured or analysed
+    characterization_methods: tuple[str, ...] = ()
+    properties_investigated: tuple[str, ...] = ()
+    results: str = ""
+    novelty: str = ""
+    limitations: str = ""
+    source: str = ""  # fulltext | abstract
+    model: str = ""  # which model wrote it
+
+
+@dataclass(frozen=True)
+class Summaries:
+    """``summaries.json``: the summaries and what made them, so that a rebuild
+    with another model or prompt can be told from this one."""
+
+    records: dict[str, Summary]
+    model: str = ""
+    prompt_version: int = 0
+    built_at: str = ""
+
+    def __len__(self) -> int:
+        return len(self.records)
+
+
+@dataclass(frozen=True)
 class FullText:
     doi: str
     text: str
@@ -83,6 +122,35 @@ class PublicationMap:
     # 100 the farthest member; `hints` says what each label's group has in common.
     centrality: dict[int, tuple[int, ...]] = field(default_factory=dict)
     hints: dict[int, tuple[str, ...]] = field(default_factory=dict)
+    index: dict[str, int] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "index", {d: i for i, d in enumerate(self.dois)})
+
+    def groups_of(self, doi: str) -> tuple[str, ...]:
+        """The paper's group at every clustering, fewest groups first.
+
+        The groups are the levels of one tree, so these are the paper's area
+        from the broadest to the finest: what a reader means by its category.
+        """
+        i = self.index.get(doi)
+        if i is None:
+            return ()
+        names = []
+        for count in self.available_counts:
+            assignments, labels = self.clusters[count]
+            slot = assignments[i]
+            names.append(labels[slot] if slot < len(labels) else "")
+        return tuple(names)
+
+    def group_of(self, doi: str, count: int = 8) -> str:
+        """The paper's group at the clustering nearest ``count`` groups."""
+        i = self.index.get(doi)
+        if i is None:
+            return ""
+        assignments, labels = self.clusters[self.nearest_count(count)]
+        slot = assignments[i]
+        return labels[slot] if slot < len(labels) else ""
 
     @property
     def available_counts(self) -> tuple[int, ...]:
