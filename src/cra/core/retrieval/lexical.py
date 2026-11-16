@@ -2,9 +2,11 @@
 
 Two BM25 indices rather than one over the concatenation: a title match and an
 abstract match mean different things, and the caller is told which it got. The
-index with the stronger best hit wins the query outright. Blending the two with
-reciprocal rank fusion is a known improvement, deferred until there is a
-regression baseline to measure it against.
+index with the stronger best hit wins the query outright. Reciprocal rank fusion
+of the two was measured against this and lost: on the 65 known-paper queries in
+``developer/search_queries.json`` it ranked the paper first for 85-88% of them
+(k = 60 and 10) against 94% here, and k = 60 dropped two abstract-only queries
+out of the top five. ``developer/search_eval.py`` reruns the measurement.
 
 Documents and queries go through the same ``tokenize``, which is what lets the
 spellings of this field meet: "Li-O2", "Li–O₂" and "LiO2", "α-Fe2O3" and

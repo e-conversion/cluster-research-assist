@@ -87,8 +87,9 @@ async def semantic_search_papers(
 
 @tool(tier=Tier.PUBLIC)
 def get_similar_papers(ctx: ToolContext, doi: Doi, limit: Limit = 5) -> dict[str, Any]:
-    """Papers closest in content to one you already have. Takes a DOI, not a
-    query: use it for "what else is like this paper?"."""
+    """Papers closest in content to one you already have, compared over the
+    whole title and abstract. Takes a DOI, not a query: use it for "what else
+    is like this paper?" rather than searching with the paper's title."""
     if ctx.indexes.dense is None:
         raise ToolError("This library has no embeddings.")
     hits = ctx.indexes.dense.similar(doi, limit)

@@ -87,12 +87,16 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         )
     if "get_similar_papers" in tool_names:
         lines.append(
-            "get_similar_papers takes a DOI rather than a query, for 'what else is like this'."
+            "For 'more like this paper', use get_similar_papers, which compares whole "
+            "papers; searching with the paper's title only finds its words. It takes a "
+            "DOI: if the paper is only described, find it first and confirm it is the "
+            "one meant."
         )
     if "list_papers" in tool_names:
         lines.append(
             "list_papers filters by author, year or journal, for exhaustive questions such as "
-            "'everything by X' where the top few results of a search are not enough."
+            "'everything by X' where the top few results of a search are not enough, and "
+            "for one paper named that way ('the 2021 Nature paper on X')."
         )
     if "count_papers" in tool_names:
         lines.append(
