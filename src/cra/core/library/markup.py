@@ -59,6 +59,9 @@ _STYLE = re.compile(
 )
 _TEXT_SCRIPT = re.compile(r"\\text(sub|super)script\s*\{([^{}]*)\}")
 _COMMAND = re.compile(r"\\([A-Za-z]+)")
+# Scraped titles lose the {} after a dash, so the word runs on: in
+# "Fe\textendashN" the command read up to the next space is "textendashN".
+_GLUED_DASH = re.compile(r"\\text(en|em)dash")
 _MATH_COMMAND = re.compile(r"\\([A-Za-z]+)(\s*)")
 _ESCAPED = re.compile(r"\\([%&_#{}])")
 _TEX_SPACE = re.compile(r"\\[,;:! ]|~")
@@ -178,6 +181,7 @@ def _tex(text: str) -> str:
         lambda m: script(m.group(2), _SUB if m.group(1) == "sub" else _SUP), text
     )
     text = _unstyle(text)
+    text = _GLUED_DASH.sub(lambda m: "–" if m.group(1) == "en" else "—", text)
     text = _COMMAND.sub(lambda m: _SYMBOLS.get(m.group(1), m.group(0)), text)
     text = _ESCAPED.sub(r"\1", text)
     return text.replace(_DOLLAR, "$")

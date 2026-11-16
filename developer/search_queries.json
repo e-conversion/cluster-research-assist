@@ -1,0 +1,271 @@
+[
+  {
+    "query": "Fe-N-C catalysts oxygen reduction potential dependent",
+    "doi": "10.1021/acs.jpclett.3c00583",
+    "kind": "spelling"
+  },
+  { "query": "OC-COH coupling copper", "doi": "10.1021/jacs.2c01044", "kind": "spelling" },
+  {
+    "query": "gold-rhodium nanoflower plasmon CO2",
+    "doi": "10.1021/acscatal.2c04207",
+    "kind": "spelling"
+  },
+  { "query": "graphene-MOF hybrid gas sensor", "doi": "10.1039/d1ta03246a", "kind": "spelling" },
+  { "query": "anthracene-ethyne MOF-74", "doi": "10.1021/acs.cgd.1c01145", "kind": "spelling" },
+  {
+    "query": "oil-water separation liquid marble",
+    "doi": "10.1039/d1ta05835e",
+    "kind": "spelling"
+  },
+  {
+    "query": "Ag-Bi-I double perovskite self-trapping",
+    "doi": "10.1021/jacs.4c04616",
+    "kind": "spelling"
+  },
+  {
+    "query": "Ruddlesden-Popper gold double perovskite",
+    "doi": "10.1021/jacs.5c01102",
+    "kind": "spelling"
+  },
+  {
+    "query": "copper nanoneedles electric-thermal field multicarbon",
+    "doi": "10.1021/jacs.1c11253",
+    "kind": "spelling"
+  },
+  {
+    "query": "Cu/TiO2 versus Pt/TiO2 ethanol reforming",
+    "doi": "10.1016/j.apcata.2026.120802",
+    "kind": "spelling"
+  },
+  {
+    "query": "lanthanide single atom catalyst CO2 to CO",
+    "doi": "10.1038/s41467-025-57464-8",
+    "kind": "spelling"
+  },
+  {
+    "query": "sub-20 attosecond timing jitter erbium fiber laser",
+    "doi": "10.1364/oe.515880",
+    "kind": "spelling"
+  },
+  {
+    "query": "sigma-hole covalent organic framework halogen",
+    "doi": "10.1021/acs.chemmater.5c03215",
+    "kind": "greek"
+  },
+  {
+    "query": "beta-carotene terahertz Stark",
+    "doi": "10.1021/acs.jpclett.5c03702",
+    "kind": "greek"
+  },
+  { "query": "β-Ga2O3 sub-bandgap spectroscopy", "doi": "10.1063/1.5143393", "kind": "greek" },
+  {
+    "query": "pi-pi stacking organic solar cell degradation",
+    "doi": "10.1039/d3ee02527f",
+    "kind": "greek"
+  },
+  { "query": "6pi heterocyclization visible light", "doi": "10.1039/d1qo00356a", "kind": "greek" },
+  { "query": "InGaAs nanowire lasers 1.3 μm", "doi": "10.1063/5.0048807", "kind": "greek" },
+  { "query": "Li11Si2PS12 ion dynamics", "doi": "10.1039/c4cp02046d", "kind": "formula" },
+  {
+    "query": "CH3NH3PbI3 charge localization infrared",
+    "doi": "10.1021/acs.jpclett.1c00935",
+    "kind": "formula"
+  },
+  {
+    "query": "MAPbI3 methylammonium self-trapped exciton",
+    "doi": "10.1039/d5na00599j",
+    "kind": "formula"
+  },
+  {
+    "query": "CsPbBr3 nanocrystals silica nanohelix",
+    "doi": "10.1021/acs.nanolett.0c02013",
+    "kind": "formula"
+  },
+  {
+    "query": "Pd In2O3 catalyst CO2 hydrogenation",
+    "doi": "10.1016/j.jcat.2025.116618",
+    "kind": "formula"
+  },
+  {
+    "query": "Na2Ni[Fe(CN)6] electrode degradation aqueous",
+    "doi": "10.1021/acs.jpcc.2c08222",
+    "kind": "formula"
+  },
+  { "query": "Li4Ti5O12 small polarons surface", "doi": "10.1063/5.0021443", "kind": "formula" },
+  {
+    "query": "Li7SiPS8 argyrodite hybrid electrolyte",
+    "doi": "10.1021/acs.chemmater.2c00346",
+    "kind": "formula"
+  },
+  { "query": "ZnSiN2 deep-level defects", "doi": "10.1021/acs.jpcc.1c08115", "kind": "formula" },
+  {
+    "query": "Ta2N3 oxygen incorporation conductivity",
+    "doi": "10.1039/d1mh00017a",
+    "kind": "formula"
+  },
+  { "query": "BP3N6 band gap defects", "doi": "10.1039/d1tc06009k", "kind": "formula" },
+  { "query": "IrO2 SnO2 nanofibers OER", "doi": "10.1002/admi.202400997", "kind": "formula" },
+  { "query": "C2H4 CuPd tandem plasmon", "doi": "10.1021/jacs.5c10517", "kind": "formula" },
+  {
+    "query": "Si-doped GaAs(Sb) nanowires dopant",
+    "doi": "10.1103/physrevmaterials.8.076002",
+    "kind": "formula"
+  },
+  { "query": "Pt(111) cations alkaline", "doi": "10.1021/acscatal.5c05622", "kind": "formula" },
+  {
+    "query": "OER catalyst iridium oxide antimony-doped tin oxide",
+    "doi": "10.1002/adfm.201906670",
+    "kind": "acronym"
+  },
+  {
+    "query": "MOF-74 films vapor assisted conversion",
+    "doi": "10.1021/acs.chemmater.1c00743",
+    "kind": "acronym"
+  },
+  {
+    "query": "two-photon absorption pyrene MOF",
+    "doi": "10.1002/adfm.202506660",
+    "kind": "acronym"
+  },
+  {
+    "query": "SHG-CD chirality polycrystalline films",
+    "doi": "10.1039/d2tc01700h",
+    "kind": "acronym"
+  },
+  {
+    "query": "AUGUR adsorption site optimization",
+    "doi": "10.1038/s41524-025-01630-5",
+    "kind": "acronym"
+  },
+  {
+    "query": "nitric oxide to ammonia spin polarization iron single atom",
+    "doi": "10.1002/adfm.202523040",
+    "kind": "plural"
+  },
+  {
+    "query": "lithium nitrate additive silicon anode",
+    "doi": "10.1149/1945-7111/ad71f7",
+    "kind": "plural"
+  },
+  {
+    "query": "aluminum corrosion dual-salt electrolyte sodium-ion",
+    "doi": "10.1021/acsami.4c10970",
+    "kind": "plural"
+  },
+  { "query": "Janus nanoparticle hot carrier", "doi": "10.1021/acsnano.5c17401", "kind": "plural" },
+  {
+    "query": "anharmonic lattice vibration organic semiconductor",
+    "doi": "10.1002/adma.201908028",
+    "kind": "plural"
+  },
+  {
+    "query": "extended tight binding metal surface",
+    "doi": "10.1002/cphc.202500463",
+    "kind": "plural"
+  },
+  {
+    "query": "microplastic degradation hydrogen carbon nitride iron single atom",
+    "doi": "10.1038/s41467-024-53055-1",
+    "kind": "plural"
+  },
+  {
+    "query": "grazing-incidence small-angle X-ray scattering gold sputter PbS",
+    "doi": "10.1021/acsami.0c12732",
+    "kind": "phrase"
+  },
+  {
+    "query": "self-driving laboratory heterogeneous catalysis human in the loop",
+    "doi": "10.1038/s41929-024-01275-5",
+    "kind": "phrase"
+  },
+  {
+    "query": "wide-bandgap perovskite perovskite-organic tandem",
+    "doi": "10.1016/j.joule.2024.06.009",
+    "kind": "phrase"
+  },
+  {
+    "query": "2D hybrid perovskite excitons phase transition",
+    "doi": "10.1021/acsphotonics.2c01035",
+    "kind": "phrase"
+  },
+  {
+    "query": "quasi-adiabatic propagator path integral distributed memory",
+    "doi": "10.1021/acs.jctc.6c00002",
+    "kind": "phrase"
+  },
+  {
+    "query": "highly oriented pyrolytic graphite STM hydrogen evolution active sites",
+    "doi": "10.1039/d1cp00434d",
+    "kind": "abstract"
+  },
+  {
+    "query": "MoSe2 spatial sorting of excitons dielectric environment",
+    "doi": "10.1021/acs.nanolett.0c03810",
+    "kind": "abstract"
+  },
+  {
+    "query": "DIO solvent additive degradation GIWAXS PffBT4T-2OD",
+    "doi": "10.1002/advs.202001117",
+    "kind": "abstract"
+  },
+  {
+    "query": "COF azobenzene bipyridine linkers photodynamic",
+    "doi": "10.1021/jacs.5c07787",
+    "kind": "abstract"
+  },
+  {
+    "query": "amorphous ruthenium oxide X-ray absorption acidic OER activation",
+    "doi": "10.1021/acscatal.3c01607",
+    "kind": "abstract"
+  },
+  {
+    "query": "indium zinc oxide radio frequency sputtering O- ion damage",
+    "doi": "10.1002/advs.202516853",
+    "kind": "abstract"
+  },
+  {
+    "query": "TiSCAT microscopy tunable probe arm",
+    "doi": "10.1364/josab.510611",
+    "kind": "abstract"
+  },
+  {
+    "query": "Ta3N5 nitrogen vacancies Ta3+ deep traps photoelectrochemical",
+    "doi": "10.1021/acscatal.0c02648",
+    "kind": "abstract"
+  },
+  {
+    "query": "electron paramagnetic resonance underpotential deposition hydrogen platinum",
+    "doi": "10.1002/cssc.202501908",
+    "kind": "abstract"
+  },
+  {
+    "query": "circularly polarized luminescence dissymmetry factor chiral perovskite",
+    "doi": "10.1021/acsami.2c20716",
+    "kind": "abstract"
+  },
+  {
+    "query": "plasma-enhanced atomic layer deposition cobalt oxide cobaltocene",
+    "doi": "10.26434/chemrxiv-2022-23ck4",
+    "kind": "abstract"
+  },
+  {
+    "query": "lithium dendrites gel polymer electrolyte nanofocus wide-angle X-ray scattering",
+    "doi": "10.1038/s41467-025-64736-w",
+    "kind": "abstract"
+  },
+  {
+    "query": "Nafion ionomer catalyst ink CuO nanoparticles CO2 electrolysis",
+    "doi": "10.1021/acscatal.2c05235",
+    "kind": "abstract"
+  },
+  {
+    "query": "carboxymethyl cellulose graphene nanoplatelets conductive paste",
+    "doi": "10.1007/s10570-022-04998-5",
+    "kind": "abstract"
+  },
+  {
+    "query": "charge-vibrational coupling molecular electronics energy dissipation",
+    "doi": "10.1021/jacs.9b07757",
+    "kind": "abstract"
+  }
+]
