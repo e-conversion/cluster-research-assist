@@ -2840,7 +2840,7 @@ html:has(.viz-frame.expanded) {
 }
 
 .graph-card h3 a:hover {
-  text-decoration-color: currentColor;
+  text-decoration-color: currentcolor;
 }
 
 .graph-card li .w {
