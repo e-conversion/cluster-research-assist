@@ -81,7 +81,13 @@ def nest(vectors: np.ndarray, counts: list[int]) -> np.ndarray:
     """
     from scipy.cluster.hierarchy import cut_tree, linkage
 
-    return np.asarray(cut_tree(linkage(vectors, method="ward"), n_clusters=counts))
+    cuts = np.asarray(cut_tree(linkage(vectors, method="ward"), n_clusters=counts))
+    # cut_tree puts every paper in group 0 when asked for as many groups as
+    # papers, which a library smaller than MAX_CLUSTERS asks for at the top
+    for column, k in enumerate(counts):
+        if k == len(vectors):
+            cuts[:, column] = np.arange(k)
+    return cuts
 
 
 def vocabularies(texts: list[str]) -> list[set[str]]:
