@@ -1,3 +1,4 @@
+import csv
 import shutil
 
 import numpy as np
@@ -6,6 +7,7 @@ from conftest import TOY_LIBRARY
 from fakes import FakeEncoder
 
 from cra.core.library.library import Library
+from cra.core.library.records import normalise_doi
 from cra.core.retrieval.dense import DenseIndex
 from cra.core.retrieval.encoder import (
     LFS_POINTER,
@@ -59,12 +61,19 @@ def test_the_shipped_encoder_reproduces_the_librarys_vectors(encoder):
     """The toy library's vectors came from sentence-transformers on torch, so
     agreement here checks the tokenizer, the forward pass and the weights at
     once. Built from the title and abstract, as developer/make_toy_library.py
-    does."""
+    does: the title as the CSV stores it, since the loader resolves its markup
+    and the vectors were made from the raw string."""
     library = Library.load(TOY_LIBRARY)
     assert encoder.name == library.embeddings.model
+    with (TOY_LIBRARY / "papers.csv").open(encoding="utf-8", newline="") as f:
+        stored_titles = {
+            normalise_doi(row["article_doi"]): row["article_title"]
+            for row in csv.DictReader(f)
+        }
     for doi, row in library.embeddings.index.items():
         paper = library.papers[doi]
-        text = f"{paper.title.strip()}. {paper.abstract.strip()}".strip(". ")
+        title = stored_titles[doi]
+        text = f"{title.strip()}. {paper.abstract.strip()}".strip(". ")
         stored = library.embeddings.vectors[row]
         assert float(encoder.encode(text) @ stored) > 0.9999, doi
 
