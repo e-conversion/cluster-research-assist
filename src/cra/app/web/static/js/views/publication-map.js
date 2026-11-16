@@ -32,6 +32,8 @@ const GLIDE_MS = 450;
 const DOT = { r: 4, touch: 6, grow: 1.25, max: 12 };
 // How far from a dot a click or tap still picks it, in pixels.
 const PICK = { mouse: 3, touch: 14 };
+// The closest papers a shown paper is joined to by a line on the map.
+const LINKED = 5;
 
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const truncate = (t) => (t.length > LABEL.chars ? t.slice(0, LABEL.chars - 1).trimEnd() + "…" : t);
@@ -46,6 +48,13 @@ const bareDoi = (raw) =>
     .replace(/^https?:\/\/(dx\.)?doi\.org\//, "")
     .replace(/^doi:/, "")
     .replace(/[}\s]+$/, "");
+// The server's test of a DOI (cra.core.retrieval.locate), so only what it would accept is offered.
+const DOI_PATTERN = /^10\.\d{4,9}\/\S+$/;
+// A term like this is a publication year, matched against the year alone, so
+// "2020" does not also find every DOI that happens to contain it.
+const YEAR = /^(1[89]|2\d)\d\d$/;
+// Rows the search list renders; the rest are ringed on the map all the same.
+const ROWS_SHOWN = 200;
 
 /** A CSS colour token as [r, g, b], so the canvas labels follow the theme. */
 function tokenRGB(name) {
@@ -209,16 +218,9 @@ export function libraryMapView(store) {
             </div>
           </div>
           <div class="map-row">
-            <p class="row-hint">Locate ${escapeHtml(article(ours))} ${escapeHtml(ours)} publication.</p>
+            <p class="row-hint">Search ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper by title, author, year, journal or DOI, or paste the DOI of any other paper to place it on the map.</p>
             <div class="map-toolbar">
-              <label>Find ${escapeHtml(article(ours))} ${escapeHtml(ours)} paper <input type="search" id="paper-search" list="paper-titles" enterkeyhint="search" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Title, author, year, journal or DOI…"><datalist id="paper-titles"></datalist></label>
-            </div>
-          </div>
-          <div class="map-row">
-            <p class="row-hint">Locate an external work based on the DOI.</p>
-            <div class="map-toolbar">
-              <label>Place a DOI <input type="search" id="doi-input" autocomplete="off" inputmode="url" enterkeyhint="go" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="10.1038/s41586-021-03819-2, or a doi.org link…"></label>
-              <button class="btn primary" id="doi-go" type="button">Place on the map</button>
+              <label>Find a paper <input type="search" id="paper-search" autocomplete="off" enterkeyhint="search" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Title, author, year, journal or DOI…"></label>
             </div>
           </div>
           <div class="lookup-card" id="lookup-card" hidden></div>
@@ -238,9 +240,10 @@ export function libraryMapView(store) {
       let fitZoom = 0;
       let zoom = 0;
       let hits = [];
-      let placed = null; // the response for a DOI brought in from outside
+      let placed = null; // the lookup answer for the paper in the card, ours or from outside
+      let fromList = false; // whether the card can go back to the search's list
+      let asked = 0; // the latest lookup; an answer to an older one is dropped
       let selected = null; // the point whose details the card shows
-      let busy = false;
       let disposed = false;
       // A touch screen has no hover: a tap pins the card instead, and a
       // tooltip left behind where the finger lifted would only repeat it.
@@ -290,18 +293,16 @@ export function libraryMapView(store) {
         let z = fitZoom;
         const found = data.filter((d) => matches.has(d.doi));
         if (placed && !found.length) {
-          // Frame the new paper together with the papers it was placed from,
-          // which is the whole point of having looked it up.
-          const near = [placed.point, ...placed.neighbours];
-          const nx = Math.min(...near.map((d) => d.x)),
-            Xx = Math.max(...near.map((d) => d.x));
-          const ny = Math.min(...near.map((d) => d.y)),
-            Xy = Math.max(...near.map((d) => d.y));
-          target = [(nx + Xx) / 2, (ny + Xy) / 2, 0];
-          const zfit = Math.log2(
-            0.55 * Math.min(W / Math.max(Xx - nx, 1e-6), H / Math.max(Xy - ny, 1e-6)),
+          // Centre on the paper and keep in view the papers its lines go to. A
+          // paper of ours can sit at the edge of its neighbourhood, so the box
+          // around them all would leave it out once zoomed in.
+          const { x, y } = placed.point;
+          const reach = Math.max(
+            ...placed.neighbours.slice(0, LINKED).map((n) => Math.hypot(n.x - x, n.y - y)),
+            1e-6,
           );
-          z = Math.min(Math.max(zfit, fitZoom + 0.5), fitZoom + 5);
+          target = [x, y, 0];
+          z = Math.min(Math.max(Math.log2((0.45 * Math.min(W, H)) / reach), fitZoom), fitZoom + 5);
         } else if (found.length === 1) {
           const sel = found[0];
           const dists = data.map((d) => Math.hypot(d.x - sel.x, d.y - sel.y)).sort((a, b) => a - b);
@@ -481,7 +482,7 @@ export function libraryMapView(store) {
           L.push(
             new LineLayer({
               id: "placed-links",
-              data: placed.neighbours.slice(0, 5),
+              data: placed.neighbours.slice(0, LINKED),
               getSourcePosition: () => [placed.point.x, placed.point.y],
               getTargetPosition: (d) => [d.x, d.y],
               getColor: [...accent, 120],
@@ -547,28 +548,35 @@ export function libraryMapView(store) {
         });
       }
 
-      // A DOI is the join key everywhere: two papers can share a title, and
-      // the citation the datalist offers is not the title either.
-      function matchesFor(q) {
+      /**
+       * The library papers matching every term, newest first: a second term
+       * narrows the list, and a year only matches the year. A DOI or the full
+       * citation finds just that paper.
+       */
+      function search(q) {
         q = (q || "").trim();
-        if (!q) return new Set();
+        if (!q) return [];
         const asDoi = bareDoi(q);
         const exact = data.find((d) => d.cite === q || d.title === q || d.doi === asDoi);
-        if (exact) return new Set([exact.doi]);
-        // Every term must appear, so a second word narrows the result.
+        if (exact) return [exact];
         const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
-        const found = new Set();
-        for (const d of data) {
-          if (terms.every((term) => d._hay.includes(term))) {
-            found.add(d.doi);
-            if (found.size >= 100) break;
-          }
-        }
-        return found;
+        return data
+          .filter((d) =>
+            terms.every((t) => (YEAR.test(t) ? String(d.year) === t : d._hay.includes(t))),
+          )
+          .sort(
+            (a, b) =>
+              String(b.year || "").localeCompare(String(a.year || "")) ||
+              String(a.title || "").localeCompare(String(b.title || "")),
+          );
       }
 
+      /** While the card shows one paper, the map frames it with its closest; otherwise the search's hits. */
+      const currentMatches = () =>
+        placed ? new Set() : new Set(search($("paper-search").value).map((d) => d.doi));
+
       /** Render and frame `matches`: the search field's hits unless a caller names its own. */
-      function draw(matches = matchesFor($("paper-search").value)) {
+      function draw(matches = currentMatches()) {
         const { found, viewState } = fit(matches);
         hits = found;
         const { Deck, OrthographicView, LinearInterpolator } = window.deck;
@@ -596,16 +604,20 @@ export function libraryMapView(store) {
                 relayer();
               }
             },
-            onClick: ({ object }) => select(object || null),
-            getTooltip: ({ object }) =>
-              object &&
-              object !== selected &&
-              !noHover.matches && {
-                html: object.placed
-                  ? `<b>${escapeHtml(object.cite)}</b><br/>not in the library · placed among its nearest neighbours`
-                  : `<b>${escapeHtml(object.cite || object.title)}</b><br/>${escapeHtml(object.title)}<br/>${escapeHtml(String(object.year || ""))} · ${escapeHtml(String(object.cluster || ""))}`,
-                className: "dk-tip",
-              },
+            onClick: ({ object }) => select(asPaper(object) || null),
+            getTooltip: ({ object: hovered }) => {
+              const object = asPaper(hovered);
+              return (
+                object &&
+                object !== selected &&
+                !noHover.matches && {
+                  html: object.placed
+                    ? `<b>${escapeHtml(object.cite)}</b><br/>not in the library · placed among its nearest neighbours`
+                    : `<b>${escapeHtml(object.cite || object.title)}</b><br/>${escapeHtml(object.title)}<br/>${escapeHtml(String(object.year || ""))} · ${escapeHtml(String(object.cluster || ""))}`,
+                  className: "dk-tip",
+                }
+              );
+            },
           });
         } else {
           // glide to a search hit or a placed DOI rather than jump there
@@ -618,6 +630,12 @@ export function libraryMapView(store) {
           deckInst.setProps({ layers: layers(), initialViewState: { ...viewState, ...glide } });
         }
       }
+
+      /** A paper of ours marked as the card's paper is that paper, with its year and cluster. */
+      const asPaper = (object) =>
+        object?.placed && placed?.in_library
+          ? data.find((d) => d.doi === object.doi) || object
+          : object;
 
       /** Pin a point's details in the card, or clear them with null. */
       function select(object) {
@@ -681,14 +699,6 @@ export function libraryMapView(store) {
             d._hay =
               `${d.cite || ""} ${d.title || ""} ${d.au || ""} ${d.year || ""} ${d.doi}`.toLowerCase();
           }
-          if (!$("paper-titles").children.length) {
-            const dl = $("paper-titles");
-            for (const c of [...new Set(data.map((d) => d.cite || d.title))].sort()) {
-              const o = document.createElement("option");
-              o.value = c;
-              dl.append(o);
-            }
-          }
           renderLegend(payload.legend);
           marks = clusterMarks(data, payload.legend);
           plan();
@@ -696,6 +706,7 @@ export function libraryMapView(store) {
           if (selected && !selected.placed)
             select(data.find((d) => d.doi === selected.doi) || null);
           status.hidden = true;
+          if (!placed && $("paper-search").value.trim()) renderMatches();
           draw();
         } catch (e) {
           status.textContent = e.message;
@@ -711,13 +722,70 @@ export function libraryMapView(store) {
         card.hidden = false;
       }
 
+      /** A paper as a row of the card's list, alike whether it matched the search or sits close by. */
+      function row(p, extra) {
+        const doi = String(p.doi || "");
+        const title =
+          p.title && p.title !== p.cite && p.title !== doi
+            ? `<span class="title">${escapeHtml(p.title)}</span>`
+            : "";
+        const meta = [p.year, extra].filter(Boolean).map((m) => escapeHtml(String(m)));
+        if (doi.startsWith("10."))
+          meta.push(
+            `<a href="https://doi.org/${escapeHtml(encodeURI(doi))}" target="_blank" rel="noopener noreferrer">doi.org/${escapeHtml(doi)}</a>`,
+          );
+        // The citation clips the title, so the full one follows it and wraps.
+        return `<li data-doi="${escapeHtml(doi)}"><button type="button" class="pick"><span class="cite">${escapeHtml(p.cite || p.title)}</span>${title}</button>
+          <div class="meta">${meta.join(" · ")}</div></li>`;
+      }
+
+      /** The search's list: the papers of ours that match, and a DOI from outside to place. */
+      function renderMatches() {
+        const q = $("paper-search").value.trim();
+        if (!q) {
+          card.hidden = true;
+          return;
+        }
+        const found = search(q);
+        const asDoi = bareDoi(q);
+        const parts = [];
+        if (DOI_PATTERN.test(asDoi) && !found.length) {
+          parts.push(`<div class="place"><div class="meta">${escapeHtml(asDoi)} is not in the library.
+            Placing it fetches its title and abstract and puts it among the papers it is closest to.</div>
+            <button type="button" class="btn primary" data-place="${escapeHtml(asDoi)}">Place it on the map</button></div>`);
+        } else if (!found.length) {
+          parts.push(
+            '<div class="meta">No paper in the library matches. To place a paper from elsewhere, paste its DOI.</div>',
+          );
+        }
+        if (found.length) {
+          const count = found.length === 1 ? "1 paper" : `${found.length} papers`;
+          const more =
+            found.length > ROWS_SHOWN
+              ? ` <span>the first ${ROWS_SHOWN}; type more to narrow</span>`
+              : "";
+          parts.push(
+            `<div class="neighbours-head">${count} in the library${more}</div><ol class="neighbours" data-rows="matches">${found
+              .slice(0, ROWS_SHOWN)
+              .map((p) => row(p, p.cluster))
+              .join("")}</ol>`,
+          );
+        }
+        showCard(parts.join(""));
+      }
+
+      /** One paper and the papers closest to it, whether it is ours or placed from outside. */
       function describe(found) {
         const point = found.point;
-        const lines = [`<div class="cite">${escapeHtml(point.cite)}</div>`];
+        const lines = [];
+        if (fromList) {
+          lines.push('<button type="button" class="back" data-back>← Back to the list</button>');
+        }
+        lines.push(`<div class="cite">${escapeHtml(point.cite)}</div>`);
         if (found.in_library) {
-          lines.push(
-            '<div class="meta">Already in the library — shown at its own place on the map.</div>',
-          );
+          const ownDot = data.find((d) => d.doi === point.doi);
+          const meta = ["In the library", point.year, ownDot?.cluster].filter(Boolean).join(" · ");
+          lines.push(`<div class="meta">${escapeHtml(String(meta))}</div>`);
         } else {
           const percent = Math.round((found.confidence || 0) * 100);
           const where = found.duplicate_of
@@ -733,26 +801,11 @@ export function libraryMapView(store) {
           }
         }
         if (found.neighbours.length) {
-          // The citation clips the title, so the full one follows it and wraps.
           const items = found.neighbours
-            .map((n) => {
-              const doi = String(n.doi || "");
-              const title =
-                n.title && n.title !== n.cite && n.title !== doi
-                  ? `<span class="title">${escapeHtml(n.title)}</span>`
-                  : "";
-              const meta = [n.year, `${Math.round((n.score || 0) * 100)}% similar`]
-                .filter(Boolean)
-                .join(" · ");
-              const link = doi.startsWith("10.")
-                ? ` · <a href="https://doi.org/${escapeHtml(encodeURI(doi))}" target="_blank" rel="noopener noreferrer">doi.org/${escapeHtml(doi)}</a>`
-                : "";
-              return `<li data-doi="${escapeHtml(doi)}"><button type="button" class="pick"><span class="cite">${escapeHtml(n.cite || n.title)}</span>${title}</button>
-                <div class="meta">${escapeHtml(String(meta))}${link}</div></li>`;
-            })
+            .map((n) => row(n, `${Math.round((n.score || 0) * 100)}% similar`))
             .join("");
           lines.push(
-            `<div class="neighbours-head">Closest in the library <span>by embedding similarity</span></div><ol class="neighbours">${items}</ol>`,
+            `<div class="neighbours-head">Closest in the library <span>by embedding similarity</span></div><ol class="neighbours" data-rows="closest">${items}</ol>`,
           );
         }
         return lines.join("");
@@ -774,63 +827,71 @@ export function libraryMapView(store) {
         });
       }
 
-      card.addEventListener("click", (e) => {
-        const row = e.target.closest("li[data-doi]");
-        // the DOI link opens doi.org and leaves the map where it is
-        if (!row || e.target.closest("a")) return;
-        focusNeighbour(row.dataset.doi);
-      });
-
-      function clearLookup() {
-        placed = null;
-        card.hidden = true;
-        if (selected?.placed) select(null);
-        if (data.length) draw();
-      }
-
-      async function lookupDoi() {
-        const raw = $("doi-input").value.trim();
-        if (!raw || busy) return;
-        busy = true;
-        const button = $("doi-go");
-        button.disabled = true;
-        button.textContent = "Looking up…";
+      /**
+       * Show one paper with its closest. The same request serves a paper of ours,
+       * which costs nothing, and one from outside, which spends a lookup.
+       */
+      async function lookup(doi, back) {
+        const ticket = ++asked;
+        const button = card.querySelector("[data-place]");
+        if (button) {
+          button.disabled = true;
+          button.textContent = "Looking up…";
+        }
         // the on-screen keyboard would cover the map the paper lands on
-        if (noHover.matches) $("doi-input").blur();
+        if (noHover.matches) $("paper-search").blur();
         try {
-          const found = await postJSON("api/publication-map/lookup", { doi: raw });
-          if (disposed) return;
+          const found = await postJSON("api/publication-map/lookup", { doi });
+          if (disposed || ticket !== asked) return;
           placed = found;
+          fromList = back;
+          if (selected) select(null);
           showCard(describe(found));
-          draw();
+          if (data.length) draw();
         } catch (e) {
-          if (disposed) return;
-          // The toast goes; the card stays while the DOI is being corrected.
+          if (disposed || ticket !== asked) return;
+          // The toast goes; the card stays until the search is changed.
           toast(e.message, "bad");
           placed = null;
+          if (selected?.placed) select(null);
           showCard(escapeHtml(e.message), true);
           if (data.length) draw();
-        } finally {
-          busy = false;
-          button.disabled = false;
-          button.textContent = "Place on the map";
         }
       }
 
-      $("doi-go").addEventListener("click", lookupDoi);
-      $("doi-input").addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          lookupDoi();
-        }
+      /** Back to what the search field says, dropping any paper the card held. */
+      function backToSearch() {
+        asked += 1;
+        placed = null;
+        fromList = false;
+        if (selected?.placed) select(null);
+        if (!data.length) return;
+        renderMatches();
+        draw();
+      }
+
+      card.addEventListener("click", (e) => {
+        if (e.target.closest("[data-back]")) return backToSearch();
+        // the DOI the button was offered for, not whatever the field holds by now
+        const place = e.target.closest("[data-place]");
+        if (place) return lookup(place.dataset.place, false);
+        const rowEl = e.target.closest("li[data-doi]");
+        // the DOI link opens doi.org and leaves the map where it is
+        if (!rowEl || e.target.closest("a")) return;
+        if (rowEl.closest("[data-rows=matches]")) {
+          rowEl.classList.add("pending");
+          lookup(rowEl.dataset.doi, true);
+        } else focusNeighbour(rowEl.dataset.doi);
       });
-      // Emptying the field undoes the placement, the way emptying the search
-      // field undoes a search. That covers the input's own clear button, a
-      // selection deleted by hand, and the Escape key alike.
-      $("doi-input").addEventListener("input", () => {
-        // An error card belongs to the DOI that caused it, so it goes too.
-        if (!$("doi-input").value.trim() && (placed || !card.hidden)) clearLookup();
-      });
+
+      /** The field changed: list what it finds, or show at once the one paper of ours it names. */
+      function onSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = 0;
+        backToSearch();
+        const asDoi = bareDoi($("paper-search").value);
+        if (data.some((d) => d.doi === asDoi)) lookup(asDoi, false);
+      }
 
       const slider = $("clusters");
       let timer = 0;
@@ -840,14 +901,25 @@ export function libraryMapView(store) {
         timer = setTimeout(() => load(Number(slider.value)), 250);
       });
       let searchTimer = 0;
+      // Emptying the field clears the list and any paper shown, whether by its
+      // own clear button, a selection deleted by hand, or the Escape key.
       $("paper-search").addEventListener("input", () => {
         clearTimeout(searchTimer);
-        searchTimer = setTimeout(() => data.length && draw(), 200);
+        searchTimer = setTimeout(onSearch, 200);
       });
-      $("paper-search").addEventListener("change", () => data.length && draw());
-      // the search key on an on-screen keyboard closes it, so the hits are in view
       $("paper-search").addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && noHover.matches) e.target.blur();
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        // a search still waiting out its pause runs now, so Enter acts on what the field says
+        if (searchTimer) onSearch();
+        if (placed) return;
+        const found = search(e.target.value);
+        const asDoi = bareDoi(e.target.value);
+        // Enter takes the only thing on offer: one match, or a DOI to place.
+        if (found.length === 1) lookup(found[0].doi, true);
+        else if (!found.length && DOI_PATTERN.test(asDoi)) lookup(asDoi, false);
+        // the search key on an on-screen keyboard closes it, so the hits are in view
+        else if (noHover.matches) e.target.blur();
       });
 
       // The fitted zoom depends on the frame, and the label colours on the theme.

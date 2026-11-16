@@ -2871,7 +2871,7 @@ html:has(.viz-frame.expanded) {
   overflow-wrap: anywhere;
 }
 
-/* ---------- placing a DOI on the map ---------- */
+/* ---------- finding a paper, ours or from outside ---------- */
 
 /* One control per row, each under the line that says what it is for. */
 .map-row {
@@ -2916,6 +2916,22 @@ html:has(.viz-frame.expanded) {
   margin-top: 4px;
 }
 
+.lookup-card .back {
+  display: block;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.lookup-card .place .btn {
+  margin-top: 8px;
+}
+
 .lookup-card .neighbours-head {
   margin-top: 10px;
   color: var(--ink);
@@ -2944,6 +2960,11 @@ html:has(.viz-frame.expanded) {
   padding: 7px 4px;
   border-bottom: 1px solid var(--hair);
   cursor: pointer;
+}
+
+/* a row whose paper is being looked up */
+.lookup-card .neighbours li.pending {
+  opacity: 0.55;
 }
 
 .lookup-card .neighbours .pick {
