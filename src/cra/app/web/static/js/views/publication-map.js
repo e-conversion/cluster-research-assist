@@ -889,6 +889,11 @@ export function libraryMapView(store) {
           if (selected) select(null);
           showCard(describe(found));
           if (data.length) draw();
+          // On a phone the card fills the screen above the map; bring the map up.
+          wrap.scrollIntoView({
+            block: "nearest",
+            behavior: reduceMotion.matches ? "auto" : "smooth",
+          });
         } catch (e) {
           if (disposed || ticket !== asked) return;
           // The toast goes; the card stays until the search is changed.
