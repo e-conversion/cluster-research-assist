@@ -200,12 +200,12 @@ export function libraryMapView(store) {
       container.innerHTML = `
         <div class="page">
           <h1>Publication Map</h1>
-          <p class="lede">UMAP layout of the paper embeddings; KMeans clusters (computed in the full 384-d space)
-            labeled with their top title keywords. Hover over a point for its citation; click or tap it for the details.</p>
+          <p class="lede">UMAP layout of the paper embeddings, grouped by hierarchical clustering in the full 384-d space.
+            Hover over a point for its citation; click or tap it for the details.</p>
           <div class="map-row">
-            <p class="row-hint">Adjust number of clusters</p>
+            <p class="row-hint">More groups split one group at a time; the others stay as they are</p>
             <div class="map-toolbar">
-              <label>Clusters <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
+              <label>Groups <input type="range" id="clusters" min="2" max="20" value="8"> <b id="clusters-n">8</b></label>
             </div>
           </div>
           <div class="map-row">
@@ -626,7 +626,9 @@ export function libraryMapView(store) {
         if (object) {
           const meta = object.placed
             ? "Not in the library · placed among its nearest neighbours"
-            : [object.year, object.cluster].filter(Boolean).join(" · ");
+            : [object.year, object.cluster, object.edge && "on the edge of this group"]
+                .filter(Boolean)
+                .join(" · ");
           const doi = String(object.doi || "");
           const title =
             object.title && object.title !== object.cite && object.title !== doi
@@ -646,11 +648,12 @@ export function libraryMapView(store) {
       function renderLegend(legend) {
         const el = $("legend");
         el.innerHTML =
-          '<div class="t">Cluster (top title keywords)</div>' +
+          '<div class="t">Groups</div>' +
           legend
             .map(
+              // the names may come from a model, so they are text, never markup
               (e) =>
-                `<span><i style="background:rgb(${e.color.join(",")})"></i>${e.cluster}</span>`,
+                `<span${e.hint ? ` title="${escapeHtml(e.hint)}"` : ""}><i style="background:rgb(${e.color.join(",")})"></i>${escapeHtml(e.cluster)}</span>`,
             )
             .join("");
       }

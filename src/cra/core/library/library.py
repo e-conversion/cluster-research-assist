@@ -347,7 +347,8 @@ def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:
     x, y = tuple(raw.get("x") or ()), tuple(raw.get("y") or ())
     if len(x) != len(dois) or len(y) != len(dois):
         raise LibraryError(f"{FILES['map']}: one coordinate pair per DOI expected")
-    clusters = {}
+    groups = {g.get("id"): g for g in raw.get("groups") or () if isinstance(g, dict)}
+    clusters, centrality, hints = {}, {}, {}
     for key, entry in (raw.get("clusters") or {}).items():
         assignments = tuple(int(a) for a in entry.get("assignments") or ())
         if len(assignments) != len(dois):
@@ -355,8 +356,28 @@ def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:
                 f"{FILES['map']}: clustering {key} does not cover every DOI"
             )
         clusters[int(key)] = (assignments, tuple(entry.get("labels") or ()))
+        ranks = tuple(int(r) for r in entry.get("centrality") or ())
+        if len(ranks) == len(dois):
+            centrality[int(key)] = ranks
+        if entry.get("groups"):
+            hints[int(key)] = tuple(_hint(groups.get(g) or {}) for g in entry["groups"])
     if not clusters:
         raise LibraryError(f"{FILES['map']}: no clusterings")
     return PublicationMap(
-        dois=dois, x=x, y=y, clusters=clusters, model=str(raw.get("model", ""))
+        dois=dois,
+        x=x,
+        y=y,
+        clusters=clusters,
+        model=str(raw.get("model", "")),
+        centrality=centrality,
+        hints=hints,
     )
+
+
+def _hint(group: dict[str, Any]) -> str:
+    """What a group's papers share, for whoever wonders where its name comes from."""
+    terms = [str(t) for t in group.get("terms") or ()]
+    if not terms:
+        return ""
+    share = round(100 * float(group.get("coverage") or 0))
+    return f"Common words: {', '.join(terms)} (in {share}% of its {group.get('size', 0)} papers)"

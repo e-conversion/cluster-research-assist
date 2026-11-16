@@ -137,8 +137,10 @@ def cmd_library_build(args: argparse.Namespace) -> int:
         library.embeddings.vectors,
         {doi: paper.title for doi, paper in library.papers.items()},
         model=library.embeddings.model,
+        abstracts={doi: paper.abstract for doi, paper in library.papers.items()},
     )
     target = directory / FILES["map"]
+    _name_groups(args, settings, payload, library, target)
     target.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     _out(f"wrote {target} in {time.perf_counter() - started:.1f}s")
 
@@ -152,6 +154,64 @@ def cmd_library_build(args: argparse.Namespace) -> int:
     )
     _out(f"wrote {directory / manifest.MANIFEST}")
     return 0
+
+
+def _name_groups(
+    args: argparse.Namespace, settings: Settings, payload: dict, library, target: Path
+) -> None:
+    """Have the model name the map's groups, then print them for a review.
+
+    Names from the map being replaced are kept for groups whose papers did not
+    change, so a rebuild neither calls the model for them nor renames them.
+    """
+    import json
+
+    import httpx
+
+    from cra.assistant.llm.client import ChatClient
+    from cra.assistant.naming import name_groups
+    from cra.core.library.derive import relabel
+
+    model = args.model or settings.llm_model or next(iter(settings.llm_models), "")
+    if args.no_names or not model or not settings.llm_api_key.get_secret_value():
+        if not args.no_names:
+            _out(
+                "group names: common words (set CRA_LLM_API_KEY and CRA_LLM_MODEL to have the model name them)"
+            )
+    else:
+        previous: dict[str, str] = {}
+        try:
+            old = json.loads(target.read_text(encoding="utf-8"))
+            previous = {
+                g["fingerprint"]: g["name"]
+                for g in old.get("groups") or ()
+                if g.get("named_by") == "model"
+            }
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            pass
+
+        def paper(doi: str) -> tuple[str, str]:
+            record = library.papers.get(doi)
+            return (record.title, record.abstract) if record else (doi, "")
+
+        async def run():
+            async with httpx.AsyncClient() as http:
+                client = ChatClient(settings, http)
+                return await name_groups(
+                    client, settings, model, payload, paper, previous
+                )
+
+        outcome = asyncio.run(run())
+        _out(
+            f"group names by {model}: {outcome.named} new, {outcome.kept} kept"
+            + (f", {outcome.failed} left as common words" if outcome.failed else "")
+        )
+        relabel(payload)
+    for group in payload["groups"]:
+        _out(
+            f"  {group['id']:>4} {group['size']:>5} papers  {round(100 * group['coverage']):>3}%  "
+            f"{group['name']}  [{', '.join(group['terms'])}]"
+        )
 
 
 def cmd_library_manifest(args: argparse.Namespace) -> int:
@@ -799,6 +859,16 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument(
             "directory", nargs="?", type=Path, help="default: CRA_LIBRARY_PATH"
         )
+        if name == "build":
+            p.add_argument(
+                "--model",
+                help="the model that names the map's groups (default: CRA_LLM_MODEL)",
+            )
+            p.add_argument(
+                "--no-names",
+                action="store_true",
+                help="label the map's groups with their common words only",
+            )
         p.set_defaults(func=func)
 
     migrate = library.add_parser(
