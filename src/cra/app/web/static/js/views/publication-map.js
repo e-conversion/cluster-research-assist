@@ -808,7 +808,15 @@ export function libraryMapView(store) {
         lines.push(`<div class="cite">${escapeHtml(point.cite)}</div>`);
         if (found.in_library) {
           const ownDot = data.find((d) => d.doi === point.doi);
-          const meta = ["In the library", point.year, ownDot?.cluster].filter(Boolean).join(" · ");
+          // the same line the map's own card gives this paper
+          const meta = [
+            "In the library",
+            point.year,
+            ownDot?.cluster,
+            ownDot?.edge && "on the edge of this group",
+          ]
+            .filter(Boolean)
+            .join(" · ");
           lines.push(`<div class="meta">${escapeHtml(String(meta))}</div>`);
         } else {
           const percent = Math.round((found.confidence || 0) * 100);
