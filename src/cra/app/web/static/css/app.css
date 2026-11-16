@@ -755,7 +755,8 @@ body:not([data-route="chat"]) #new-chat {
 }
 
 .admin input,
-.admin select {
+.admin select,
+.admin textarea {
   background: var(--panel);
   color: var(--ink);
   font: inherit;
@@ -766,6 +767,12 @@ body:not([data-route="chat"]) #new-chat {
 
 .admin .val {
   width: 220px;
+}
+
+.admin textarea.val {
+  width: min(480px, 60vw);
+  font: 13px/1.5 var(--mono);
+  resize: vertical;
 }
 
 .admin .src {
@@ -840,6 +847,85 @@ body:not([data-route="chat"]) #new-chat {
 
 .signin.wide {
   width: min(520px, calc(100vw - 32px));
+}
+
+/* the home page: what the service offers on the left, signing in on the right */
+.signin.with-about {
+  width: min(900px, calc(100vw - 32px));
+  margin-top: 8vh;
+  display: grid;
+  grid-template:
+    "head body" auto
+    "about body" 1fr
+    / minmax(0, 1fr) 340px;
+  column-gap: 40px;
+  padding: 36px 40px 30px;
+  text-align: left;
+}
+
+.with-about .signin-head {
+  grid-area: head;
+}
+
+.with-about .signin-head .logo {
+  justify-content: flex-start;
+  margin: 0 0 16px;
+}
+
+.with-about .signin-head h1 {
+  margin-bottom: 14px;
+}
+
+.signin-about {
+  grid-area: about;
+  color: var(--ink-2);
+  font-size: 15px;
+  scroll-margin-top: 16px;
+}
+
+.with-about .signin-body {
+  grid-area: body;
+  align-self: center;
+  padding-left: 40px;
+  border-left: 1px solid var(--hair);
+  text-align: center;
+}
+
+@media (width <= 760px) {
+  .signin.with-about {
+    margin-top: 4vh;
+    grid-template:
+      "head"
+      "body"
+      "about"
+      / minmax(0, 1fr);
+    padding: 30px 22px 24px;
+  }
+
+  .with-about .signin-head {
+    text-align: center;
+  }
+
+  .with-about .signin-head .logo {
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .with-about .signin-body {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .signin-about {
+    margin-top: 26px;
+    padding-top: 22px;
+    border-top: 1px solid var(--hair);
+  }
+}
+
+.about-page .md {
+  margin-top: 14px;
+  max-width: 70ch;
 }
 
 .consent {
