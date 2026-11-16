@@ -205,7 +205,8 @@ def list_papers(
     from cra.core.library.text import fold
 
     library = ctx.indexes.library
-    if category and library.map is None:
+    area_map = library.map
+    if category and area_map is None:
         raise ToolError("This library has no publication map, so papers have no area.")
     wanted_author, wanted_journal = fold(author), fold(journal)
     wanted_area = fold(category)
@@ -217,7 +218,10 @@ def list_papers(
         and (not wanted_journal or wanted_journal in fold(paper.journal))
         and (
             not wanted_area
-            or any(wanted_area in fold(g) for g in library.map.groups_of(paper.doi))
+            or (
+                area_map is not None
+                and any(wanted_area in fold(g) for g in area_map.groups_of(paper.doi))
+            )
         )
     ]
     matches.sort(key=lambda p: p.year, reverse=True)
@@ -228,7 +232,7 @@ def list_papers(
             paper_view(
                 p,
                 abstract=0,
-                group=library.map.group_of(p.doi) if library.map else "",
+                group=area_map.group_of(p.doi) if area_map else "",
             )
             for p in matches[:limit]
         ],
