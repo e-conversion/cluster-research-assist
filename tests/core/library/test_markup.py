@@ -41,6 +41,9 @@ MATHML = (
         (r"{DFT} study of the {111} facet", "DFT study of the {111} facet"),
         ("Costs of $5 to $10", "Costs of $5 to $10"),
         (r"\alpha-Fe and \unknown", r"α-Fe and \unknown"),
+        # scraped titles lose the {} after a dash, so the next word runs on
+        (r"Fe\textendashN\textendashC catalysts", "Fe–N–C catalysts"),
+        (r"MOF-74 Films\textemdashImpact", "MOF-74 Films—Impact"),
         ("  Plain   title ", "Plain title"),
         ("", ""),
     ],
