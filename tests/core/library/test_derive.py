@@ -112,6 +112,21 @@ def test_the_papers_shown_for_a_group_are_its_own(built):
         assert len(group["central"]) == min(derive.CENTRAL_PAPERS, len(members))
 
 
+def test_a_library_smaller_than_the_slider_gets_one_paper_per_group_at_the_top(
+    monkeypatch,
+):
+    monkeypatch.setattr(derive, "project", lambda v, *_: np.zeros((len(v), 2)))
+    vectors = np.random.default_rng(1).normal(size=(6, 16))
+    dois = tuple(f"10.1000/small.{i}" for i in range(6))
+    payload = derive.build_map(dois, vectors, {d: f"study {d}" for d in dois})
+    assert list(payload["clusters"]) == [str(k) for k in range(2, 7)]
+    for k in range(2, 7):
+        groups = partition(payload, k)
+        assert len(groups) == k
+        assert all(groups)
+    assert all(g["size"] for g in payload["groups"])
+
+
 def test_a_rare_word_and_a_repeated_one_do_not_describe_a_group():
     vocab = [{"co2", "co2 reduction", "copper"} for _ in range(19)] + [
         {"co2", "zeolite"}
