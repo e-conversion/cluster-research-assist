@@ -50,11 +50,20 @@ const bareDoi = (raw) =>
     .replace(/[}\s]+$/, "");
 // The server's test of a DOI (cra.core.retrieval.locate), so only what it would accept is offered.
 const DOI_PATTERN = /^10\.\d{4,9}\/\S+$/;
-// A term like this is a publication year, matched against the year alone, so
-// "2020" does not also find every DOI that happens to contain it.
-const YEAR = /^(1[89]|2\d)\d\d$/;
-// Rows the search list renders; the rest are ringed on the map all the same.
+// Four digits that are the year of some paper of ours filter by year alone, so
+// "2020" does not also find every DOI containing it; "1800 K" or "EXC 2089"
+// stay plain words.
+const YEAR = /^\d{4}$/;
+// Rows the search list renders.
 const ROWS_SHOWN = 200;
+// Above this many hits the rings would cover the map and say nothing.
+const RINGS_MAX = 100;
+/** Text as the search compares it: "Li₂O" and "Fe³⁺" match "li2o" and "fe3+", accents drop out. */
+const fold = (t) =>
+  String(t || "")
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
 
 /** A CSS colour token as [r, g, b], so the canvas labels follow the theme. */
 function tokenRGB(name) {
@@ -243,6 +252,10 @@ export function libraryMapView(store) {
       let placed = null; // the lookup answer for the paper in the card, ours or from outside
       let fromList = false; // whether the card can go back to the search's list
       let asked = 0; // the latest lookup; an answer to an older one is dropped
+      // A lookup on its way, { doi, answer }: asking again for the same DOI waits
+      // for it, since every request for a paper from outside spends an allowance.
+      let inFlight = null;
+      let years = new Set(); // the publication years in the library
       let selected = null; // the point whose details the card shows
       let disposed = false;
       // A touch screen has no hover: a tap pins the card instead, and a
@@ -559,10 +572,12 @@ export function libraryMapView(store) {
         const asDoi = bareDoi(q);
         const exact = data.find((d) => d.cite === q || d.title === q || d.doi === asDoi);
         if (exact) return [exact];
-        const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+        const terms = fold(q).split(/\s+/).filter(Boolean);
         return data
           .filter((d) =>
-            terms.every((t) => (YEAR.test(t) ? String(d.year) === t : d._hay.includes(t))),
+            terms.every((t) =>
+              YEAR.test(t) && years.has(t) ? String(d.year) === t : d._hay.includes(t),
+            ),
           )
           .sort(
             (a, b) =>
@@ -572,8 +587,11 @@ export function libraryMapView(store) {
       }
 
       /** While the card shows one paper, the map frames it with its closest; otherwise the search's hits. */
-      const currentMatches = () =>
-        placed ? new Set() : new Set(search($("paper-search").value).map((d) => d.doi));
+      function currentMatches() {
+        if (placed) return new Set();
+        const found = search($("paper-search").value);
+        return new Set(found.length > RINGS_MAX ? [] : found.map((d) => d.doi));
+      }
 
       /** Render and frame `matches`: the search field's hits unless a caller names its own. */
       function draw(matches = currentMatches()) {
@@ -696,9 +714,11 @@ export function libraryMapView(store) {
           // One haystack per paper, built once: doing it per keystroke would
           // rebuild every string on a library of a few thousand.
           for (const d of data) {
-            d._hay =
-              `${d.cite || ""} ${d.title || ""} ${d.au || ""} ${d.year || ""} ${d.doi}`.toLowerCase();
+            d._hay = fold(
+              `${d.cite || ""} ${d.title || ""} ${d.au || ""} ${d.year || ""} ${d.doi}`,
+            );
           }
+          years = new Set(data.map((d) => String(d.year || "")).filter(Boolean));
           renderLegend(payload.legend);
           marks = clusterMarks(data, payload.legend);
           plan();
@@ -706,7 +726,8 @@ export function libraryMapView(store) {
           if (selected && !selected.placed)
             select(data.find((d) => d.doi === selected.doi) || null);
           status.hidden = true;
-          if (!placed && $("paper-search").value.trim()) renderMatches();
+          if (placed) showCard(describe(placed));
+          else if ($("paper-search").value.trim()) renderMatches();
           draw();
         } catch (e) {
           status.textContent = e.message;
@@ -841,7 +862,16 @@ export function libraryMapView(store) {
         // the on-screen keyboard would cover the map the paper lands on
         if (noHover.matches) $("paper-search").blur();
         try {
-          const found = await postJSON("api/publication-map/lookup", { doi });
+          if (inFlight?.doi !== doi) {
+            const answer = postJSON("api/publication-map/lookup", { doi });
+            inFlight = { doi, answer };
+            answer
+              .finally(() => {
+                if (inFlight?.answer === answer) inFlight = null;
+              })
+              .catch(() => {});
+          }
+          const found = await inFlight.answer;
           if (disposed || ticket !== asked) return;
           placed = found;
           fromList = back;
@@ -912,7 +942,7 @@ export function libraryMapView(store) {
         e.preventDefault();
         // a search still waiting out its pause runs now, so Enter acts on what the field says
         if (searchTimer) onSearch();
-        if (placed) return;
+        if (placed || inFlight) return;
         const found = search(e.target.value);
         const asDoi = bareDoi(e.target.value);
         // Enter takes the only thing on offer: one match, or a DOI to place.
