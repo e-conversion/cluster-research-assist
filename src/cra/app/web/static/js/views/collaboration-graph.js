@@ -11,6 +11,18 @@ const D3_INTEGRITY = "sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6
 /** A ranked name without its titles: "Prof. Dr. Ada Lovelace" -> "Ada Lovelace". */
 const untitled = (name) => name.replace(/^(Prof\.|Dr\.|Prof\. Dr\.)\s*/, "");
 
+/** A PI's papers as the map names them, newest first, each leading to its DOI. */
+function paperList(rows) {
+  if (!rows.length) return '<div class="hintline">No papers listed.</div>';
+  const items = rows
+    .map(
+      (p) =>
+        `<li><a href="https://doi.org/${escapeHtml(encodeURI(p.doi))}" target="_blank" rel="noopener noreferrer">${escapeHtml(p.cite)}</a></li>`,
+    )
+    .join("");
+  return `<ul>${items}</ul>`;
+}
+
 export function collaborationView() {
   return {
     mount(container) {
@@ -318,12 +330,42 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
       <h3>${escapeHtml(n.name)}</h3><div class="grp">${escapeHtml(n.group || "—")}</div>
       <div class="nums"><div><div class="n" style="color:${c}">${n.deg}</div><div class="l">collaborator${n.deg === 1 ? "" : "s"}</div></div>
         <div><div class="n">${n.papers}</div><div class="l">papers</div></div></div>
-      ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : '<div class="hintline">No co-authorships recorded in the library.</div>'}`;
+      ${n.deg ? `<h4>Most shared with</h4><ul>${tops}</ul>` : '<div class="hintline">No co-authorships recorded in the library.</div>'}
+      <h4>Papers</h4><div class="papers"><div class="hintline">Loading…</div></div>`;
     card.querySelector(".close")?.addEventListener("click", () => {
       pin = null;
       apply(null);
     });
     card.classList.add("on");
+    shown = id;
+    const list = card.querySelector(".papers");
+    papersOf(id).then(
+      (rows) => {
+        // the pointer may have moved on to another PI while this was asked for
+        if (shown === id) list.innerHTML = paperList(rows);
+      },
+      () => {
+        if (shown === id) list.innerHTML = '<div class="hintline">Papers not available.</div>';
+      },
+    );
+  }
+  // The papers are asked for when a card opens, not sent with the graph: the
+  // page loads with counts only, and a hover over many PIs asks once for each.
+  const asked = new Map();
+  let shown = null;
+  function papersOf(id) {
+    if (!asked.has(id))
+      asked.set(
+        id,
+        getJSON(`api/collaboration-graph/${encodeURIComponent(id)}/papers`).then(
+          (body) => body.papers,
+          (e) => {
+            asked.delete(id); // a failed request is tried again next time
+            throw e;
+          },
+        ),
+      );
+    return asked.get(id);
   }
   // settle the layout before first paint so it opens at rest, not mid-jitter
   for (let i = 0; i < 260; i++) sim.tick();

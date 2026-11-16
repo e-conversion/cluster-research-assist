@@ -1871,6 +1871,50 @@ body:not([data-route="chat"]) #new-chat {
   border-color: var(--accent);
 }
 
+/* a password field with its Show/Hide toggle (reveal.js) sitting inside it */
+.reveal {
+  position: relative;
+  display: flex;
+}
+
+.reveal input {
+  flex: 1;
+  min-width: 0;
+  padding-right: 64px;
+}
+
+/* Edge draws its own eye in the field; one control is enough */
+.reveal input::-ms-reveal {
+  display: none;
+}
+
+.reveal-toggle {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  bottom: 3px;
+  min-width: 54px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(7px * var(--radius-scale));
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .reveal-toggle:hover {
+    background: var(--hair);
+    color: var(--ink);
+  }
+}
+
+.reveal-toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
+
 .radio-row {
   display: flex;
   gap: 18px;
@@ -2784,6 +2828,23 @@ html:has(.viz-frame.expanded) {
   color: var(--faint);
 }
 
+/* A prolific PI lists dozens of papers: the list scrolls on its own, so the
+   name and counts above it stay in view. Citations wrap rather than clip. */
+.graph-card .papers ul {
+  max-height: 260px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  gap: 7px;
+}
+
+.graph-card .papers li {
+  /* a flex column under a max-height squeezes its rows instead of scrolling */
+  flex-shrink: 0;
+  display: block;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 /* ---------- placing a DOI on the map ---------- */
 
 /* One control per row, each under the line that says what it is for. */
@@ -2829,13 +2890,66 @@ html:has(.viz-frame.expanded) {
   margin-top: 4px;
 }
 
-.lookup-card ol {
-  margin: 6px 0 0;
-  padding-left: 20px;
+.lookup-card .neighbours-head {
+  margin-top: 10px;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 13px;
 }
 
-.lookup-card li {
-  margin: 2px 0;
+.lookup-card .neighbours-head span {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* Eight rows with wrapped titles are taller than a phone screen: the list
+   scrolls inside the card, so the map below stays one swipe away. */
+.lookup-card .neighbours {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  max-height: min(340px, 55vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--hair);
+}
+
+.lookup-card .neighbours li {
+  padding: 7px 4px;
+  border-bottom: 1px solid var(--hair);
+  cursor: pointer;
+}
+
+.lookup-card .neighbours .pick {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lookup-card .neighbours .title {
+  display: block;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+.lookup-card .neighbours .meta {
+  margin-top: 2px;
+}
+
+.lookup-card .neighbours a {
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .lookup-card .neighbours li:hover {
+    background: var(--panel);
+  }
 }
 
 /* ---------- touch screens ---------- */
@@ -2906,6 +3020,14 @@ html:has(.viz-frame.expanded) {
   .graph-frame .reset {
     padding: 8px 14px;
     font-size: 13px;
+  }
+
+  /* the whole height of the field, for a thumb */
+  .reveal-toggle {
+    top: 0;
+    bottom: 0;
+    right: 0;
+    min-width: 60px;
   }
 
   /* iOS zooms the whole page into any field under 16px when it takes focus */
@@ -3207,6 +3329,10 @@ html:has(.viz-frame.expanded) {
     inset: auto 8px 8px;
     width: auto;
     max-height: 48%;
+  }
+
+  .graph-card .papers ul {
+    max-height: 140px;
   }
 }
 

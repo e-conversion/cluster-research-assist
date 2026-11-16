@@ -1,4 +1,6 @@
-"""The publication map, and placing a DOI the library may not have."""
+"""The publication map, placing a DOI the library may not have, and a PI's papers."""
+
+from dataclasses import replace
 
 import httpx
 import pytest
@@ -8,6 +10,7 @@ from fakes import FakeEncoder
 from library_builder import write_library
 
 from cra.app.web.factory import create_app
+from cra.app.web.route_views import NEIGHBOURS_SHOWN
 from cra.core.retrieval.indexes import Indexes
 
 CROSSREF = "https://api.crossref.org"
@@ -115,6 +118,19 @@ async def test_an_outside_paper_is_placed_among_its_neighbours(client):
     assert body["has_abstract"] is True
     assert body["neighbours"]
     assert body["point"]["cite"].startswith("Lovelace, ")
+
+
+@respx.mock
+async def test_every_neighbour_carries_what_its_row_shows(client):
+    """The closest list shows citation, title, year, similarity and a DOI link."""
+    respx.get(WORK_URL).mock(return_value=crossref_ok())
+    _, body = await lookup(client, OUTSIDE)
+    assert 0 < len(body["neighbours"]) <= NEIGHBOURS_SHOWN
+    for n in body["neighbours"]:
+        assert {"doi", "cite", "title", "year", "score", "x", "y"} <= n.keys()
+        assert isinstance(n["score"], float)
+    scores = [n["score"] for n in body["neighbours"]]
+    assert scores == sorted(scores, reverse=True)
 
 
 @respx.mock
@@ -244,3 +260,43 @@ async def test_a_deployment_without_an_encoder_says_what_is_missing(tmp_path):
         status, body = await lookup(client, OUTSIDE)
     assert status == 503
     assert body["reason"] == "semantic_unavailable"
+
+
+# ---------- a PI's papers, for the collaboration card ----------
+
+
+async def test_a_pis_papers_come_newest_first_as_citations(client):
+    response = await client.get("/api/collaboration-graph/1/papers")
+    assert response.status_code == 200
+    rows = (await response.get_json())["papers"]
+    assert [(r["doi"], r["year"]) for r in rows] == [
+        ("10.1000/alpha", "2024"),
+        ("10.1000/beta", "2023"),
+    ]
+    assert all(r["cite"] and r["cite"] != r["doi"] for r in rows)
+
+
+async def test_a_listed_paper_the_library_lacks_is_named_by_its_doi(app, client):
+    library = app.extensions["cra"].library
+    first, *rest = library.pis
+    elsewhere = "10.9999/elsewhere"
+    library.pis = (
+        replace(first, publication_dois=(elsewhere, *first.publication_dois)),
+        *rest,
+    )
+    rows = (await (await client.get("/api/collaboration-graph/1/papers")).get_json())[
+        "papers"
+    ]
+    assert len(rows) == 3
+    # no year to place it by, so it follows the dated ones
+    assert rows[-1] == {"doi": elsewhere, "cite": elsewhere, "year": ""}
+
+
+async def test_a_node_with_no_pi_behind_it_is_not_found(client):
+    response = await client.get("/api/collaboration-graph/nobody/papers")
+    assert response.status_code == 404
+
+
+async def test_a_pis_papers_need_a_signed_in_caller(app):
+    response = await app.test_client().get("/api/collaboration-graph/1/papers")
+    assert response.status_code == 401

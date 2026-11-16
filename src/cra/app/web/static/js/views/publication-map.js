@@ -567,8 +567,9 @@ export function libraryMapView(store) {
         return found;
       }
 
-      function draw() {
-        const { found, viewState } = fit(matchesFor($("paper-search").value));
+      /** Render and frame `matches`: the search field's hits unless a caller names its own. */
+      function draw(matches = matchesFor($("paper-search").value)) {
+        const { found, viewState } = fit(matches);
         hits = found;
         const { Deck, OrthographicView, LinearInterpolator } = window.deck;
         if (!deckInst) {
@@ -732,14 +733,53 @@ export function libraryMapView(store) {
           }
         }
         if (found.neighbours.length) {
+          // The citation clips the title, so the full one follows it and wraps.
           const items = found.neighbours
-            .slice(0, 5)
-            .map((n) => `<li>${escapeHtml(n.cite)}</li>`)
+            .map((n) => {
+              const doi = String(n.doi || "");
+              const title =
+                n.title && n.title !== n.cite && n.title !== doi
+                  ? `<span class="title">${escapeHtml(n.title)}</span>`
+                  : "";
+              const meta = [n.year, `${Math.round((n.score || 0) * 100)}% similar`]
+                .filter(Boolean)
+                .join(" · ");
+              const link = doi.startsWith("10.")
+                ? ` · <a href="https://doi.org/${escapeHtml(encodeURI(doi))}" target="_blank" rel="noopener noreferrer">doi.org/${escapeHtml(doi)}</a>`
+                : "";
+              return `<li data-doi="${escapeHtml(doi)}"><button type="button" class="pick"><span class="cite">${escapeHtml(n.cite || n.title)}</span>${title}</button>
+                <div class="meta">${escapeHtml(String(meta))}${link}</div></li>`;
+            })
             .join("");
-          lines.push(`<div class="meta">Closest in the library:</div><ol>${items}</ol>`);
+          lines.push(
+            `<div class="neighbours-head">Closest in the library <span>by embedding similarity</span></div><ol class="neighbours">${items}</ol>`,
+          );
         }
         return lines.join("");
       }
+
+      /** Frame a paper from the closest list on the map and open its card. */
+      function focusNeighbour(doi) {
+        const neighbour = placed?.neighbours.find((n) => n.doi === doi);
+        if (!neighbour) return;
+        // The map's own point carries the cluster the card names; before the
+        // map has loaded, the neighbour as the lookup sent it is all there is.
+        const paper = data.find((d) => d.doi === doi);
+        if (paper) draw(new Set([doi]));
+        select(paper || neighbour);
+        // On a phone the list fills the screen above the map; bring the map up.
+        wrap.scrollIntoView({
+          block: "nearest",
+          behavior: reduceMotion.matches ? "auto" : "smooth",
+        });
+      }
+
+      card.addEventListener("click", (e) => {
+        const row = e.target.closest("li[data-doi]");
+        // the DOI link opens doi.org and leaves the map where it is
+        if (!row || e.target.closest("a")) return;
+        focusNeighbour(row.dataset.doi);
+      });
 
       function clearLookup() {
         placed = null;
