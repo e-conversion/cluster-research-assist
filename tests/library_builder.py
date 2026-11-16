@@ -114,8 +114,70 @@ def write_library(
     publication_map: bool = True,
     proposal: bool = True,
     with_manifest: bool = True,
+    schema: str = "2.0",
 ) -> Path:
+    """The same content in either layout: 2.0 as clean records, 1.x as the
+    scraped CSV plus enrichment, with the PI brace quirk the loader repairs."""
     directory.mkdir(parents=True, exist_ok=True)
+    if schema == "1.0":
+        _write_papers_1(directory, abstracts=abstracts)
+    else:
+        _write_papers_2(directory, abstracts=abstracts)
+    _write_rest(
+        directory,
+        fulltexts=fulltexts,
+        pis=pis,
+        embeddings=embeddings,
+        graph=graph,
+        publication_map=publication_map,
+        proposal=proposal,
+        clean=schema != "1.0",
+    )
+    if with_manifest:
+        counts = {
+            "papers": 3,
+            "abstracts": 2 if abstracts else 0,
+            "fulltexts": 2 if fulltexts else 0,
+            "pis": 3 if pis else 0,
+            "graph_nodes": 3 if graph else 0,
+            "graph_edges": 2 if graph else 0,
+            "embeddings": 3 if embeddings else 0,
+            "map_points": 3 if publication_map else 0,
+        }
+        manifest.write(
+            directory,
+            counts,
+            schema_version=schema,
+            embedding_model="fake" if embeddings else "",
+        )
+    return directory
+
+
+DATASET = {"doi": "10.5281/zenodo.1", "title": "Raw spectra"}
+
+
+def _write_papers_2(directory: Path, *, abstracts: bool) -> None:
+    (directory / "papers.json").write_text(
+        json.dumps(
+            [
+                {
+                    "doi": p["doi"],
+                    "title": p["title"],
+                    "authors": p["authors"],
+                    "year": p["year"],
+                    "journal": (p["journal"] or "") if abstracts else "",
+                    "citation_count": p["citation_count"] if abstracts else None,
+                    "abstract": p["abstract"] if abstracts else "",
+                    "abstract_source": "test" if abstracts else "",
+                    "datasets": [DATASET] if p is PAPERS[0] else [],
+                }
+                for p in PAPERS
+            ]
+        )
+    )
+
+
+def _write_papers_1(directory: Path, *, abstracts: bool) -> None:
     with (directory / "papers.csv").open("w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(
@@ -151,8 +213,8 @@ def write_library(
                 "",
                 "2024",
                 "",
-                "10.5281/zenodo.1",
-                "Raw spectra",
+                DATASET["doi"],
+                DATASET["title"],
                 "dataset",
             ]
         )
@@ -171,6 +233,19 @@ def write_library(
                 }
             )
         )
+
+
+def _write_rest(
+    directory: Path,
+    *,
+    fulltexts: bool,
+    pis: bool,
+    embeddings: bool,
+    graph: bool,
+    publication_map: bool,
+    proposal: bool,
+    clean: bool,
+) -> None:
     if fulltexts:
         (directory / "fulltexts.json").write_text(
             json.dumps(
@@ -188,7 +263,20 @@ def write_library(
             )
         )
     if pis:
-        (directory / "pis.json").write_text(json.dumps(PIS))
+        people = PIS
+        if clean:
+            people = [
+                {
+                    **pi,
+                    "publication_dois": list(
+                        dict.fromkeys(
+                            d.lower().rstrip("}") for d in pi["publication_dois"]
+                        )
+                    ),
+                }
+                for pi in PIS
+            ]
+        (directory / "pis.json").write_text(json.dumps(people))
     if embeddings:
         dois = sorted(p["doi"] for p in PAPERS)
         rng = np.random.default_rng(0)
@@ -244,16 +332,3 @@ def write_library(
                 }
             )
         )
-    if with_manifest:
-        counts = {
-            "papers": 3,
-            "abstracts": 2 if abstracts else 0,
-            "fulltexts": 2 if fulltexts else 0,
-            "pis": 3 if pis else 0,
-            "graph_nodes": 3 if graph else 0,
-            "graph_edges": 2 if graph else 0,
-            "embeddings": 3 if embeddings else 0,
-            "map_points": 3 if publication_map else 0,
-        }
-        manifest.write(directory, counts, embedding_model="fake" if embeddings else "")
-    return directory

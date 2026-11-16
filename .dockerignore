@@ -4,6 +4,7 @@
 dist
 build
 tests/data
+library
 developer
 journal
 *.sqlite
