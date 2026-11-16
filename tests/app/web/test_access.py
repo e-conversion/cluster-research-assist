@@ -42,6 +42,7 @@ USER_ROUTES = {
     "/api/publication-map",
     "/api/publication-map/lookup",
     "/api/collaboration-graph",
+    "/api/collaboration-graph/<node>/papers",
     "/api/tokens",
     "/api/tokens/<token_id>",
     "/api/me",
