@@ -422,7 +422,8 @@ export function libraryMapView(store) {
             new TextLayer({
               id: "titles",
               data: titled,
-              pickable: false,
+              // a title is the largest target a paper has: a tap on it opens the paper
+              pickable: true,
               characterSet: "auto",
               fontFamily: font,
               getPosition: (d) => [d.x, d.y],
@@ -513,7 +514,7 @@ export function libraryMapView(store) {
             new TextLayer({
               id: "placed-label",
               data: [placed.point],
-              pickable: false,
+              pickable: true,
               characterSet: "auto",
               fontFamily: font,
               getPosition: (d) => [d.x, d.y],

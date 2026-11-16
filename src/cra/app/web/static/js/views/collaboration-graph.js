@@ -287,16 +287,21 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
     if (id) showCard(id);
     else card.classList.remove("on");
   }
+  // Only a mouse previews on hover. A tap sends emulated mouse events first: the
+  // preview card would open under the finger and take the click meant for the
+  // node, and iOS treats a page that changes on hover as needing a second tap.
   node
-    .on("mouseenter", (e, d) => {
-      if (!pin) apply(d.id);
+    .on("pointerenter", (e, d) => {
+      if (e.pointerType === "mouse" && !pin) apply(d.id);
     })
     .on("click", (e, d) => {
       e.stopPropagation();
       pin = pin === d.id ? null : d.id;
       apply(pin);
     });
-  svg.on("mouseleave", () => apply(pin));
+  svg.on("pointerleave", (e) => {
+    if (e.pointerType === "mouse") apply(pin);
+  });
   svg.on("click", () => {
     pin = null;
     apply(null);

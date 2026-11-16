@@ -146,6 +146,7 @@ textarea {
   font: var(--heading-weight) 20px/1 var(--display);
   letter-spacing: -0.01em;
   color: var(--heading-ink);
+  white-space: nowrap;
 }
 
 .nav {
@@ -1819,9 +1820,10 @@ body:not([data-route="chat"]) #new-chat {
 
 .dlg-body {
   --pad: 22px;
+  --pad-end: 20px;
 
   margin: 0;
-  padding: 18px var(--pad) 20px;
+  padding: 18px var(--pad) var(--pad-end);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1941,6 +1943,18 @@ body:not([data-route="chat"]) #new-chat {
   background: var(--panel);
   margin: -18px calc(-1 * var(--pad)) 0;
   padding: 18px var(--pad) 8px;
+}
+
+/* ... and the button that applies it, which on a phone sat below the screen;
+   like the head, it covers the padding it sticks in */
+.dlg.tall .dlg-foot {
+  position: sticky;
+  bottom: calc(-1 * var(--pad-end));
+  z-index: 2;
+  background: var(--panel);
+  margin: 6px calc(-1 * var(--pad)) calc(-1 * var(--pad-end));
+  padding: 10px var(--pad) var(--pad-end);
+  border-top: 1px solid var(--hair);
 }
 
 /* settings dialog */
@@ -3039,6 +3053,10 @@ html:has(.viz-frame.expanded) {
     padding: 12px;
   }
 
+  #connect-paste summary {
+    padding: 10px 0;
+  }
+
   .map-toolbar input[type="range"] {
     height: 32px;
   }
@@ -3076,16 +3094,31 @@ html:has(.viz-frame.expanded) {
   }
 }
 
+/* With the screen keyboard up, the chips under the composer left an iPhone SE
+   about 100px of answer; they come back as soon as the keyboard goes. */
+@media (hover: none) and (pointer: coarse) {
+  .composer:has(textarea:focus) .settings-row {
+    display: none;
+  }
+}
+
+/* Name, three labelled tabs and two labelled actions need about 1050px. Below
+   that the name wrapped out of the bar and the tabs scrolled their last entry
+   out of sight (a landscape phone, a portrait tablet), so name and action
+   labels go first; the tabs keep theirs down to the phone layout. */
+@media (width <= 1100px) {
+  .brand-name,
+  .act span {
+    display: none;
+  }
+}
+
 /* ---------- narrow screens ---------- */
 @media (width <= 720px) {
   .top {
     gap: 10px;
     padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0
       max(12px, env(safe-area-inset-left));
-  }
-
-  .brand-name {
-    display: none;
   }
 
   .nav {
@@ -3097,8 +3130,7 @@ html:has(.viz-frame.expanded) {
     font-size: 13px;
   }
 
-  .nav a span,
-  .act span {
+  .nav a span {
     display: none;
   }
 
@@ -3199,8 +3231,9 @@ html:has(.viz-frame.expanded) {
 
   .dlg-body {
     --pad: 16px;
+    --pad-end: max(18px, env(safe-area-inset-bottom));
 
-    padding: 16px max(var(--pad), env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom))
+    padding: 16px max(var(--pad), env(safe-area-inset-right)) var(--pad-end)
       max(var(--pad), env(safe-area-inset-left));
   }
 
