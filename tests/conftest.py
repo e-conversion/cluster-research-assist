@@ -12,6 +12,7 @@ from cra.app.history import migrate
 from cra.app.history.engine import make_engine, make_session_factory
 from cra.app.history.repository import Repository
 from cra.app.history.tables import Base
+from cra.app.ratelimit import RateLimiter
 from cra.app.web.factory import create_app
 from cra.config.settings import Settings
 
@@ -30,6 +31,20 @@ def _clean_environment(monkeypatch, tmp_path):
             monkeypatch.delenv(key)
     monkeypatch.setenv("PYTHON_COLORS", "0")  # argparse colours help on a tty (3.14)
     monkeypatch.chdir(tmp_path)
+
+
+@pytest.fixture(autouse=True)
+def _frozen_rate_limit_window(monkeypatch):
+    """The limiter counts in fixed windows of the real clock; a burst of
+    requests that straddles a window boundary would start counting afresh
+    and miss the limit it tests. Every app's limiter stays in one window;
+    test_ratelimit passes its own clock to test the windows themselves."""
+    unfrozen = RateLimiter.__init__
+
+    def frozen(self, clock=lambda: 0.0):
+        unfrozen(self, clock=clock)
+
+    monkeypatch.setattr(RateLimiter, "__init__", frozen)
 
 
 @pytest.fixture(autouse=True)
