@@ -1,7 +1,9 @@
 // The pages someone sees before they are signed in: the sign-in card, the
 // access request that follows an institutional sign-in without an account,
 // and the page a one-time set-password link opens. Everything the server or
-// the person sent is set as text, never as markup.
+// the person sent is set as text, never as markup, except the service
+// description, which an admin writes in Markdown and is sanitized.
+import { aboutText, isAbout } from "./about.js";
 import { ApiError, getJSON, postJSON } from "./api.js";
 import { logo } from "./brand.js";
 import { conceal, revealable } from "./reveal.js";
@@ -140,11 +142,9 @@ function tabbed(panels) {
 
 // The sign-in page follows the system theme; the choice between light and
 // dark is offered in Settings, once there is someone to remember it for.
+// It is also the home page, so it says what the service offers: beside the
+// form on a wide screen, under it on a narrow one.
 export function renderSignIn(view, config) {
-  const lede = make("p", {
-    className: "lede",
-    textContent: `Ask about the research in ${config.cluster.name}: its papers, its groups and who works with whom.`,
-  });
   let body;
   if (config.auth.institution) {
     const signIn = make(
@@ -178,9 +178,24 @@ export function renderSignIn(view, config) {
   } else {
     body = [passwordForm()];
   }
-  view.replaceChildren(card(config, lede, ...body));
+  const about = aboutText(config);
+  if (!about) {
+    view.replaceChildren(card(config, ...body));
+  } else {
+    about.classList.add("signin-about");
+    const page = make(
+      "div",
+      { className: "signin with-about" },
+      make("div", { className: "signin-head" }, logo(), make("h1", { textContent: config.title })),
+      about,
+      make("div", { className: "signin-body" }, ...body),
+    );
+    view.replaceChildren(page);
+  }
   hideChrome();
-  view.querySelector("input[name=username]").focus();
+  // #/about is where a link to the description lands; the form waits below it
+  if (about && isAbout()) about.scrollIntoView({ block: "start" });
+  else view.querySelector("input[name=username]").focus();
 }
 
 // ---------- set a password from a one-time link ----------

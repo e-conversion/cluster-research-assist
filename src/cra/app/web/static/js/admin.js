@@ -311,7 +311,8 @@ async function loadPolicy() {
     row.append(name);
 
     const valueCell = el("td");
-    const input = el("input", "val");
+    const input = el(s.multiline ? "textarea" : "input", "val");
+    if (s.multiline) input.rows = 10;
     input.value = Array.isArray(s.value) ? s.value.join(", ") : String(s.value);
     if (typeof s.value === "boolean") input.setAttribute("list", "booleans");
     input.addEventListener("change", () =>

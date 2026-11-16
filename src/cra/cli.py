@@ -670,6 +670,12 @@ def _date(value: str):
     return moment
 
 
+def _one_line(value: object) -> str:
+    """A setting as one row of the listing: a block of text by its first line."""
+    lines = str(value).splitlines()
+    return lines[0] + " …" if len(lines) > 1 else str(value)
+
+
 def cmd_policy_list(args: argparse.Namespace) -> int:
     from cra.app.policy import Policy
 
@@ -681,7 +687,7 @@ def cmd_policy_list(args: argparse.Namespace) -> int:
         await engine.dispose()
         for entry in policy.describe():
             marker = "*" if entry["source"] == "database" else " "
-            _out(f"{marker} {entry['key']:28} {entry['value']}")
+            _out(f"{marker} {entry['key']:28} {_one_line(entry['value'])}")
         _out("\n* changed from the configured default")
         return 0
 
@@ -695,6 +701,13 @@ def cmd_policy_set(args: argparse.Namespace) -> int:
     engine, repo = _repo(settings)
 
     async def run() -> int:
+        # the engine is closed on every way out, a refused value included
+        try:
+            return await change()
+        finally:
+            await engine.dispose()
+
+    async def change() -> int:
         if args.key not in KEYS:
             sys.stderr.write(f"unknown setting {args.key!r}; try `cra policy list`\n")
             return 1
@@ -704,15 +717,17 @@ def cmd_policy_set(args: argparse.Namespace) -> int:
                 await repo.clear_policy(args.key)
                 policy.clear(args.key)
             else:
-                value = policy.set(args.key, args.value)
+                raw = (
+                    args.from_file.read_text(encoding="utf-8")
+                    if args.from_file
+                    else args.value
+                )
+                value = policy.set(args.key, raw)
                 await repo.set_policy(args.key, value, "cli")
-        except (PolicyError, TypeError, ValueError) as exc:
+        except (PolicyError, TypeError, ValueError, OSError) as exc:
             sys.stderr.write(f"{exc}\n")
             return 1
-        finally:
-            pass
-        _out(f"{args.key} = {policy[args.key]} ({policy.source(args.key)})")
-        await engine.dispose()
+        _out(f"{args.key} = {_one_line(policy[args.key])} ({policy.source(args.key)})")
         return 0
 
     return asyncio.run(run())
@@ -1040,6 +1055,12 @@ def build_parser() -> argparse.ArgumentParser:
     set_.add_argument("key")
     set_.add_argument("value", nargs="?", default=None)
     set_.add_argument("--reset", action="store_true", help="drop the override")
+    set_.add_argument(
+        "--from-file",
+        type=Path,
+        metavar="PATH",
+        help="read the value from a UTF-8 file, e.g. a Markdown service description",
+    )
     set_.set_defaults(func=cmd_policy_set)
     return parser
 

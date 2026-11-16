@@ -327,3 +327,30 @@ def test_feedback_is_exported_from_a_date_on(env, monkeypatch, capsys):
     assert main(cli) == 0
     (entry,) = json.loads(capsys.readouterr().out)
     assert (entry["text"], entry["username"]) == ("after", "ada@uni.de")
+
+
+def test_a_service_description_is_set_from_a_file_and_listed_by_its_first_line(
+    env, tmp_path, capsys
+):
+    about = tmp_path / "about.md"
+    about.write_text("Atlas helps the cluster.\n\n- chat\n- map\n", encoding="utf-8")
+    cli = ["--env-file", str(env), "policy"]
+    capsys.readouterr()
+
+    assert main([*cli, "set", "service_description", "--from-file", str(about)]) == 0
+    assert "Atlas helps the cluster. … (database)" in capsys.readouterr().out
+
+    assert main([*cli, "list"]) == 0
+    row = next(
+        line
+        for line in capsys.readouterr().out.splitlines()
+        if "service_description" in line
+    )
+    assert row.startswith("*")
+    assert row.endswith("Atlas helps the cluster. …")
+
+
+def test_a_missing_description_file_is_reported_not_raised(env, tmp_path, capsys):
+    cli = ["--env-file", str(env), "policy", "set", "service_description"]
+    assert main([*cli, "--from-file", str(tmp_path / "nope.md")]) == 1
+    assert "nope.md" in capsys.readouterr().err

@@ -6,6 +6,7 @@ import { initDialogs, toast } from "./settings.js";
 import { initHistory } from "./history.js";
 import { libraryMapView } from "./views/publication-map.js";
 import { collaborationView } from "./views/collaboration-graph.js";
+import { aboutView } from "./about.js";
 import {
   isAccessRequest,
   isPasswordLink,
@@ -128,6 +129,7 @@ async function boot() {
       chat: chatView(store),
       "publication-map": libraryMapView(store),
       "collaboration-graph": collaborationView(store),
+      about: aboutView(store),
     },
     { container: view, nav: document.getElementById("nav") },
   );

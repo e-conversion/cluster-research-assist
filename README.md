@@ -282,6 +282,19 @@ cra policy set notice "Pilot running until Friday"
 cra policy set notice --reset            # back to the configured default
 ```
 
+`service_description` is what the service says about itself to anyone, signed
+in or not: beside the sign-in form on the home page, and at `#/about`, an
+address to give a federation such as DFN-AAI as the service's information
+page. It is Markdown (links and lists, no images), at most 4000 characters.
+Until an admin writes one, it is built from `CRA_CLUSTER_DISPLAY_NAME`,
+`CRA_CLUSTER_DESCRIPTION`, `CRA_CLUSTER_FUNDING_BODY`,
+`CRA_CLUSTER_HOST_INSTITUTIONS` and `CRA_CLUSTER_WEBSITE`; an empty one hides
+it. Edit it in the console, or from a file:
+
+```bash
+cra policy set service_description --from-file about.md
+```
+
 ## Branding
 
 A deployment changes how the interface looks, and the few things it says that
