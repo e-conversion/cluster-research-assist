@@ -154,12 +154,15 @@ async def test_an_outside_paper_is_placed_among_its_neighbours(client):
     assert body["point"]["cite"].startswith("Lovelace, ")
 
 
+@pytest.mark.parametrize("doi", [INSIDE, OUTSIDE])
 @respx.mock
-async def test_every_neighbour_carries_what_its_row_shows(client):
-    """The closest list shows citation, title, year, similarity and a DOI link."""
+async def test_every_neighbour_carries_what_its_row_shows(client, doi):
+    """The closest list shows citation, title, year, similarity and a DOI link,
+    for a paper of ours as for one from outside."""
     respx.get(WORK_URL).mock(return_value=crossref_ok())
-    _, body = await lookup(client, OUTSIDE)
+    _, body = await lookup(client, doi)
     assert 0 < len(body["neighbours"]) <= NEIGHBOURS_SHOWN
+    assert doi not in {n["doi"] for n in body["neighbours"]}
     for n in body["neighbours"]:
         assert {"doi", "cite", "title", "year", "score", "x", "y"} <= n.keys()
         assert isinstance(n["score"], float)
