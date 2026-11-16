@@ -111,6 +111,24 @@ def test_precomputed_map_is_loaded_with_every_clustering(library_dir):
     assert publication_map.model == "fake"
 
 
+def test_a_nested_map_brings_its_centrality_and_what_each_group_shares(library_dir):
+    path = library_dir / "publication_map.json"
+    raw = json.loads(path.read_text())
+    raw["groups"] = [
+        {"id": "g0", "size": 1, "terms": ["perovskite"], "coverage": 1.0},
+        {"id": "g1", "size": 2, "terms": ["copper", "co2"], "coverage": 0.5},
+    ]
+    raw["clusters"]["2"].update(groups=["g0", "g1"], centrality=[0, 0, 100])
+    path.write_text(json.dumps(raw))
+    publication_map = Library.load(library_dir, verify=False).map
+    assert publication_map.centrality == {2: (0, 0, 100)}
+    assert publication_map.hints[2] == (
+        "Common words: perovskite (in 100% of its 1 papers)",
+        "Common words: copper, co2 (in 50% of its 2 papers)",
+    )
+    assert 3 not in publication_map.hints  # a clustering without groups has none
+
+
 @pytest.mark.parametrize(("asked", "chosen"), [(1, 2), (2, 2), (3, 3), (8, 3)])
 def test_map_falls_back_to_the_nearest_precomputed_clustering(
     library_dir, asked, chosen

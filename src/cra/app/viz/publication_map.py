@@ -12,6 +12,10 @@ from cra.core.library.citation import short, surnames
 from cra.core.library.library import Library
 from cra.core.library.records import Paper
 
+# A paper farther from its group's centre than four in five of its members is
+# on the group's edge: its group's name says less about it.
+EDGE = 80
+
 
 def point_view(
     doi: str, x: float, y: float, paper: Paper | None = None, **extra: Any
@@ -49,10 +53,17 @@ def payload(library: Library, clusters: int) -> dict[str, Any]:
         }
     count = stored.nearest_count(clusters)
     assignments, labels = stored.clusters[count]
+    ranks = stored.centrality.get(count)
+    hints = stored.hints.get(count, ())
     named = [labels[a] if a < len(labels) else f"cluster {a + 1}" for a in assignments]
-    colours = {
-        name: colour(i) for i, name in enumerate(dict.fromkeys(sorted(set(named))))
-    }
+    # A group's colour is its slot, which it keeps until it splits, so moving
+    # the slider recolours only the papers that moved.
+    colours: dict[str, list[int]] = {}
+    hint_of: dict[str, str] = {}
+    for slot in sorted(set(assignments)):
+        name = named[assignments.index(slot)]
+        colours.setdefault(name, colour(slot))
+        hint_of.setdefault(name, hints[slot] if slot < len(hints) else "")
     points = [
         point_view(
             doi,
@@ -61,6 +72,7 @@ def payload(library: Library, clusters: int) -> dict[str, Any]:
             library.papers.get(doi),
             cluster=named[index],
             color=colours[named[index]],
+            **({"edge": True} if ranks and ranks[index] >= EDGE else {}),
         )
         for index, doi in enumerate(stored.dois)
     ]
@@ -69,5 +81,8 @@ def payload(library: Library, clusters: int) -> dict[str, Any]:
         "clusters": count,
         "available_counts": list(stored.available_counts),
         "points": points,
-        "legend": [{"cluster": name, "color": rgb} for name, rgb in colours.items()],
+        "legend": [
+            {"cluster": name, "color": rgb, "hint": hint_of[name]}
+            for name, rgb in colours.items()
+        ],
     }

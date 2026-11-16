@@ -78,6 +78,11 @@ class PublicationMap:
     y: tuple[float, ...]
     clusters: dict[int, tuple[tuple[int, ...], tuple[str, ...]]]
     model: str = ""
+    # Per clustering, in maps built since groups were nested; older maps have
+    # neither. `centrality` places each paper in its group, 0 at the centre and
+    # 100 the farthest member; `hints` says what each label's group has in common.
+    centrality: dict[int, tuple[int, ...]] = field(default_factory=dict)
+    hints: dict[int, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def available_counts(self) -> tuple[int, ...]:
