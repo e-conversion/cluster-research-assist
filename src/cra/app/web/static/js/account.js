@@ -4,6 +4,7 @@ import { getJSON, patchJSON, putJSON, del } from "./api.js";
 import { syncControls } from "./theme.js";
 import { toast } from "./toast.js";
 import { forgetMinted, initMcp, loadTokens, showMcp } from "./mcp.js";
+import { conceal, revealable } from "./reveal.js";
 
 const CONFIRM_WORD = "delete";
 const el = (id) => document.getElementById(id);
@@ -117,6 +118,7 @@ const PASSWORD_FIELDS = ["password-current", "password-new", "password-again"];
 
 function forgetPasswords() {
   for (const id of PASSWORD_FIELDS) el(id).value = "";
+  conceal(el("account-password"));
   showError("password-error", "");
 }
 
@@ -127,6 +129,7 @@ async function changePassword() {
     showError("password-error", "The two new passwords differ.");
     return;
   }
+  conceal(el("account-password"));
   const button = el("password-change");
   button.disabled = true;
   try {
@@ -207,6 +210,7 @@ export function initSettings(s) {
     el("account-delete").disabled = e.target.value.trim().toLowerCase() !== CONFIRM_WORD;
   });
   el("account-delete").addEventListener("click", deleteAccount);
+  for (const id of PASSWORD_FIELDS) revealable(el(id));
   el("password-change").addEventListener("click", changePassword);
   onEnter(PASSWORD_FIELDS, changePassword);
   el("dlg-settings").addEventListener("close", () => {
