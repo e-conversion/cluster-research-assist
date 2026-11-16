@@ -3,8 +3,8 @@
 A brand is a directory (``CRA_BRAND_DIR``) holding any of the files in
 ``FALLBACKS``. Each file missing from it is taken from the package's own brand,
 so a deployment supplies only what it changes. ``brand.json`` carries content
-rather than looks: example questions, the institutions the collaboration graph
-tells apart, and the pipeline map.
+rather than looks: example questions and the institutions the collaboration
+graph tells apart. The pipeline map is the package's own (``pipeline.py``).
 
 The colours and fonts are CSS custom properties in ``static/css/tokens.css``;
 ``theme.css`` overrides them. The token names are the stable interface, the
@@ -13,11 +13,14 @@ rest of ``app.css`` is not.
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+log = logging.getLogger(__name__)
 
 DEFAULT_DIR = Path(__file__).resolve().parent / "brand"
 MANIFEST = "brand.json"
@@ -65,43 +68,12 @@ class Institution(_Strict):
     name: str = ""
 
 
-class Stage(_Strict):
-    key: str = Field(min_length=1)
-    label: str = Field(min_length=1)
-
-
-class PipelineNode(_Strict):
-    id: str = Field(min_length=1)
-    stage: str
-    name: str = Field(min_length=1)
-    summary: str = ""
-    detail: str = ""
-    group: str | None = None
-
-
-class Pipeline(_Strict):
-    intro: str = ""
-    stages: list[Stage] = Field(min_length=1)
-    nodes: list[PipelineNode]
-    edges: list[tuple[str, str]] = []
-
-    @model_validator(mode="after")
-    def _references_resolve(self) -> "Pipeline":
-        stages = {s.key for s in self.stages}
-        ids = [n.id for n in self.nodes]
-        if len(ids) != len(set(ids)):
-            raise ValueError("pipeline node ids must be unique")
-        if strays := sorted({n.stage for n in self.nodes} - stages):
-            raise ValueError(f"pipeline nodes name unknown stages: {strays}")
-        if strays := sorted({end for edge in self.edges for end in edge} - set(ids)):
-            raise ValueError(f"pipeline edges name unknown nodes: {strays}")
-        return self
-
-
 class Manifest(_Strict):
     examples: list[str] = []
     institutions: list[Institution] = []
-    pipeline: Pipeline | None = None
+    # Brands once described the pipeline map; the package does now. An old
+    # block is ignored rather than refused, so upgrading needs no brand change.
+    pipeline: Any = Field(default=None, exclude=True)
 
 
 @dataclass(frozen=True)
@@ -127,6 +99,10 @@ class Brand:
                     files[name] = base / candidate
                     break
         manifest = _manifest(own / MANIFEST if own else DEFAULT_DIR / MANIFEST)
+        if manifest.pipeline is not None:
+            log.warning(
+                "brand.json: 'pipeline' is no longer read; the package draws its own map"
+            )
         digest = hashlib.sha256()
         for name in sorted(files):
             digest.update(name.encode())

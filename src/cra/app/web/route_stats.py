@@ -11,6 +11,7 @@ from typing import Any
 from quart import Blueprint, current_app
 
 from cra import __version__
+from cra.app.web import pipeline as pipeline_
 from cra.core.library import manifest as manifest_
 
 bp = Blueprint("stats", __name__)
@@ -108,3 +109,13 @@ async def stats() -> dict[str, Any]:
         "tools": summary["tools"],
         "models": summary["models"],
     }
+
+
+@bp.get("/api/pipeline")
+async def pipeline() -> dict[str, Any]:
+    ctx = _ctx()
+    return pipeline_.served(
+        ctx.settings,
+        {spec.name for spec in ctx.registry},
+        ctx.library.counts if ctx.library else None,
+    )

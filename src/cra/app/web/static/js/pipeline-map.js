@@ -1,15 +1,14 @@
-// The pipeline map. A deployment describes its own pipeline in brand.json;
-// this page only draws it. Moved out of the page so the CSP can refuse inline scripts.
+// The pipeline map. The server describes it (pipeline.json, tailored to this
+// deployment); this page only draws it. Not inline, so the CSP can refuse inline scripts.
 const esc = (t) =>
   String(t).replace(
     /[&<>"']/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
 
-fetch("../brand/brand.json")
+fetch("../api/pipeline")
   .then((r) => r.json())
-  .then(({ pipeline }) => {
-    if (!pipeline) return;
+  .then((pipeline) => {
     // stages take the categorical palette in order, so a theme recolours them
     const STAGES = Object.fromEntries(
       pipeline.stages.map((s, i) => [s.key, { label: s.label, v: `--viz-${(i % 8) + 1}` }]),

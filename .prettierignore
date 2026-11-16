@@ -13,3 +13,6 @@ package-lock.json
 tests/data/
 src/cra/core/retrieval/
 src/cra/app/history/migrations/
+# one node or edge per line keeps the pipeline map readable; prettier would
+# spread each over a dozen
+src/cra/app/web/pipeline.json
