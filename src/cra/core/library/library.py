@@ -1,7 +1,13 @@
 """One ``Library`` object per process, loaded explicitly from one directory.
 
-Only ``papers.csv`` is required; each other file switches a capability on.
+Only ``papers.json`` is required; each other file switches a capability on.
 Nothing here runs at import time.
+
+A 2.0 bundle is read as it is. A 1.x bundle, with the scraped ``papers.csv``
+and its enrichment in ``abstracts.json``, is merged and repaired on every
+load; ``cra library migrate`` converts it once instead. The files present
+decide which a directory is, never the manifest, so rewriting a manifest
+cannot relabel a bundle.
 """
 
 import csv
@@ -15,6 +21,7 @@ import numpy as np
 from networkx.readwrite import json_graph
 
 from cra.core.library import manifest as manifest_
+from cra.core.library import normalise
 from cra.core.library.records import (
     PI,
     Dataset,
@@ -30,8 +37,7 @@ from cra.core.library.versions import resolve
 log = logging.getLogger(__name__)
 
 FILES = {
-    "papers": "papers.csv",
-    "abstracts": "abstracts.json",
+    "papers": "papers.json",
     "fulltexts": "fulltexts.json",
     "pis": "pis.json",
     "embeddings": "embeddings.npz",
@@ -40,10 +46,26 @@ FILES = {
     "proposal_summary": "proposal_summary.md",
     "map": "publication_map.json",
 }
+# the 1.x layout differs only in how papers arrive
+FILES_1 = {**FILES, "papers": "papers.csv", "abstracts": "abstracts.json"}
+SCHEMA_1, SCHEMA_2 = "1.0", "2.0"
 
 
 class LibraryError(Exception):
     pass
+
+
+def schema_of(path: Path) -> str:
+    """The schema a directory's files follow."""
+    new, old = (path / FILES["papers"]).exists(), (path / FILES_1["papers"]).exists()
+    if new and old:
+        raise LibraryError(
+            f"{path} holds both {FILES['papers']} and {FILES_1['papers']}; "
+            "a bundle is one or the other"
+        )
+    if not new and not old:
+        raise LibraryError(f"{FILES['papers']} missing in {path}")
+    return SCHEMA_2 if new else SCHEMA_1
 
 
 class Library:
@@ -57,8 +79,10 @@ class Library:
         embeddings: Embeddings | None,
         graph: nx.Graph | None,
         map_: PublicationMap | None,
+        schema_version: str = SCHEMA_2,
     ) -> None:
         self.path = path
+        self.schema_version = schema_version
         self.papers = papers
         self.fulltexts = fulltexts
         self.pis = pis
@@ -69,7 +93,7 @@ class Library:
 
     @classmethod
     def load(
-        cls, path: Path, *, verify: bool = True, required_schema: str = "1.x"
+        cls, path: Path, *, verify: bool = True, required_schema: str = "1.x,2.x"
     ) -> "Library":
         configured = Path(path)
         if not configured.is_dir():
@@ -80,20 +104,35 @@ class Library:
             problems = manifest_.check(path, required_schema)
             if problems:
                 raise LibraryError("library bundle rejected: " + "; ".join(problems))
-        files = {key: path / name for key, name in FILES.items()}
-        if not files["papers"].exists():
-            raise LibraryError(f"{FILES['papers']} missing in {path}")
-
-        papers = _load_papers(files["papers"], _load_json(files["abstracts"]) or {})
+        schema = schema_of(path)
+        if verify:
+            stated = str((manifest_.read(path) or {}).get("schema_version", ""))
+            if stated.split(".")[0] != schema.split(".")[0]:
+                raise LibraryError(
+                    f"library bundle rejected: the manifest says schema {stated!r} "
+                    f"but the files are {schema}"
+                )
+        legacy = schema == SCHEMA_1
+        files = {
+            key: path / name for key, name in (FILES_1 if legacy else FILES).items()
+        }
+        if legacy:
+            papers = _load_papers_csv(
+                files["papers"], _load_json(files["abstracts"]) or {}
+            )
+        else:
+            papers = _load_papers(_load_json(files["papers"]))
+        clean = not legacy
         library = cls(
             path=path,
             papers=papers,
             fulltexts=_load_fulltexts(_load_json(files["fulltexts"]) or {}),
-            pis=_load_pis(_load_json(files["pis"]) or []),
+            pis=_load_pis(_load_json(files["pis"]) or [], clean=clean),
             proposal=_load_proposal(files["proposal"], files["proposal_summary"]),
             embeddings=_load_embeddings(files["embeddings"]),
-            graph=_load_graph(_load_json(files["graph"])),
+            graph=_load_graph(_load_json(files["graph"]), clean=clean),
             map_=_load_map(_load_json(files["map"])),
+            schema_version=schema,
         )
         if verify:
             problems = manifest_.check_counts(
@@ -102,7 +141,8 @@ class Library:
             if problems:
                 raise LibraryError("library bundle rejected: " + "; ".join(problems))
         log.info(
-            "library loaded", extra={"fields": {"path": str(path), **library.counts}}
+            "library loaded",
+            extra={"fields": {"path": str(path), "schema": schema, **library.counts}},
         )
         return library
 
@@ -157,7 +197,39 @@ def _split_authors(field: str) -> tuple[str, ...]:
     return tuple(a.strip() for a in field.split(" and ") if a.strip())
 
 
-def _load_papers(path: Path, abstracts: dict[str, dict[str, Any]]) -> dict[str, Paper]:
+def _load_papers(raw: Any) -> dict[str, Paper]:
+    if not isinstance(raw, list):
+        raise LibraryError(f"{FILES['papers']}: a list of papers expected")
+    papers = {}
+    for number, entry in enumerate(raw, start=1):
+        try:
+            paper = Paper(
+                doi=normalise_doi(entry["doi"]),
+                title=entry["title"],
+                authors=tuple(entry["authors"]),
+                year=entry["year"],
+                journal=entry.get("journal") or "",
+                citation_count=entry.get("citation_count"),
+                abstract=entry.get("abstract") or "",
+                abstract_source=entry.get("abstract_source") or "",
+                datasets=tuple(
+                    Dataset(doi=d["doi"], title=d.get("title", ""))
+                    for d in entry.get("datasets") or ()
+                ),
+            )
+        except (KeyError, TypeError) as exc:
+            raise LibraryError(
+                f"{FILES['papers']}: paper {number} is malformed ({exc!r})"
+            ) from exc
+        if paper.doi in papers:
+            raise LibraryError(f"{FILES['papers']}: {paper.doi} appears twice")
+        papers[paper.doi] = paper
+    return papers
+
+
+def _load_papers_csv(
+    path: Path, abstracts: dict[str, dict[str, Any]]
+) -> dict[str, Paper]:
     rows: dict[str, dict[str, Any]] = {}
     with path.open(encoding="utf-8", newline="") as f:
         for row in csv.DictReader(f):
@@ -184,12 +256,10 @@ def _load_papers(path: Path, abstracts: dict[str, dict[str, Any]]) -> dict[str, 
     papers = {}
     for doi, raw in rows.items():
         cached = abstracts.get(doi) or {}
-        # OpenAlex author names are clean UTF-8 where the scraped CSV truncates them
-        authors = tuple(cached.get("authors") or ()) or raw["authors"]
         papers[doi] = Paper(
             doi=doi,
             title=raw["title"],
-            authors=authors,
+            authors=normalise.authors(raw["authors"], cached),
             year=raw["year"],
             journal=cached.get("journal") or "",
             citation_count=cached.get("citation_count"),
@@ -215,7 +285,13 @@ def _load_fulltexts(raw: dict[str, dict[str, Any]]) -> dict[str, FullText]:
     }
 
 
-def _load_pis(raw: list[dict[str, Any]]) -> tuple[PI, ...]:
+def _load_pis(raw: list[dict[str, Any]], *, clean: bool) -> tuple[PI, ...]:
+    def dois(entry: dict[str, Any]) -> tuple[str, ...]:
+        listed = entry.get("publication_dois") or ()
+        if clean:
+            return tuple(normalise_doi(d) for d in listed)
+        return normalise.unique_dois(listed)
+
     return tuple(
         PI(
             smid=str(entry.get("smid", "")),
@@ -229,11 +305,7 @@ def _load_pis(raw: list[dict[str, Any]]) -> tuple[PI, ...]:
             profile_url=entry.get("profile_url", ""),
             research_focus=tuple(entry.get("research_focus") or ()),
             application_fields=tuple(entry.get("application_fields") or ()),
-            publication_dois=tuple(
-                dict.fromkeys(
-                    normalise_doi(d) for d in entry.get("publication_dois") or ()
-                )
-            ),
+            publication_dois=dois(entry),
         )
         for entry in raw
     )
@@ -258,18 +330,11 @@ def _load_embeddings(path: Path) -> Embeddings | None:
     return Embeddings(dois=dois, vectors=vectors, model=model)
 
 
-def _load_graph(raw: dict[str, Any] | None) -> nx.Graph | None:
+def _load_graph(raw: dict[str, Any] | None, *, clean: bool) -> nx.Graph | None:
     if raw is None:
         return None
     graph = json_graph.node_link_graph(raw, edges="links")
-    # The builder that scraped the shared DOIs left a stray brace on some, so
-    # one paper appears twice on an edge and the weight counts it twice.
-    for _, _, data in graph.edges(data=True):
-        if "shared_dois" in data:
-            unique = tuple(dict.fromkeys(normalise_doi(d) for d in data["shared_dois"]))
-            data["shared_dois"] = list(unique)
-            data["weight"] = len(unique)
-    return graph
+    return graph if clean else normalise.graph_edges(graph)
 
 
 def _load_map(raw: dict[str, Any] | None) -> PublicationMap | None:

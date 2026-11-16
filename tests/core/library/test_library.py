@@ -9,9 +9,10 @@ from cra.core.library.library import Library, LibraryError
 from cra.core.library.records import normalise_doi
 
 
-@pytest.fixture
-def library_dir(tmp_path):
-    return write_library(tmp_path / "library")
+@pytest.fixture(params=["2.0", "1.0"])
+def library_dir(tmp_path, request):
+    """The same content in both layouts: what a tool sees must not depend on it."""
+    return write_library(tmp_path / "library", schema=request.param)
 
 
 def test_papers_merge_csv_rows_and_abstract_metadata(library_dir):
@@ -57,9 +58,10 @@ def test_pi_dois_are_normalised_against_the_brace_quirk(library_dir):
     assert library.pis[0].publication_dois == ("10.1000/alpha", "10.1000/beta")
 
 
-def test_graph_edges_are_deduplicated_against_the_brace_quirk(library_dir):
-    """The real bundle carries every shared DOI twice on some edges, once with
-    a stray brace, and a weight that counts both."""
+def test_graph_edges_are_deduplicated_against_the_brace_quirk(tmp_path):
+    """The real 1.x bundle carries every shared DOI twice on some edges, once
+    with a stray brace, and a weight that counts both."""
+    library_dir = write_library(tmp_path / "library", schema="1.0")
     path = library_dir / "graph.json"
     raw = json.loads(path.read_text())
     link = next(link for link in raw["links"] if link["weight"] == 2)
@@ -123,12 +125,50 @@ def test_inconsistent_map_is_rejected(library_dir, break_it, message):
         Library.load(library_dir, verify=False)
 
 
-def test_papers_csv_is_required(tmp_path):
+def test_papers_are_required(tmp_path):
     directory = write_library(tmp_path / "c")
-    (directory / "papers.csv").unlink()
+    (directory / "papers.json").unlink()
     manifest.write(directory, {})
-    with pytest.raises(LibraryError, match="papers.csv missing"):
+    with pytest.raises(LibraryError, match="papers.json missing"):
         Library.load(directory)
+
+
+def test_a_directory_with_both_layouts_is_refused(tmp_path):
+    directory = write_library(tmp_path / "c")
+    write_library(tmp_path / "old", schema="1.0")
+    (directory / "papers.csv").write_bytes(
+        (tmp_path / "old" / "papers.csv").read_bytes()
+    )
+    with pytest.raises(LibraryError, match="both papers.json and papers.csv"):
+        Library.load(directory, verify=False)
+
+
+def test_a_manifest_that_mislabels_the_files_is_refused(tmp_path):
+    directory = write_library(tmp_path / "c", schema="1.0")
+    manifest.write(directory, {}, schema_version="2.0")
+    with pytest.raises(LibraryError, match="manifest says schema '2.0'"):
+        Library.load(directory)
+
+
+def test_the_files_decide_the_schema_a_rewritten_manifest_keeps(tmp_path):
+    for schema in ("1.0", "2.0"):
+        library = Library.load(write_library(tmp_path / schema, schema=schema))
+        assert library.schema_version == schema
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [{"papers": "not a list"}, [{"doi": "10.1000/x"}], "duplicate"],
+)
+def test_malformed_papers_are_refused(tmp_path, malformed):
+    directory = write_library(tmp_path / "c", with_manifest=False)
+    path = directory / "papers.json"
+    if malformed == "duplicate":
+        papers = json.loads(path.read_text())
+        malformed = [*papers, {**papers[0], "doi": papers[0]["doi"].upper()}]
+    path.write_text(json.dumps(malformed))
+    with pytest.raises(LibraryError, match="papers.json"):
+        Library.load(directory, verify=False)
 
 
 def test_tampered_file_is_rejected(library_dir):
@@ -152,11 +192,16 @@ def test_wrong_counts_are_rejected(library_dir):
         ("1.0", "1.x", True),
         ("1.3", "1.x", True),
         ("2.0", "1.x", False),
+        ("1.0", "2.x", False),
         ("1.0", "1.0", True),
         ("1.1", "1.0", False),
+        ("1.0", "1.x,2.x", True),
+        ("2.0", "1.x,2.x", True),
+        ("2.0", "1.x, 2.0", True),
     ],
 )
-def test_schema_version_requirement(library_dir, version, required, ok):
+def test_schema_version_requirement(tmp_path, version, required, ok):
+    library_dir = write_library(tmp_path / "c", schema=version.split(".")[0] + ".0")
     data = json.loads((library_dir / "manifest.json").read_text())
     data["schema_version"] = version
     (library_dir / "manifest.json").write_text(json.dumps(data))

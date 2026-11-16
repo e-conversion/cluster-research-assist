@@ -21,6 +21,9 @@ htmlcov/
 
 # runtime
 logs/
+# the library holds personal and licensed data and never belongs in git;
+# anchored, so src/cra/core/library/ and tests/data/library/ stay tracked
+/library/
 *.sqlite
 *.sqlite3
 *.db
