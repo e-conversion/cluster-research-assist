@@ -641,6 +641,13 @@ def cmd_policy_set(args: argparse.Namespace) -> int:
     engine, repo = _repo(settings)
 
     async def run() -> int:
+        # the engine is closed on every way out, a refused value included
+        try:
+            return await change()
+        finally:
+            await engine.dispose()
+
+    async def change() -> int:
         if args.key not in KEYS:
             sys.stderr.write(f"unknown setting {args.key!r}; try `cra policy list`\n")
             return 1
@@ -660,10 +667,7 @@ def cmd_policy_set(args: argparse.Namespace) -> int:
         except (PolicyError, TypeError, ValueError, OSError) as exc:
             sys.stderr.write(f"{exc}\n")
             return 1
-        finally:
-            pass
         _out(f"{args.key} = {_one_line(policy[args.key])} ({policy.source(args.key)})")
-        await engine.dispose()
         return 0
 
     return asyncio.run(run())
