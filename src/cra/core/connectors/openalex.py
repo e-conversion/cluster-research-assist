@@ -17,6 +17,7 @@ from typing import Any
 import httpx
 
 from cra.core.connectors.crossref import ABSTRACT_CHARS, MetadataError, Work
+from cra.core.library.markup import plain
 from cra.core.library.records import normalise_doi
 
 log = logging.getLogger(__name__)
@@ -66,10 +67,10 @@ def parse_work(record: dict[str, Any]) -> Work:
     year = record.get("publication_year")
     return Work(
         doi=normalise_doi(str(record.get("doi") or "")),
-        title=str(record.get("display_name") or record.get("title") or "").strip(),
+        title=plain(str(record.get("display_name") or record.get("title") or "")),
         authors=_authors(record.get("authorships")),
         year=str(year) if year else "",
-        journal=_journal(record),
+        journal=plain(_journal(record)),
         abstract=rebuild_abstract(record.get("abstract_inverted_index")),
         source="openalex",
     )

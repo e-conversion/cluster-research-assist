@@ -22,6 +22,7 @@ from networkx.readwrite import json_graph
 
 from cra.core.library import manifest as manifest_
 from cra.core.library import normalise
+from cra.core.library.markup import plain
 from cra.core.library.records import (
     PI,
     Dataset,
@@ -205,10 +206,12 @@ def _load_papers(raw: Any) -> dict[str, Paper]:
         try:
             paper = Paper(
                 doi=normalise_doi(entry["doi"]),
-                title=entry["title"],
+                # A 2.x bundle migrated before titles were cleaned, or written
+                # by another tool, can still carry markup; plain() is idempotent.
+                title=plain(entry["title"]),
                 authors=tuple(entry["authors"]),
                 year=entry["year"],
-                journal=entry.get("journal") or "",
+                journal=plain(entry.get("journal") or ""),
                 citation_count=entry.get("citation_count"),
                 abstract=entry.get("abstract") or "",
                 abstract_source=entry.get("abstract_source") or "",
@@ -240,7 +243,7 @@ def _load_papers_csv(
             paper = rows.setdefault(
                 doi,
                 {
-                    "title": row.get("article_title", "").strip(),
+                    "title": plain(row.get("article_title", "")),
                     "authors": _split_authors(row.get("article_authors", "")),
                     "year": row.get("article_year", "").strip(),
                     "datasets": [],
@@ -261,7 +264,7 @@ def _load_papers_csv(
             title=raw["title"],
             authors=normalise.authors(raw["authors"], cached),
             year=raw["year"],
-            journal=cached.get("journal") or "",
+            journal=plain(cached.get("journal") or ""),
             citation_count=cached.get("citation_count"),
             abstract=cached.get("abstract") or "",
             abstract_source=cached.get("source") or "",
