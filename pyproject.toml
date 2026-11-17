@@ -74,7 +74,7 @@ addopts = [
     "--cov-append",
     "--cov-report=",
     "--import-mode=importlib",
-    "-m", "not llm and not postgres and not slow",
+    "-m", "not llm and not postgres and not slow and not browser",
 ]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
@@ -82,6 +82,7 @@ markers = [
     "llm: calls a real LLM endpoint; needs CRA_LLM_API_KEY",
     "postgres: needs a PostgreSQL server at CRA_TEST_POSTGRES_URL",
     "slow: downloads models or takes more than a few seconds",
+    "browser: drives a phone-sized Chromium; needs playwright, its Chromium and the network",
 ]
 
 [tool.mypy]

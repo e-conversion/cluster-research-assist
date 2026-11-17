@@ -56,12 +56,14 @@ def test_no_catch_all_module_names():
 
 def test_every_test_file_sits_where_its_module_does():
     """tests/app/web/test_factory.py tests src/cra/app/web/factory.py, so a
-    module's tests are found from its path alone."""
+    module's tests are found from its path alone. tests/browser is the one
+    exception: it drives the served interface as a whole, not one module."""
     tests = REPO / "tests"
     orphans = [
         str(path.relative_to(REPO))
         for path in tests.rglob("test_*.py")
         if path != Path(__file__).resolve()
+        and not path.is_relative_to(tests / "browser")
         and not (
             SRC
             / path.parent.relative_to(tests)

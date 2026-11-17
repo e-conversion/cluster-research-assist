@@ -9,6 +9,8 @@ const D3_URL = "https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js";
 const D3_INTEGRITY = "sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i";
 
 /** A ranked name without its titles: "Prof. Dr. Ada Lovelace" -> "Ada Lovelace". */
+// How far past a PI's dot a finger still selects them, in pixels (#43).
+const TOUCH_PAD = 8;
 const untitled = (name) => name.replace(/^(Prof\.|Dr\.|Prof\. Dr\.)\s*/, "");
 
 /** A PI's papers as the map names them, newest first, each leading to its DOI. */
@@ -138,8 +140,19 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
     .attr("stroke-opacity", 0.55);
 
   const node = gN.selectAll("g").data(NODES).join("g").attr("class", "node");
+  // A finger gets an invisible ring around each dot. The collide force keeps
+  // centres at least room() (>= rOf + 10) apart, so rings of rOf + 8 never
+  // overlap and a tap between two PIs still goes to the nearer one.
+  if (matchMedia("(pointer: coarse)").matches)
+    node
+      .append("circle")
+      .attr("class", "hit")
+      .attr("r", (d) => rOf(d) + TOUCH_PAD)
+      .style("fill", "transparent")
+      .style("stroke", "none");
   node
     .append("circle")
+    .attr("class", "dot")
     .attr("r", rOf)
     .style("fill", (d) => (d.deg ? col(d) : "var(--viz-other)"))
     .attr("fill-opacity", (d) => (d.deg ? 1 : 0.5));
@@ -287,16 +300,21 @@ function draw(frame, legendEl, { nodes: NODES, links: LINKS }, institutions) {
     if (id) showCard(id);
     else card.classList.remove("on");
   }
+  // Only a mouse previews on hover. A tap sends emulated mouse events first: the
+  // preview card would open under the finger and take the click meant for the
+  // node, and iOS treats a page that changes on hover as needing a second tap.
   node
-    .on("mouseenter", (e, d) => {
-      if (!pin) apply(d.id);
+    .on("pointerenter", (e, d) => {
+      if (e.pointerType === "mouse" && !pin) apply(d.id);
     })
     .on("click", (e, d) => {
       e.stopPropagation();
       pin = pin === d.id ? null : d.id;
       apply(pin);
     });
-  svg.on("mouseleave", () => apply(pin));
+  svg.on("pointerleave", (e) => {
+    if (e.pointerType === "mouse") apply(pin);
+  });
   svg.on("click", () => {
     pin = null;
     apply(null);
