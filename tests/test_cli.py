@@ -1,5 +1,6 @@
 import asyncio
 import io
+from typing import ClassVar
 
 import pytest
 from conftest import PASSWORD
@@ -354,3 +355,128 @@ def test_a_missing_description_file_is_reported_not_raised(env, tmp_path, capsys
     cli = ["--env-file", str(env), "policy", "set", "service_description"]
     assert main([*cli, "--from-file", str(tmp_path / "nope.md")]) == 1
     assert "nope.md" in capsys.readouterr().err
+
+
+class FakeChat:
+    """Stands in for the chat client: every request is answered with a summary."""
+
+    calls: ClassVar[list[dict]] = []
+    answer = (
+        '{"summary": "Films were grown.", "approach": "experimental", '
+        '"characterization_methods": ["XRD"]}'
+    )
+
+    def __init__(self, settings, http):
+        pass
+
+    async def complete(self, request, timeout_s=None):
+        type(self).calls.append(request)
+        return {"choices": [{"message": {"content": type(self).answer}}]}
+
+
+@pytest.fixture
+def chat(monkeypatch):
+    FakeChat.calls = []
+    monkeypatch.setattr("cra.assistant.llm.client.ChatClient", FakeChat)
+    return FakeChat
+
+
+def summarising(tmp_path, *, key="k"):
+    from library_builder import write_library
+
+    directory = write_library(tmp_path / "lib")
+    env = tmp_path / "e"
+    env.write_text(
+        f"CRA_LIBRARY_PATH={directory}\nCRA_LLM_API_KEY={key}\nCRA_LLM_MODEL=test-model\n"
+    )
+    return directory, ["--env-file", str(env), "library", "summarise"]
+
+
+def test_summarise_dry_run_calls_nothing_and_writes_nothing(tmp_path, capsys, chat):
+    directory, command = summarising(tmp_path)
+    assert main([*command, "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "3 papers: 2 to summarise, 1 with no text to read, 0 already current" in out
+    assert "this run: 2 requests" in out
+    assert "first request" in out
+    assert chat.calls == []
+    assert not (directory / "summaries.json").exists()
+
+
+def test_summarise_writes_the_file_and_says_in_the_manifest_who_made_it(
+    tmp_path, capsys, chat
+):
+    import json
+
+    from cra.core.library import manifest
+    from cra.core.library.library import Library
+
+    directory, command = summarising(tmp_path)
+    assert main(command) == 0
+    assert len(chat.calls) == 2
+    # the library loads against the manifest the command rewrote
+    library = Library.load(directory)
+    assert library.counts["summaries"] == 2
+    assert library.summary("10.1000/alpha").model == "test-model"
+    assert manifest.read(directory)["provenance"]["summaries"]["model"] == "test-model"
+    raw = json.loads((directory / "summaries.json").read_text(encoding="utf-8"))
+    assert raw["records"]["10.1000/gamma"]["status"] == "no_text"
+    capsys.readouterr()
+    # nothing has changed, so a second run asks for nothing and writes nothing
+    written = (directory / "summaries.json").read_bytes()
+    assert main(command) == 0
+    assert len(chat.calls) == 2
+    assert "nothing to do" in capsys.readouterr().out
+    assert (directory / "summaries.json").read_bytes() == written
+
+
+def test_summarise_keeps_what_it_has_and_tries_the_rest_again(
+    tmp_path, capsys, chat, monkeypatch
+):
+    directory, command = summarising(tmp_path)
+    monkeypatch.setattr(chat, "answer", "I cannot read this.")
+    assert main(command) == 1
+    assert "0 summarised, 2 failed" in capsys.readouterr().out
+    from cra.core.library.library import Library
+
+    assert Library.load(directory).counts["summaries"] == 0
+    monkeypatch.undo()
+    monkeypatch.setattr("cra.assistant.llm.client.ChatClient", chat)
+    assert main(command) == 0
+    assert Library.load(directory).counts["summaries"] == 2
+
+
+def test_summarise_one_paper_again_on_request(tmp_path, capsys, chat):
+    _, command = summarising(tmp_path)
+    assert main(command) == 0
+    before = len(chat.calls)
+    assert main([*command, "--only", "10.1000/ALPHA", "--force"]) == 0
+    assert len(chat.calls) == before + 1
+    assert main([*command, "--only", "10.9/none"]) == 1
+    assert "not in the library" in capsys.readouterr().err
+
+
+def test_summarise_needs_a_model_and_a_key(tmp_path, capsys, chat):
+    _, command = summarising(tmp_path, key="")
+    assert main(command) == 2
+    assert "CRA_LLM_API_KEY" in capsys.readouterr().err
+    assert chat.calls == []
+
+
+def test_summarise_drops_the_record_of_a_paper_the_library_no_longer_holds(
+    tmp_path, capsys, chat
+):
+    import json
+
+    directory, command = summarising(tmp_path)
+    assert main(command) == 0
+    path = directory / "summaries.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw["records"]["10.9/gone"] = {**raw["records"]["10.1000/alpha"]}
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    calls = len(chat.calls)
+    assert main(command) == 0
+    assert len(chat.calls) == calls, "nothing was asked for, only cleaned up"
+    kept = json.loads(path.read_text(encoding="utf-8"))["records"]
+    assert "10.9/gone" not in kept
+    assert "10.1000/alpha" in kept

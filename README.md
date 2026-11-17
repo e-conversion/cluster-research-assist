@@ -43,8 +43,8 @@ cra serve
 ## The library bundle
 
 `CRA_LIBRARY_PATH` points at the library: `papers.json` is required, and each of
-`fulltexts.json`, `pis.json`, `embeddings.npz`, `graph.json`, `proposal.md` and
-`publication_map.json` switches on the tools that need it. `manifest.json`
+`fulltexts.json`, `pis.json`, `embeddings.npz`, `graph.json`, `proposal.md`,
+`publication_map.json` and `summaries.json` switches on the tools that need it. `manifest.json`
 records a checksum per file and the expected counts; `cra serve` refuses a
 bundle that does not match it.
 
@@ -84,6 +84,41 @@ pip install "cluster-research-assist[build] @ git+https://github.com/e-conversio
 cra library build          # projection and clusterings for the publication map
 cra library manifest       # refresh checksums and counts
 ```
+
+## Method summaries
+
+`summaries.json` is optional. It holds, per paper, a short summary that the
+configured model wrote when the library was built: one sentence, the kind of
+work (experimental, computational, theoretical, mixed or review), the material,
+what was done and what was measured, the main result, what is new and the
+limits the authors state. With it the chat can answer "which of our papers used
+method X" or "which are simulations of Y" from metadata
+(`find_papers_by_method`, `get_paper_summary`). Both tools are internal tier:
+signed-in users reach them, the outward MCP endpoint does not, because a summary
+is made from the full text. The assistant is told that the summaries are
+machine-written and says so when it quotes one.
+
+```bash
+cra library summarise --dry-run     # what would be asked, a token estimate, the first request
+cra library summarise --limit 20    # a trial run
+cra library summarise               # every paper that is new or changed, then the manifest
+```
+
+It is a step of its own, apart from `build`, because it is slow and costs
+tokens. It needs `CRA_LLM_API_KEY` and a model (`CRA_LLM_MODEL` or `--model`),
+not the `build` extra. Each paper goes to the model once, whole up to 100,000
+characters: a longer text is cut to its opening and its methods section, and a
+paper whose full text is missing or a few lines long is summarised from its
+abstract. **The endpoint therefore sees the library's full texts**; use one the
+cluster trusts with them. A paper with nothing to read is recorded as having no
+text, and a paper the model fails on is left out and asked for again on the next
+run. A rerun only asks for papers whose text changed, `--force` asks for all,
+and `--only DOI` for one. Every record names the model that wrote it, and the
+manifest records the last model and prompt version under `provenance`.
+
+A paper's area, the `category` filter of `list_papers`, is not part of this: it
+is the paper's group on the publication map, so there is no category list to
+maintain.
 
 ## Semantic search
 

@@ -6,13 +6,16 @@ with its abstract twice is a paper the model reads twice.
 
 from typing import Any
 
-from cra.core.library.records import PI, Paper
+from cra.core.library.records import PI, Paper, Summary
 
 ABSTRACT_IN_LIST = 500
 
 
-def paper_view(paper: Paper, *, abstract: str | int | None = None) -> dict[str, Any]:
-    """``abstract`` caps the abstract's length, or drops it when 0."""
+def paper_view(
+    paper: Paper, *, abstract: str | int | None = None, group: str = ""
+) -> dict[str, Any]:
+    """``abstract`` caps the abstract's length, or drops it when 0; ``group`` is the
+    paper's area on the publication map, left out when empty."""
     view: dict[str, Any] = {
         "doi": paper.doi,
         "title": paper.title,
@@ -21,6 +24,8 @@ def paper_view(paper: Paper, *, abstract: str | int | None = None) -> dict[str, 
     }
     if paper.journal:
         view["journal"] = paper.journal
+    if group:
+        view["group"] = group
     if paper.citation_count is not None:
         view["citation_count"] = paper.citation_count
     if paper.datasets:
@@ -28,6 +33,26 @@ def paper_view(paper: Paper, *, abstract: str | int | None = None) -> dict[str, 
     if abstract != 0 and paper.abstract:
         limit = abstract if isinstance(abstract, int) else None
         view["abstract"] = paper.abstract[:limit] if limit else paper.abstract
+    return view
+
+
+def summary_view(summary: Summary, *, compact: bool = False) -> dict[str, Any]:
+    """A paper's method summary. Compact is what a list of papers carries: the
+    sentence, the kind of work and the material."""
+    view: dict[str, Any] = {
+        "summary": summary.summary,
+        "approach": summary.approach,
+    }
+    if summary.material_system:
+        view["material_system"] = summary.material_system
+    if compact:
+        return view
+    for key in ("processing_method", "results", "novelty", "limitations"):
+        if value := getattr(summary, key):
+            view[key] = value
+    for key in ("characterization_methods", "properties_investigated"):
+        if value := getattr(summary, key):
+            view[key] = list(value)
     return view
 
 
