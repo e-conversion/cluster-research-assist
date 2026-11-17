@@ -176,6 +176,36 @@ async def test_a_setting_reaches_the_landing_page_without_signing_in(admin, admi
     assert config["notice"] == "Maintenance on Friday"
 
 
+async def test_the_service_description_is_public_and_an_admin_rewrites_it(
+    admin, admin_app
+):
+    anonymous = admin_app.test_client()
+    default = (await json_of(await anonymous.get("/api/config")))["about"]
+    assert default.startswith("Cluster Research Assistant answers questions")
+
+    text = "We help members of the cluster find its research.\n\n- chat\n- map"
+    response = await admin.put(
+        "/api/admin/policy/service_description", json={"value": text}
+    )
+    assert (await json_of(response))["source"] == "database"
+    assert (await json_of(await anonymous.get("/api/config")))["about"] == text
+    ctx = admin_app.extensions["cra"]
+    assert (await Policy.load(ctx.settings, ctx.repo))["service_description"] == text
+
+    await admin.put("/api/admin/policy/service_description", json={"reset": True})
+    assert (await json_of(await anonymous.get("/api/config")))["about"] == default
+
+
+async def test_a_user_who_is_not_an_admin_cannot_rewrite_the_description(admin_app):
+    user = await sign_in(admin_app, admin_app.test_client(), "someone")
+    response = await user.put(
+        "/api/admin/policy/service_description", json={"value": "Hijacked"}
+    )
+    assert response.status_code == 403
+    config = await json_of(await admin_app.test_client().get("/api/config"))
+    assert config["about"] != "Hijacked"
+
+
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -184,6 +214,7 @@ async def test_a_setting_reaches_the_landing_page_without_signing_in(admin, admi
         ("user_chat_daily_limit", "-1"),
         ("tool_modules", "papers,papers"),
         ("notice", "x" * 501),
+        ("service_description", "x" * 4001),
     ],
 )
 async def test_invalid_settings_are_refused(admin, key, value):

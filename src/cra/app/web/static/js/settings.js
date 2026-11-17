@@ -367,6 +367,9 @@ export function initDialogs(s) {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") for (const d of popovers()) d.open = false;
   });
+  document.getElementById("about-link").addEventListener("click", () => {
+    menu.open = false;
+  });
   document.getElementById("stats-btn").addEventListener("click", () => {
     menu.open = false;
     openStats();

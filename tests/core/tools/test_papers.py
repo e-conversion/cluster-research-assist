@@ -18,6 +18,16 @@ async def test_search_papers_finds_a_paper_and_says_which_field_matched(registry
     assert found["results"][0]["authors"] == ["Ada Lovelace", "Grace Hopper"]
 
 
+async def test_a_doi_in_a_keyword_search_returns_that_paper(registry, ctx):
+    found = await call_tool(
+        registry, ctx, "search_papers", query="the paper https://doi.org/10.1000/BETA."
+    )
+    assert found["matched_on"] == "doi"
+    assert [p["doi"] for p in found["results"]] == ["10.1000/beta"]
+    missing = await call_tool(registry, ctx, "search_papers", query="10.9999/elsewhere")
+    assert "locate_paper_by_doi" in missing["error"]
+
+
 async def test_semantic_search_needs_a_matching_encoder(
     registry, ctx, indexes, settings
 ):

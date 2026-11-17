@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from cra.app.about import default_description
 from cra.app.history.repository import Repository
 from cra.config.settings import Settings
 
@@ -63,6 +64,13 @@ def _text(value: Any) -> str:
     return text
 
 
+def _markdown(value: Any) -> str:
+    text = "\n".join(line.rstrip() for line in str(value).splitlines()).strip()
+    if len(text) > 4000:
+        raise PolicyError("must be at most 4000 characters")
+    return text
+
+
 @dataclass(frozen=True)
 class PolicyKey:
     name: str
@@ -70,6 +78,11 @@ class PolicyKey:
     coerce: Callable[[Any], Any]
     description: str
     fallback: Any = ""
+    # a default worked out from the configuration, for a key no single
+    # setting holds
+    derive: Callable[[Settings], Any] | None = None
+    # edited as a block of text rather than on one line
+    multiline: bool = False
 
 
 KEYS: dict[str, PolicyKey] = {
@@ -138,6 +151,15 @@ KEYS: dict[str, PolicyKey] = {
             _text,
             "Notice shown across the top of the site; empty hides it.",
         ),
+        PolicyKey(
+            "service_description",
+            None,
+            _markdown,
+            "What the service offers, in Markdown. Anyone can read it, on the "
+            "sign-in page and at #/about; empty hides it.",
+            derive=default_description,
+            multiline=True,
+        ),
     )
 }
 
@@ -166,6 +188,8 @@ class Policy:
 
     def default(self, key: str) -> Any:
         spec = KEYS[key]
+        if spec.derive is not None:
+            return spec.derive(self._settings)
         if spec.setting is None:
             return spec.fallback
         return getattr(self._settings, spec.setting)
@@ -196,6 +220,7 @@ class Policy:
                 "default": self.default(key),
                 "source": self.source(key),
                 "description": spec.description,
+                "multiline": spec.multiline,
             }
             for key, spec in KEYS.items()
         ]

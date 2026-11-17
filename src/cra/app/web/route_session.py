@@ -40,6 +40,8 @@ async def config() -> dict[str, Any]:
             "contact": settings.auth_admin_contact,
         },
         "notice": policy["notice"],
+        # what the service offers, for whoever has not signed in yet
+        "about": policy["service_description"],
         "provider": settings.llm_provider,
         "openrouter": params_.is_openrouter(settings),
         "models": await available(
