@@ -42,6 +42,8 @@ jobs:
   tests-browser:
     name: Phone (Chromium)
     runs-on: ubuntu-latest
+    # the pages load deck.gl, d3 and marked from a CDN; an outage must not hang the job
+    timeout-minutes: 15
     env:
       PLAYWRIGHT_INSTALL_FLAGS: --with-deps
     steps:

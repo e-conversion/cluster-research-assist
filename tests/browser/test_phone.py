@@ -156,21 +156,36 @@ def test_one_finger_on_the_map_pans_it_without_scrolling_the_page(open_page):
     assert page.evaluate("scrollY") == before
 
 
-def test_a_tap_on_a_graph_node_pins_its_card(open_page):
-    # A tap's emulated hover used to open the card under the finger first, and
-    # the click landed on the card: the PI was never pinned.
+@pytest.fixture
+def graph(open_page):
     page = open_page("Pixel 7", "#/collaboration-graph")
     page.wait_for_selector(".graph-frame .node")
     page.locator(".graph-frame").scroll_into_view_if_needed()
     page.wait_for_timeout(500)
-    name = page.locator(".graph-frame .node .lab").first.text_content()
-    x, y = page.evaluate(FRAME_CENTRE, ".graph-frame .node circle")
-    page.touchscreen.tap(x, y)
-    card = page.locator(".graph-card")
+    return page
+
+
+def test_a_tap_on_a_graph_node_pins_its_card(graph):
+    # A tap's emulated hover used to open the card under the finger first, and
+    # the click landed on the card: the PI was never pinned.
+    name = graph.locator(".graph-frame .node .lab").first.text_content()
+    x, y = graph.evaluate(FRAME_CENTRE, ".graph-frame .node .dot")
+    graph.touchscreen.tap(x, y)
+    card = graph.locator(".graph-card")
     expect(card).to_have_class(re.compile(r"\bon\b"))
     expect(card).to_contain_text(name)
     # only a pinned card has a close button
     expect(card.locator(".close")).to_be_visible()
+
+
+def test_a_point_just_beside_a_graph_dot_belongs_to_its_pi(graph):
+    # A dot is 17-21px across, so a finger landing beside it has to count (#43).
+    # Asked of hit-testing, not of a tap: Chromium would snap the tap to the dot
+    # by itself, which Safari does not do.
+    box = graph.locator(".graph-frame .node .dot").first.bounding_box()
+    x, y = box["x"] + box["width"] + 5, box["y"] + box["height"] / 2
+    under = f"document.elementFromPoint({x}, {y})?.closest('.node') === document.querySelector('.graph-frame .node')"
+    assert graph.evaluate(under)
 
 
 def test_scrolling_up_while_an_answer_streams_keeps_the_reader_there(open_page):
@@ -188,6 +203,27 @@ def test_scrolling_up_while_an_answer_streams_keeps_the_reader_there(open_page):
     page.wait_for_timeout(1500)
     assert page.evaluate("document.querySelector('.send').classList.contains('stop')")
     assert page.evaluate("scrollY") == left_at
+
+
+CHIPS_SHOWN = (
+    "() => getComputedStyle(document.querySelector('.settings-row')).display !== 'none'"
+)
+
+
+def test_the_chips_under_the_composer_give_way_while_typing(open_page):
+    # with the screen keyboard up they left an iPhone SE ~100px of answer
+    page = open_page("iPhone SE")
+    page.locator(".composer textarea").tap()
+    assert not page.evaluate(CHIPS_SHOWN)
+
+
+def test_the_chips_under_the_composer_return_once_a_question_is_sent(open_page):
+    page = open_page("iPhone SE")
+    page.locator(".composer textarea").tap()
+    page.keyboard.type("How many papers?")
+    page.locator(".send").tap()
+    # sending closes the keyboard, so the model can be changed for the next question
+    page.wait_for_function(CHIPS_SHOWN)
 
 
 IN_VIEW = """(sel) => {

@@ -3105,9 +3105,10 @@ html:has(.viz-frame.expanded) {
 /* Name, three labelled tabs and two labelled actions need about 1050px. Below
    that the name wrapped out of the bar and the tabs scrolled their last entry
    out of sight (a landscape phone, a portrait tablet), so name and action
-   labels go first; the tabs keep theirs down to the phone layout. */
+   labels go first; the tabs keep theirs down to the phone layout. The admin
+   console's bar has no tabs, so its name keeps the room until then too. */
 @media (width <= 1100px) {
-  .brand-name,
+  .top:has(.nav) .brand-name,
   .act span {
     display: none;
   }
@@ -3119,6 +3120,10 @@ html:has(.viz-frame.expanded) {
     gap: 10px;
     padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0
       max(12px, env(safe-area-inset-left));
+  }
+
+  .brand-name {
+    display: none;
   }
 
   .nav {
