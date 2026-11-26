@@ -103,6 +103,42 @@ PROPOSAL = (
 )
 
 
+SUMMARIES: dict[str, dict[str, Any]] = {
+    "10.1000/alpha": {
+        "status": "ok",
+        "model": "test-model",
+        "source": "fulltext",
+        "input_hash": "a1",
+        "summary": "Perovskite solar cells are simulated with machine-learned potentials.",
+        "approach": "computational",
+        "material_system": "Halide perovskite",
+        "processing_method": "Machine-learned potential molecular dynamics",
+        "characterization_methods": ["radial distribution function"],
+        "properties_investigated": ["stability under illumination"],
+        "results": "Long-range electrostatics change the predicted stability.",
+        "novelty": "",
+        "limitations": "Small cells only.",
+    },
+    "10.1000/beta": {
+        "status": "ok",
+        "model": "test-model",
+        "source": "abstract",
+        "input_hash": "b1",
+        "summary": "Copper electrodes turn carbon dioxide into methanol.",
+        "approach": "experimental",
+        "material_system": "Copper electrodes",
+        "processing_method": "Electrochemical CO2 reduction",
+        "characterization_methods": ["gas chromatography", "XRD"],
+        "properties_investigated": ["methanol yield"],
+        "results": "",
+        "novelty": "",
+        "limitations": "",
+    },
+    # no abstract and no full text: listed, with nothing to read
+    "10.1000/gamma": {"status": "no_text", "input_hash": ""},
+}
+
+
 def write_library(
     directory: Path,
     *,
@@ -115,6 +151,7 @@ def write_library(
     proposal: bool = True,
     with_manifest: bool = True,
     schema: str = "2.0",
+    summaries: bool = False,
 ) -> Path:
     """The same content in either layout: 2.0 as clean records, 1.x as the
     scraped CSV plus enrichment, with the PI brace quirk the loader repairs."""
@@ -133,6 +170,12 @@ def write_library(
         proposal=proposal,
         clean=schema != "1.0",
     )
+    if summaries:
+        (directory / "summaries.json").write_text(
+            json.dumps(
+                {"model": "test-model", "prompt_version": 1, "records": SUMMARIES}
+            )
+        )
     if with_manifest:
         counts = {
             "papers": 3,
@@ -143,6 +186,7 @@ def write_library(
             "graph_edges": 2 if graph else 0,
             "embeddings": 3 if embeddings else 0,
             "map_points": 3 if publication_map else 0,
+            "summaries": 2 if summaries else 0,
         }
         manifest.write(
             directory,

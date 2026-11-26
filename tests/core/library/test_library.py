@@ -53,8 +53,9 @@ def test_counts_and_availability(library_dir):
         "graph_edges": 2,
         "embeddings": 3,
         "map_points": 3,
+        "summaries": 0,
     }
-    assert all(library.available.values())
+    assert all(ok for key, ok in library.available.items() if key != "summaries")
     assert library.fulltext("10.1000/alpha").char_count > 0
     assert library.fulltext("10.1000/gamma") is None
     assert (
@@ -290,3 +291,46 @@ def test_building_the_map_reproduces_the_committed_toy_bundle():
     assert payload["dois"] == committed["dois"]
     assert payload["clusters"].keys() == committed["clusters"].keys()
     assert payload["x"] == pytest.approx(committed["x"], abs=1e-3)
+
+
+def test_a_library_without_summaries_loads_and_has_none(library_dir):
+    library = Library.load(library_dir)
+    assert library.summaries is None
+    assert library.summary("10.1000/alpha") is None
+    assert library.counts["summaries"] == 0
+    assert library.available["summaries"] is False
+
+
+def test_summaries_are_loaded_beside_the_papers(tmp_path):
+    library = Library.load(write_library(tmp_path / "lib", summaries=True))
+    assert library.counts["summaries"] == 2
+    assert library.available["summaries"] is True
+    alpha = library.summary("10.1000/ALPHA")
+    assert (alpha.approach, alpha.model) == ("computational", "test-model")
+    assert alpha.characterization_methods == ("radial distribution function",)
+    assert library.summary("10.1000/gamma") is None, "it had no text to read"
+
+
+def test_malformed_summaries_are_refused(tmp_path):
+    directory = write_library(tmp_path / "lib", summaries=True, with_manifest=False)
+    (directory / "summaries.json").write_text('{"records": []}')
+    with pytest.raises(LibraryError, match="summaries.json"):
+        Library.load(directory, verify=False)
+
+
+def test_the_manifest_checks_the_summaries_file(tmp_path):
+    directory = write_library(tmp_path / "lib", summaries=True)
+    (directory / "summaries.json").write_text('{"records": {}}')
+    with pytest.raises(LibraryError, match="summaries.json: checksum mismatch"):
+        Library.load(directory)
+
+
+def test_a_paper_has_a_group_at_every_level_of_the_map(library_dir):
+    papers_map = Library.load(library_dir).map
+    assert papers_map.groups_of("10.1000/alpha") == ("perovskite", "perovskite")
+    assert papers_map.groups_of("10.1000/gamma") == ("copper", "battery")
+    assert papers_map.groups_of("10.9/none") == ()
+    # nearest to eight groups is the finest clustering there is
+    assert papers_map.group_of("10.1000/gamma") == "battery"
+    assert papers_map.group_of("10.1000/gamma", 2) == "copper"
+    assert papers_map.group_of("10.9/none") == ""

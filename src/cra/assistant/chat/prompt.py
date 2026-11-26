@@ -94,7 +94,8 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         )
     if "list_papers" in tool_names:
         lines.append(
-            "list_papers filters by author, year or journal, for exhaustive questions such as "
+            "list_papers filters by author, year, journal or area (a group on the "
+            "publication map), for exhaustive questions such as "
             "'everything by X' where the top few results of a search are not enough, and "
             "for one paper named that way ('the 2021 Nature paper on X')."
         )
@@ -107,6 +108,14 @@ def build(settings: Settings, library: Library, tool_names: set[str]) -> str:
         lines.append(
             "\nsearch_fulltext looks inside the papers themselves and returns short passages. "
             "Use it for methods, materials or numbers that an abstract leaves out."
+        )
+    if "find_papers_by_method" in tool_names:
+        lines.append(
+            "find_papers_by_method answers 'which of our papers used method X' or 'which "
+            "are simulations of Y' from summaries a model wrote when the library was "
+            "built, and get_paper_summary shows one paper's. Say that they are "
+            "machine-written when you quote one, and check the abstract or the full text "
+            "before relying on a detail."
         )
     if "get_paper_fulltext" in tool_names:
         lines.append(
